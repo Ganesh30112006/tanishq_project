@@ -1,0 +1,1477 @@
+You are a senior frontend architect, product designer, security engineer, and cross-platform application developer.
+
+Build the frontend for a production-grade healthcare platform called:
+
+                    “CareSense AI”
+
+The frontend must be designed from the beginning for BOTH:
+1. Web application
+2. Future iOS/Android mobile application
+
+The architecture must avoid treating mobile as an afterthought.
+
+The web and mobile applications should share:
+- TypeScript types
+- API contracts
+- Validation schemas
+- Authentication logic where platform-appropriate
+- RBAC/permission definitions
+- Business rules
+- Design tokens
+- Reusable cross-platform UI primitives where practical
+
+The system must be clean, secure, scalable, accessible, responsive, and visually premium.
+
+============================================================
+1. TECHNOLOGY STACK
+============================================================
+
+Use the following stack:
+
+WEB:
+- Next.js
+- React
+- TypeScript
+
+MOBILE-READY ARCHITECTURE:
+- Expo
+- React Native
+
+SHARED UI:
+- Tamagui
+- Shared design tokens
+- Shared component primitives where practical
+
+MONOREPO:
+- Turborepo
+- pnpm
+
+STATE:
+- TanStack Query for server/API state
+- Zustand for lightweight client/UI state
+
+FORMS:
+- React Hook Form
+- Zod
+
+DATA TABLES:
+- TanStack Table
+
+CHARTS:
+- Apache ECharts for web
+- Use a React Native-compatible chart implementation for mobile while keeping the chart data/configuration model reusable
+
+ICONS:
+- Lucide
+
+API:
+- REST API
+- FastAPI backend
+- OpenAPI-generated TypeScript API types/client where practical
+
+AUTHENTICATION:
+- OAuth 2.0 / OpenID Connect
+- Secure session/token handling appropriate to each platform
+
+TESTING:
+- Vitest
+- React Testing Library
+- Playwright
+- React Native/Expo testing
+
+QUALITY:
+- ESLint
+- Prettier
+- Strict TypeScript
+
+CONTAINERIZATION:
+- Docker for the web application
+
+IMPORTANT:
+Do not introduce Redis, IoT, Kafka, or unnecessary frontend infrastructure.
+
+============================================================
+2. PRODUCT PURPOSE
+============================================================
+
+CareSense AI is an intelligent healthcare platform for:
+
+- Patients
+- Doctors
+- Lab Technicians
+- Administrators
+
+The platform manages healthcare information and provides AI-assisted health risk analysis.
+
+Core functionality includes:
+
+- Patient profiles
+- Medical history
+- Health records
+- Laboratory results
+- Medical report management
+- Health trends
+- AI-estimated disease risk
+- Explainable AI
+- Alerts
+- AI-assisted health summaries
+- Role-specific workflows
+- Secure document access
+- Audit visibility for authorized administrators
+
+The interface must make complex healthcare information easy to understand.
+
+============================================================
+3. PRIMARY UX PRINCIPLE
+============================================================
+
+The application should feel like:
+
+        PREMIUM CLINICAL SOFTWARE
+
+NOT:
+
+        A generic AI startup dashboard
+
+NOT:
+
+        A cryptocurrency dashboard
+
+NOT:
+
+        A glassmorphism showcase
+
+NOT:
+
+        An over-designed SaaS template
+
+The interface must prioritize:
+
+- Clarity
+- Trust
+- Readability
+- Information hierarchy
+- Fast navigation
+- Low cognitive load
+- Professional appearance
+- Consistency
+
+============================================================
+4. VISUAL DESIGN
+============================================================
+
+Create a beautiful, modern, premium healthcare interface using:
+
+- Plain surfaces
+- Monochromatic colors
+- Neutral backgrounds
+- Strong typography
+- Subtle borders
+- Minimal shadows
+- Consistent spacing
+- Carefully designed tables
+- Clean charts
+- Restrained animations
+
+DO NOT widely use glassmorphism.
+
+Glass effects may only be used occasionally for:
+- Modals
+- Command palettes
+- Floating overlays
+- Special contextual panels
+
+Do not make every card translucent.
+
+Avoid:
+- Excessive gradients
+- Neon colors
+- Excessive rounded containers
+- Huge shadows
+- Excessive animations
+- Visually noisy dashboards
+- Too many colors
+
+============================================================
+5. COLOR SYSTEM
+============================================================
+
+Use a predominantly monochromatic palette.
+
+Base:
+- White
+- Off-white
+- Light neutral gray
+- Medium gray
+- Dark charcoal
+- Near-black
+
+Use one restrained primary accent.
+
+Use semantic healthcare colors only when required:
+
+LOW:
+- Subtle green
+
+MEDIUM:
+- Subtle amber
+
+HIGH:
+- Subtle orange/red
+
+CRITICAL:
+- Strong red
+
+Risk colors must NEVER be the only way information is communicated.
+
+Always combine color with:
+- Text
+- Labels
+- Icons
+- Patterns/indicators where appropriate
+
+Dark mode should be supported through the shared design-token system.
+
+============================================================
+6. DESIGN SYSTEM
+============================================================
+
+Create a centralized design system.
+
+Define tokens for:
+
+- Colors
+- Typography
+- Spacing
+- Border radius
+- Borders
+- Shadows
+- Motion
+- Breakpoints
+- Component sizes
+
+Create reusable primitives:
+
+- Button
+- Input
+- Select
+- Checkbox
+- Radio
+- Switch
+- Badge
+- Alert
+- Card
+- Dialog
+- Modal
+- Drawer
+- Tabs
+- Tooltip
+- Dropdown
+- Table
+- Pagination
+- Breadcrumb
+- Skeleton
+- Empty State
+- Error State
+- Toast
+- Avatar
+- Date Picker
+- File Upload
+- Progress indicator
+
+Do not duplicate similar components.
+
+The design system must work well across web and mobile.
+
+============================================================
+7. CROSS-PLATFORM ARCHITECTURE
+============================================================
+
+Use a monorepo structure similar to:
+
+apps/
+  web/
+  mobile/
+
+packages/
+  ui/
+  design-system/
+  api/
+  types/
+  validation/
+  auth/
+  permissions/
+  utils/
+
+The exact structure may be adjusted if there is a better implementation, but preserve strong separation between:
+
+- Platform-specific code
+- Shared code
+- API code
+- UI
+- Authentication
+- Authorization
+- Business rules
+
+WEB:
+Next.js
+
+MOBILE:
+Expo + React Native
+
+Do not force identical layouts between platforms.
+
+Share the underlying system while allowing platform-specific UX.
+
+============================================================
+8. RESPONSIVE WEB DESIGN
+============================================================
+
+The web application must work on:
+
+- Desktop
+- Laptop
+- Tablet
+- Mobile browser
+
+Desktop:
+- Sidebar navigation
+- Dense but readable information layout
+
+Tablet:
+- Collapsible navigation
+- Adaptive grids
+
+Mobile:
+- Compact navigation
+- Bottom navigation where appropriate
+- Touch-friendly controls
+- Responsive tables
+- Stacked information
+- Mobile-first forms
+
+Never simply shrink the desktop UI.
+
+============================================================
+9. MOBILE-FIRST FUTURE
+============================================================
+
+Design every feature with eventual mobile implementation in mind.
+
+For every new component ask:
+
+1. Can the interaction work on touch?
+2. Can the information hierarchy work on a small screen?
+3. Can this component be shared with React Native?
+4. Is the interaction unnecessarily dependent on hover?
+5. Is there a mobile-friendly alternative?
+
+Avoid:
+- Hover-only functionality
+- Extremely wide tables without mobile alternatives
+- Tiny controls
+- Desktop-only interactions
+
+============================================================
+10. AUTHENTICATION
+============================================================
+
+Implement a secure authentication architecture.
+
+Support:
+
+- Login
+- Logout
+- Forgot password
+- Password reset
+- MFA/OTP flow where enabled
+- Session expiration
+- Re-authentication for sensitive operations
+- Account security settings
+
+Authentication must be integrated through OAuth 2.0 / OIDC.
+
+Do not implement custom authentication logic unnecessarily.
+
+Do not store:
+- Passwords
+- API secrets
+- Database credentials
+- Private keys
+
+in frontend code.
+
+Never store sensitive tokens in insecure browser storage.
+
+Use platform-appropriate secure credential/session storage.
+
+============================================================
+11. MULTI-USER SESSION ISOLATION
+============================================================
+
+This is a critical requirement.
+
+The application must support multiple independent users.
+
+Users may include:
+
+- Patient A
+- Patient B
+- Doctor A
+- Doctor B
+- Lab Technician A
+- Admin
+
+Never allow state from one authenticated session to appear in another.
+
+Implement:
+
+- User-scoped application state
+- User-scoped query/cache keys
+- Permission-aware data fetching
+- Session validation
+- Cache invalidation on logout
+- Sensitive state cleanup
+- Patient-context cleanup
+- Session expiration handling
+- Authentication state reset
+
+Example:
+
+USER A
+  ↓
+Session A
+  ↓
+Patient A data
+
+LOGOUT
+  ↓
+Clear sensitive state
+  ↓
+Invalidate relevant cache
+  ↓
+Reset patient context
+
+USER B
+  ↓
+Session B
+  ↓
+Only authorized User B data
+
+Never display stale User A data during the transition.
+
+============================================================
+12. MULTI-TAB / MULTI-SESSION SAFETY
+============================================================
+
+Handle browser tabs safely.
+
+If a user logs out in one tab:
+
+- Other tabs should detect the invalid session
+- Sensitive screens should be invalidated
+- Protected API requests should fail safely
+- User should be redirected to authentication when appropriate
+
+Do not leave previously loaded sensitive patient information visible after session invalidation.
+
+============================================================
+13. RBAC
+============================================================
+
+Implement centralized RBAC.
+
+Roles:
+
+PATIENT
+DOCTOR
+LAB_TECHNICIAN
+ADMIN
+
+Create a permission system rather than scattering role checks throughout the application.
+
+Example permissions:
+
+PATIENT:
+- patient.read.self
+- report.read.self
+- report.upload.self
+- risk.read.self
+- profile.update.self
+
+DOCTOR:
+- patient.read.assigned
+- patient.update.assigned
+- report.read.assigned
+- risk.read.assigned
+- risk.analyze
+- clinical_note.create
+- alert.manage
+
+LAB_TECHNICIAN:
+- lab.queue.read
+- patient.read.lab_required
+- report.upload
+- lab.result.create
+- lab.result.update
+
+ADMIN:
+- user.manage
+- role.manage
+- permission.manage
+- audit.read
+- system.manage
+
+The frontend must use permissions to control:
+
+- Navigation
+- Routes
+- Buttons
+- Actions
+- Components
+- Data visibility
+
+IMPORTANT:
+
+Frontend RBAC is NOT the security boundary.
+
+The backend must independently enforce every permission.
+
+Never trust a role supplied by the client.
+
+============================================================
+14. USER DATA ISOLATION
+============================================================
+
+Patient data must be isolated.
+
+PATIENT:
+Can access only their own data.
+
+DOCTOR:
+Can access only authorized/assigned patients.
+
+LAB TECHNICIAN:
+Can access only the minimum patient information required for laboratory workflows.
+
+ADMIN:
+Can access administrative information according to policy.
+
+Never expose unauthorized records through:
+- Search
+- URLs
+- Query parameters
+- Cached data
+- Client state
+- API responses
+- Autocomplete
+- Browser history
+
+============================================================
+15. PATIENT DASHBOARD
+============================================================
+
+Create a calm, simple patient experience.
+
+Sections:
+
+Health Overview
+- Current status
+- Recent measurements
+- Recent reports
+
+Risk Assessment
+- AI-estimated risk
+- Risk trend
+- Risk factors
+
+Medical Reports
+- Recent reports
+- Upload
+- Processing status
+
+Health Timeline
+- Recent health events
+- Reports
+- Assessments
+
+AI Health Summary
+- Simple language
+- Explain changes
+- Highlight important information
+
+The patient UI must avoid unnecessary medical jargon.
+
+============================================================
+16. DOCTOR DASHBOARD
+============================================================
+
+Optimize for fast clinical decision support.
+
+Display:
+
+- Total patients
+- High-risk patients
+- New alerts
+- Pending reports
+- Recent activity
+
+Priority Patient table:
+
+Patient
+Risk
+Trend
+Latest Alert
+Last Updated
+Status
+
+Filters:
+
+- Risk level
+- Alert status
+- Date
+- Patient
+- Assigned group
+
+Patient detail should include:
+
+- Overview
+- Medical history
+- Health timeline
+- Lab results
+- Reports
+- Risk analysis
+- AI explanations
+- Alerts
+- Clinical notes
+
+============================================================
+17. LAB TECHNICIAN DASHBOARD
+============================================================
+
+Keep this workflow-focused.
+
+Display:
+
+- Pending laboratory work
+- Processing reports
+- Completed reports
+- Failed/rejected reports
+
+Primary actions:
+
+- Search authorized patient
+- Upload report
+- Enter results
+- Validate results
+- Mark report complete
+
+Do not expose doctor-only functionality.
+
+============================================================
+18. ADMIN DASHBOARD
+============================================================
+
+Admin interface:
+
+- User management
+- Role management
+- Permission management
+- Active sessions where supported
+- Audit logs
+- Security events
+- System status
+- Model version information
+
+Use efficient tables, filters, and bulk actions.
+
+============================================================
+19. PATIENT PROFILE
+============================================================
+
+Create a highly structured patient profile.
+
+Sections:
+
+- Basic information
+- Medical history
+- Allergies where available
+- Medications where authorized
+- Conditions
+- Lab results
+- Health measurements
+- Risk assessments
+- Reports
+- Timeline
+
+Use tabs and sections rather than excessive card nesting.
+
+============================================================
+20. HEALTH TIMELINE
+============================================================
+
+Create a clean chronological timeline.
+
+Example:
+
+TODAY
+  ├─ Risk assessment updated
+  ├─ Lab report uploaded
+  └─ Measurement recorded
+
+YESTERDAY
+  ├─ Clinical note added
+  └─ Report processed
+
+LAST WEEK
+  └─ Risk changed
+
+Support:
+
+- Date filtering
+- Event filtering
+- Expand/collapse
+- Detail view
+
+============================================================
+21. HEALTH ANALYTICS
+============================================================
+
+Use meaningful visualizations.
+
+Examples:
+
+- Blood pressure trends
+- Heart rate trends
+- Glucose trends
+- SpO2 trends
+- Risk progression
+- Lab-value changes
+
+Use:
+- Line charts
+- Area charts where useful
+- Reference thresholds
+- Comparison views
+- Tooltips
+
+Avoid:
+- 3D charts
+- Decorative graphs
+- Excessive donut charts
+- Unnecessary animations
+
+============================================================
+22. AI RISK ANALYSIS
+============================================================
+
+Display AI predictions clearly.
+
+Example:
+
+Cardiovascular Risk
+
+HIGH
+
+72%
+
+Previous:
+48%
+
+Trend:
+Increasing
+
+Then:
+
+Contributing Factors
+
+Blood Pressure
+██████████
+
+Heart Rate
+████████
+
+Activity
+██████
+
+BMI
+████
+
+Use language such as:
+
+"AI-estimated risk"
+
+"Risk assessment"
+
+"Contributing factors"
+
+Never present a prediction as a confirmed diagnosis.
+
+============================================================
+23. EXPLAINABLE AI
+============================================================
+
+Create a dedicated "Why this score?" interface.
+
+Display:
+
+- Major contributing factors
+- Direction of influence
+- Historical changes
+- Model version
+- Confidence information where appropriate
+
+Patient:
+Simple explanation.
+
+Doctor:
+More detailed explanation.
+
+Example:
+
+Why did risk increase?
+
+1. Blood pressure increased
+2. Recent lab value changed
+3. Activity level decreased
+
+Keep explanations understandable.
+
+============================================================
+24. MEDICAL REPORT MANAGEMENT
+============================================================
+
+Support secure report uploads.
+
+Allowed formats should be defined by the backend.
+
+UI flow:
+
+Upload
+ ↓
+Validation
+ ↓
+Uploading
+ ↓
+Scanning
+ ↓
+Processing
+ ↓
+Extraction
+ ↓
+Validation
+ ↓
+Completed
+
+Display:
+
+- File name
+- Report type
+- Uploaded date
+- Uploaded by
+- Processing status
+- Extracted information
+- Original report
+- Access information
+
+Never expose raw object-storage URLs.
+
+Use authorized backend endpoints for document access.
+
+============================================================
+25. REPORT PROCESSING UX
+============================================================
+
+Make processing status clear.
+
+Examples:
+
+UPLOADING
+PROCESSING
+EXTRACTING
+REVIEW REQUIRED
+COMPLETED
+FAILED
+
+For failure:
+
+- Explain the issue safely
+- Provide retry where appropriate
+- Do not expose internal stack traces
+
+============================================================
+26. SEARCH
+============================================================
+
+Create fast global search.
+
+Search:
+
+- Patients
+- Reports
+- Records
+- Lab results
+
+Search results MUST be permission-filtered.
+
+Never return unauthorized patient records even temporarily.
+
+============================================================
+27. ALERTS
+============================================================
+
+Create an alert center.
+
+Alert categories:
+
+- Risk update
+- Important health event
+- Report ready
+- Lab result
+- Administrative notification
+
+States:
+
+- Unread
+- Read
+- Archived
+
+Use restrained visual emphasis.
+
+Critical alerts can use stronger semantic styling.
+
+============================================================
+28. AI ASSISTANT
+============================================================
+
+Create an AI assistant for authorized users.
+
+DOCTOR examples:
+
+"Summarize this patient's recent health history."
+
+"Why did the risk score change?"
+
+"Compare the latest report with the previous report."
+
+PATIENT examples:
+
+"Explain my recent report."
+
+"What changed in my health assessment?"
+
+The AI assistant must:
+
+- Clearly indicate AI-generated content
+- Never bypass permissions
+- Never access unauthorized patient data
+- Show context/source information where available
+- Support copy
+- Support feedback
+- Show timestamp
+- Handle errors safely
+
+Do not present AI output as definitive medical diagnosis.
+
+============================================================
+29. SECURITY UX
+============================================================
+
+Security should be visible but unobtrusive.
+
+Provide:
+
+- Account security
+- MFA management
+- Session information
+- Last login where supported
+- Logout
+- Password/security management
+- Active session management where supported
+
+Sensitive actions should use confirmation or re-authentication when required.
+
+============================================================
+30. FRONTEND SECURITY
+============================================================
+
+Implement security best practices:
+
+- Strict route guards
+- Permission guards
+- Secure authentication
+- Secure session management
+- Input validation
+- Output escaping
+- XSS protection
+- CSRF protection where applicable
+- Strict CSP-compatible implementation
+- Secure headers through deployment configuration
+- No secrets in frontend
+- No direct database access
+- No direct unrestricted object-storage access
+- No sensitive information in URLs
+- No trust in client-provided role data
+
+Backend authorization remains authoritative.
+
+============================================================
+31. API LAYER
+============================================================
+
+Create a centralized API client.
+
+Structure:
+
+api/
+  auth
+  users
+  patients
+  records
+  reports
+  risks
+  alerts
+  ai
+  audit
+
+Use OpenAPI-generated types/client where possible.
+
+Globally handle:
+
+401:
+Session expired → re-authenticate
+
+403:
+Access denied → safe unauthorized state
+
+404:
+Resource unavailable
+
+422:
+Validation error
+
+429:
+Rate limited
+
+500:
+Safe generic error
+
+Never display backend stack traces.
+
+============================================================
+32. DATA FETCHING
+============================================================
+
+Use TanStack Query for server state.
+
+Examples:
+
+- Patient data
+- Reports
+- Risk assessments
+- Alerts
+- Lab results
+- Doctor patient lists
+
+Use:
+
+- Query keys scoped to authenticated user/context
+- Pagination
+- Refetching
+- Loading states
+- Error states
+- Cache invalidation
+
+Do not place all server data into Zustand.
+
+Use Zustand primarily for:
+- UI state
+- temporary filters
+- navigation state
+- non-sensitive preferences
+
+============================================================
+33. FORMS
+============================================================
+
+Use:
+
+React Hook Form + Zod
+
+For:
+
+- Patient registration
+- Profile editing
+- Lab result entry
+- Report upload
+- Clinical notes
+- Administrative forms
+
+Forms must provide:
+
+- Clear validation
+- Inline errors
+- Accessible labels
+- Loading states
+- Success feedback
+- Safe error handling
+
+============================================================
+34. ACCESSIBILITY
+============================================================
+
+Follow WCAG-oriented accessibility practices.
+
+Ensure:
+
+- Keyboard navigation
+- Visible focus states
+- Semantic HTML
+- Proper labels
+- Screen reader support
+- Sufficient contrast
+- Accessible dialogs
+- Accessible forms
+- Accessible tables
+- Text alternatives for charts
+
+Never communicate important information using color alone.
+
+============================================================
+35. PERFORMANCE
+============================================================
+
+Optimize for production.
+
+Use:
+
+- Code splitting
+- Lazy loading
+- Server/client component boundaries where appropriate
+- Efficient rendering
+- Image optimization
+- Pagination
+- Debounced search
+- Virtualized large lists
+- Skeleton loaders
+
+Never load the entire patient dataset into the browser.
+
+============================================================
+36. ERROR / EMPTY / LOADING STATES
+============================================================
+
+Every major screen must have:
+
+Loading state
+Empty state
+Error state
+Unauthorized state
+Session-expired state
+
+Example:
+
+"No medical reports available yet."
+
+Do not leave blank screens.
+
+============================================================
+37. MOBILE UX
+============================================================
+
+Design mobile workflows separately where necessary.
+
+PATIENT MOBILE:
+- Health overview
+- Risk
+- Reports
+- Timeline
+- Notifications
+- Profile
+
+DOCTOR MOBILE:
+- Priority patients
+- Alerts
+- Patient overview
+- Reports
+- Risk analysis
+- Clinical notes
+
+LAB MOBILE:
+- Work queue
+- Report upload
+- Result entry
+- Validation
+- Status updates
+
+ADMIN:
+Mobile administration can be limited to essential operations rather than reproducing every desktop feature.
+
+============================================================
+38. OFFLINE / NETWORK HANDLING
+============================================================
+
+Do not assume continuous connectivity on mobile.
+
+Implement safe network states:
+
+- Offline indicator
+- Retry
+- Failed request handling
+- Stale-data indication where appropriate
+
+Do NOT cache sensitive healthcare information offline unless there is an explicit security-approved requirement and secure device storage strategy.
+
+============================================================
+39. TESTING
+============================================================
+
+Write tests for critical security and business flows.
+
+Especially test:
+
+PATIENT A
+→ Cannot access PATIENT B
+
+DOCTOR A
+→ Cannot access unauthorized patient
+
+LAB TECHNICIAN
+→ Cannot access doctor-only functionality
+
+PATIENT
+→ Cannot access doctor routes
+
+ADMIN
+→ Can access authorized administration routes
+
+Logged-out user
+→ Cannot access protected routes
+
+Expired session
+→ Sensitive content is cleared
+
+Role change
+→ Permissions update correctly
+
+Session switch
+→ Previous user's sensitive state is removed
+
+============================================================
+40. CODE ARCHITECTURE
+============================================================
+
+Use feature-oriented architecture.
+
+Example:
+
+features/
+  auth/
+  patients/
+  reports/
+  health/
+  risks/
+  alerts/
+  ai/
+  users/
+  audit/
+
+Separate:
+
+- UI
+- Hooks
+- API functions
+- Types
+- Validation
+- Business logic
+
+Do not place large business logic inside React components.
+
+Use strict TypeScript.
+
+Avoid unnecessary use of `any`.
+
+============================================================
+41. ENVIRONMENT CONFIGURATION
+============================================================
+
+Support:
+
+development
+test
+production
+
+Only expose frontend-safe configuration.
+
+Never commit secrets.
+
+Example:
+
+NEXT_PUBLIC_API_BASE_URL
+NEXT_PUBLIC_AUTH_ISSUER
+NEXT_PUBLIC_AUTH_CLIENT_ID
+NEXT_PUBLIC_APP_ENV
+
+Do not expose private credentials through NEXT_PUBLIC variables.
+
+============================================================
+42. DEVELOPMENT QUALITY
+============================================================
+
+Before considering the frontend complete:
+
+- TypeScript must compile without errors
+- ESLint must pass
+- Formatting must be consistent
+- Tests must pass
+- Critical RBAC tests must pass
+- Protected routes must work
+- Mobile responsiveness must be tested
+- Accessibility must be tested
+- Error states must be implemented
+- Loading states must be implemented
+- No secrets must exist in source code
+
+============================================================
+43. DOCKER
+============================================================
+
+The web frontend must be containerizable.
+
+Use:
+
+- Multi-stage Docker build
+- Minimal production image
+- Non-root runtime
+- No secrets inside image
+- Production environment configuration
+- Health check
+
+The final web application must be deployable to a cloud container platform.
+
+============================================================
+44. IMPORTANT PRODUCT DESIGN RULE
+============================================================
+
+Do not build every screen at once as disconnected mockups.
+
+Establish:
+
+1. Design system
+2. Authentication
+3. RBAC
+4. Application shell
+5. API architecture
+6. Patient workflow
+7. Doctor workflow
+8. Lab workflow
+9. Admin workflow
+10. AI/risk visualization
+11. Security UX
+12. Responsive/mobile architecture
+
+Then expand functionality.
+
+============================================================
+45. FINAL EXPERIENCE
+============================================================
+
+The user should immediately understand:
+
+WHO AM I?
+→ Patient / Doctor / Lab Technician / Admin
+
+WHAT CAN I ACCESS?
+→ Based on my permissions
+
+WHAT NEEDS MY ATTENTION?
+→ Alerts / tasks / reports
+
+WHAT CHANGED?
+→ Timeline / trends / risk changes
+
+WHAT SHOULD I DO NEXT?
+→ Clear recommended action
+
+The interface should make sophisticated healthcare and AI functionality feel simple.
+
+============================================================
+46. FINAL VISUAL TARGET
+============================================================
+
+The final product should have:
+
+- Premium healthcare appearance
+- Monochromatic visual language
+- Plain textured surfaces
+- Excellent typography
+- Subtle borders
+- Minimal shadows
+- Very limited glassmorphism
+- Clear dashboards
+- Beautiful charts
+- Excellent tables
+- Strong spacing
+- Intuitive navigation
+- Smooth but restrained animations
+- Mobile-ready components
+- Strong accessibility
+- Strong security UX
+
+The result should look like a serious enterprise healthcare product rather than a template.
+
+============================================================
+47. NON-NEGOTIABLE SECURITY RULE
+============================================================
+
+The frontend must NEVER be treated as the final authorization layer.
+
+The backend must validate:
+
+- Identity
+- Role
+- Permission
+- Resource ownership
+- Patient/doctor relationship
+- Requested operation
+
+The frontend should only improve UX by hiding unavailable functionality and preventing unnecessary requests.
+
+============================================================
+48. DELIVERABLE
+============================================================
+
+Build a fully structured frontend foundation with:
+
+- Next.js web application
+- Expo/React Native-ready architecture
+- Shared packages
+- Shared design system
+- Authentication architecture
+- RBAC architecture
+- Secure session isolation
+- Patient dashboard
+- Doctor dashboard
+- Lab technician dashboard
+- Admin dashboard
+- Patient profile
+- Health timeline
+- Reports
+- Risk analytics
+- Explainable AI
+- Alerts
+- AI assistant
+- Settings
+- Responsive layouts
+- Mobile-ready component architecture
+- API integration layer
+- Loading/error/empty states
+- Accessibility
+- Testing
+- Docker deployment configuration
+
+Use realistic healthcare mock data only where backend APIs are not yet implemented.
+
+Keep mock/API implementations behind a service layer so they can be replaced with the real FastAPI backend without rewriting the UI.
+
+Do not compromise the architecture merely to make the initial demo faster.

@@ -1,0 +1,3267 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 1.0.0
+  description: CareSense AI healthcare decision-support backend (Django REST API)
+servers:
+  - url: /api/v1
+    description: Base API path (Django)
+tags:
+  - name: auth
+    description: Authentication (local dev password login; real deployments federate via OIDC)
+  - name: dashboard
+    description: Role-aware dashboard summaries
+  - name: patients
+    description: Authorized patient records, scoped before any row is returned
+  - name: reports
+    description: Medical report intelligence and processing status
+  - name: risk
+    description: Explainable, calibrated risk assessments
+  - name: alerts
+    description: Health and operational alerts
+  - name: ai
+    description: Explainable AI patient summaries
+  - name: timeline
+    description: Chronological health events
+  - name: laboratories
+    description: Laboratory workflow - orders, result entry and validation
+  - name: records
+    description: Structured clinical record authoring (notes, medications)
+  - name: admin
+    description: User, staff and care-relationship administration
+  - name: oversight
+    description: Read-only administrative oversight (audit, reconciliation, tasks)
+  - name: appointments
+    description: Consultation availability and bookings
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Exchange credentials for a bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "201":
+          description: Issued access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current bearer token
+      responses:
+        "204":
+          description: Revoked
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: The authenticated caller's identity, roles and permissions
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get the caller's role-aware dashboard summary
+      description: >-
+        The role shown is always the caller's own real role. `role` may only
+        select among roles the caller actually holds; any other value is
+        ignored rather than changing authorization.
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/UserRole"
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /patients/:
+    get:
+      operationId: listPatients
+      tags: [patients]
+      summary: List authorized patients
+      parameters:
+        - name: risk
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/RiskLevel"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/PatientStatus"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Authorized patient list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPatientList"
+    post:
+      operationId: registerPatient
+      tags: [patients]
+      summary: Register a new patient record (`patient.register`)
+      description: >-
+        Creates an identity only - no clinical finding is accepted here. A
+        clinician who registers a patient is placed on their care team, since
+        a record nobody is assigned to is invisible to every clinician.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientRegisterRequest"
+      responses:
+        "201":
+          description: The registered patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{patientId}/:
+    get:
+      operationId: getPatient
+      tags: [patients]
+      summary: Get an authorized patient profile
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Patient profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientProfile"
+        "404":
+          description: Patient not found or not accessible
+
+  /patients/{patientId}/timeline/:
+    get:
+      operationId: getPatientTimeline
+      tags: [timeline]
+      summary: Get a patient's chronological health timeline
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 1
+            maximum: 50
+            default: 8
+      responses:
+        "200":
+          description: Chronological health events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimelineEvent"
+
+  /patients/{patientId}/ai-summary/:
+    get:
+      operationId: getPatientAiSummary
+      tags: [ai]
+      summary: Get an explainable AI summary of the patient's authorized record
+      description: >-
+        Every fetch is a fresh, audited AI interaction that restates only
+        observed authorized data - never a diagnosis. Requires the `ai.use`
+        permission (doctors); other roles receive 403.
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: >-
+            An AI summary, or a blocked/safe non-answer when there was no
+            authorized context to summarize.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSummary"
+
+  /reports/:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List authorized medical reports
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ReportProcessingState"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Medical reports
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMedicalReportList"
+    post:
+      operationId: uploadReport
+      tags: [reports]
+      summary: Upload an untrusted report file for processing
+      description: >-
+        Patients may upload for themselves (`report.upload.own`); lab
+        technicians may upload within an open workflow (`lab.report.upload`).
+        The file is validated, stored privately and queued for extraction.
+        Other roles receive 403.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ReportUploadRequest"
+      responses:
+        "201":
+          description: The registered report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicalReport"
+
+  /reports/{reportId}/:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Retrieve one authorized report with its structured content
+      description: >-
+        Scoped to the caller's authorized patients (assigned doctors, the
+        patient themselves, lab technicians within a workflow). Each retrieval
+        is recorded in the audit trail.
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicalReport"
+        "404":
+          description: Report not found or not accessible
+
+  /reports/{reportId}/quality/:
+    get:
+      operationId: getReportQuality
+      tags: [reports]
+      summary: Data-quality metrics for a report (never a medical health score)
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data-quality metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportQuality"
+
+  /reports/{reportId}/file/:
+    get:
+      operationId: downloadReportFile
+      tags: [reports]
+      summary: Stream the stored original report file (authorized)
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The original uploaded file as an attachment
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /labs/orders/:
+    get:
+      operationId: listLabOrders
+      tags: [laboratories]
+      summary: List authorized laboratory orders
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Laboratory orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLabOrderList"
+    post:
+      operationId: createLabOrder
+      tags: [laboratories]
+      summary: Open a laboratory order (lab workflow access)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabOrderCreateRequest"
+      responses:
+        "201":
+          description: The created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabOrder"
+
+  /labs/orders/{orderId}/results/:
+    post:
+      operationId: enterLabResult
+      tags: [laboratories]
+      summary: Enter a laboratory result on an order (`lab.result.enter`)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabResultEntryRequest"
+      responses:
+        "201":
+          description: The recorded result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabResult"
+
+  /labs/results/{resultId}/validate/:
+    post:
+      operationId: validateLabResult
+      tags: [laboratories]
+      summary: Validate a laboratory result (`lab.result.validate`)
+      parameters:
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabResultValidateRequest"
+      responses:
+        "200":
+          description: The result with its new validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabResult"
+
+  /records/notes/:
+    get:
+      operationId: listClinicalNotes
+      tags: [records]
+      summary: List authorized clinical notes
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Clinical notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedClinicalNoteList"
+    post:
+      operationId: createClinicalNote
+      tags: [records]
+      summary: Author an append-only clinical note (`clinical_note.create`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicalNoteCreateRequest"
+      responses:
+        "201":
+          description: The created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicalNote"
+
+  /records/medications/:
+    get:
+      operationId: listMedications
+      tags: [records]
+      summary: List authorized medications
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Medications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMedicationList"
+    post:
+      operationId: createMedication
+      tags: [records]
+      summary: Prescribe / record a medication for an assigned patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MedicationCreateRequest"
+      responses:
+        "201":
+          description: The recorded medication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Medication"
+
+  /risk/assessments/:
+    get:
+      operationId: listRiskAssessments
+      tags: [risk]
+      summary: List authorized, reproducible risk assessments
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Risk assessments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRiskAssessmentList"
+    post:
+      operationId: requestRiskAnalysis
+      tags: [risk]
+      summary: Run the analysis for a patient
+      description: >-
+        A clinician runs this for an assigned patient (`risk.request`); a person
+        runs it on their own record (`risk.request.own`), where it is paced by a
+        cooldown and a daily cap. A **200** is a successful *blocked* outcome -
+        the evidence was insufficient or out of domain and the system declined
+        to guess. Only a **201** carries a scored result.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RiskRequest"
+      responses:
+        "201":
+          description: A calibrated result was produced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskRequestOutcome"
+        "200":
+          description: The prediction was safely blocked, with the reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskRequestOutcome"
+        "429":
+          description: Paced by the self-service cooldown or daily cap
+
+  /alerts/:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List authorized alerts
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AlertStatus"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAlertList"
+
+  /alerts/{alertId}/acknowledge/:
+    post:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: Acknowledge an alert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /alerts/{alertId}/resolve/:
+    post:
+      operationId: resolveAlert
+      tags: [alerts]
+      summary: Resolve an alert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Create a patient login (public sign-up)
+      description: >-
+        Creates an account holding only the PATIENT role. It is deliberately
+        NOT connected to any clinical record - staff link a verified account to
+        a record afterwards. Returns a session token so the caller is signed in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: The account could not be created
+
+  /patients/{patientId}/link-account/:
+    post:
+      operationId: linkPatientAccount
+      tags: [admin]
+      summary: Attach an existing login to a patient record
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientAccountLinkRequest"
+      responses:
+        "200":
+          description: The updated patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /users/:
+    get:
+      operationId: listUsers
+      tags: [admin]
+      summary: List user accounts
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: User accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAdminUserList"
+    post:
+      operationId: createUser
+      tags: [admin]
+      summary: Create a user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserCreateRequest"
+      responses:
+        "201":
+          description: The created account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+
+  /users/{userId}/:
+    delete:
+      operationId: deactivateUser
+      tags: [admin]
+      summary: Deactivate an account and revoke its tokens
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deactivated
+
+  /users/{userId}/roles/:
+    post:
+      operationId: grantRole
+      tags: [admin]
+      summary: Grant a role to an account
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleGrantRequest"
+      responses:
+        "200":
+          description: The updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+
+  /users/{userId}/roles/{roleCode}/:
+    delete:
+      operationId: revokeRole
+      tags: [admin]
+      summary: Revoke a role from an account
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleCode
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/UserRole"
+      responses:
+        "200":
+          description: The updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+
+  /users/{userId}/revoke-tokens/:
+    post:
+      operationId: revokeUserTokens
+      tags: [admin]
+      summary: Revoke every active session for an account
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Number of sessions revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokedSessions"
+
+  /doctors/profiles/:
+    get:
+      operationId: listDoctors
+      tags: [admin]
+      summary: List clinician profiles
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Clinician profiles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedDoctorList"
+    post:
+      operationId: createDoctor
+      tags: [admin]
+      summary: Create a clinician profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DoctorCreateRequest"
+      responses:
+        "201":
+          description: The created profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Doctor"
+
+  /doctors/admin/assignments/:
+    get:
+      operationId: listAssignments
+      tags: [admin]
+      summary: List doctor-patient assignments
+      parameters:
+        - name: patient_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: doctor_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAssignmentList"
+    post:
+      operationId: createAssignment
+      tags: [admin]
+      summary: Grant a clinician access to a patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentCreateRequest"
+      responses:
+        "201":
+          description: The created assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assignment"
+
+  /doctors/admin/assignments/{assignmentId}/end/:
+    post:
+      operationId: endAssignment
+      tags: [admin]
+      summary: End an assignment, revoking that clinician access
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentEndRequest"
+      responses:
+        "200":
+          description: The ended assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assignment"
+
+  /labs/laboratories/:
+    get:
+      operationId: listLaboratories
+      tags: [admin]
+      summary: List laboratories
+      responses:
+        "200":
+          description: Laboratories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLaboratoryList"
+    post:
+      operationId: createLaboratory
+      tags: [admin]
+      summary: Create a laboratory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LaboratoryCreateRequest"
+      responses:
+        "201":
+          description: The created laboratory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Laboratory"
+
+  /labs/technicians/:
+    get:
+      operationId: listLabTechnicians
+      tags: [admin]
+      summary: List laboratory technicians
+      parameters:
+        - name: laboratory_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Technicians
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLabTechnicianList"
+    post:
+      operationId: createLabTechnician
+      tags: [admin]
+      summary: Attach a technician account to a laboratory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabTechnicianCreateRequest"
+      responses:
+        "201":
+          description: The created technician
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabTechnician"
+
+  /audit/logs/:
+    get:
+      operationId: listAuditLogs
+      tags: [oversight]
+      summary: Read the append-only audit trail
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Audit records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAuditLogList"
+
+  /reconciliation/events/:
+    get:
+      operationId: listReconciliationEvents
+      tags: [oversight]
+      summary: List preserved data conflicts awaiting review
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Reconciliation events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedReconciliationEventList"
+
+  /notifications/tasks/:
+    get:
+      operationId: listMissingDataTasks
+      tags: [oversight]
+      summary: List missing-information tasks
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Missing-data tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMissingDataTaskList"
+
+  /appointments/availability/:
+    get:
+      operationId: listAvailability
+      tags: [appointments]
+      summary: Browse open consultation times
+      description: >-
+        Defaults to the public booking directory - open, unbooked and still in
+        the future. Pass `mine=true` as a clinician to see your own published
+        availability instead.
+      parameters:
+        - name: doctor_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mine
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Availability slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAvailabilitySlotList"
+    post:
+      operationId: publishAvailability
+      tags: [appointments]
+      summary: Publish a consultation time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityCreateRequest"
+      responses:
+        "201":
+          description: The published slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySlot"
+
+  /appointments/availability/{slotId}/withdraw/:
+    post:
+      operationId: withdrawAvailability
+      tags: [appointments]
+      summary: Withdraw an unbooked consultation time
+      parameters:
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The withdrawn slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySlot"
+
+  /appointments/directory/:
+    get:
+      operationId: listDoctorDirectory
+      tags: [appointments]
+      summary: Clinicians available to book
+      responses:
+        "200":
+          description: Clinician directory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoctorDirectoryList"
+
+  /appointments/:
+    get:
+      operationId: listAppointments
+      tags: [appointments]
+      summary: Your consultations
+      description: >-
+        A patient sees only their own; a clinician only those they are party to.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AppointmentStatus"
+        - name: upcoming
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Appointments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAppointmentList"
+    post:
+      operationId: bookAppointment
+      tags: [appointments]
+      summary: Book a consultation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentCreateRequest"
+      responses:
+        "201":
+          description: The booked consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/confirm/:
+    post:
+      operationId: confirmAppointment
+      tags: [appointments]
+      summary: Accept a consultation request (clinician)
+      description: >-
+        Accepting is what places the clinician on the patient's care team and
+        grants access to the record.
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The confirmed consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/decline/:
+    post:
+      operationId: declineAppointment
+      tags: [appointments]
+      summary: Decline a consultation request (clinician)
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentReasonRequest"
+      responses:
+        "200":
+          description: The declined consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/cancel/:
+    post:
+      operationId: cancelAppointment
+      tags: [appointments]
+      summary: Cancel a consultation (either party)
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentReasonRequest"
+      responses:
+        "200":
+          description: The cancelled consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/complete/:
+    post:
+      operationId: completeAppointment
+      tags: [appointments]
+      summary: Mark a consultation as held (clinician)
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentCompleteRequest"
+      responses:
+        "200":
+          description: The completed consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /notifications/:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: Messages addressed to the signed-in user
+      description: >-
+        A user reads only their own. The backend writes these when something
+        happens that a person needs to know about - an analysis blocked for
+        missing evidence, for instance - so they must be readable somewhere or
+        the message is lost.
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: page_size
+          schema: { type: number }
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedNotificationList"
+
+  /notifications/{id}/read/:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark one message as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_at]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    UserRole:
+      type: string
+      enum: [PATIENT, DOCTOR, LAB_TECHNICIAN, ADMIN]
+
+    Me:
+      type: object
+      required: [id, email, full_name, is_active, date_joined, roles, permissions]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        is_active:
+          type: boolean
+        date_joined:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRole"
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RiskLevel:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    PatientStatus:
+      type: string
+      enum: [STABLE, MONITORING, REVIEW_REQUIRED]
+
+    RiskTrend:
+      type: string
+      enum: [UP, DOWN, STABLE]
+
+    DashboardMetricTone:
+      type: string
+      enum: [neutral, positive, warning, critical]
+
+    DashboardMetric:
+      type: object
+      required: [label, value, context, tone]
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        context:
+          type: string
+        tone:
+          $ref: "#/components/schemas/DashboardMetricTone"
+
+    ActivityItemType:
+      type: string
+      enum: [risk, report, note, measurement, alert]
+
+    ActivityItem:
+      type: object
+      required: [id, title, detail, timestamp, type]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          $ref: "#/components/schemas/ActivityItemType"
+
+    DashboardSummary:
+      type: object
+      required: [role, greeting, metrics, recent_activity]
+      properties:
+        role:
+          $ref: "#/components/schemas/UserRole"
+        greeting:
+          type: string
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardMetric"
+        recent_activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+
+    Patient:
+      type: object
+      required:
+        [
+          id, mrn, given_name, family_name, full_name, date_of_birth, sex, phone,
+          is_active, created_at, initials, age, trend, status,
+        ]
+      properties:
+        id:
+          type: string
+        mrn:
+          type: string
+        given_name:
+          type: string
+        family_name:
+          type: string
+        full_name:
+          type: string
+        date_of_birth:
+          type: ["string", "null"]
+          format: date
+        sex:
+          type: string
+        phone:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        initials:
+          type: string
+        age:
+          type: ["number", "null"]
+        risk_level:
+          oneOf:
+            - $ref: "#/components/schemas/RiskLevel"
+            - type: "null"
+        risk_label:
+          type: string
+          description: >-
+            The band in reader-facing words, e.g. "Much higher than average".
+            Composed server-side so a list and a result card cannot describe
+            the same band differently. Empty when nothing has been assessed.
+        risk_score:
+          type: ["number", "null"]
+          description: >-
+            Null unless the viewer is the intended audience for the raw model
+            output, or the model has an external validation record.
+        trend:
+          $ref: "#/components/schemas/RiskTrend"
+        status:
+          $ref: "#/components/schemas/PatientStatus"
+        last_updated:
+          type: ["string", "null"]
+          format: date-time
+        latest_alert:
+          type: ["string", "null"]
+
+    MeasurementStatus:
+      type: string
+      enum: [IN_RANGE, ATTENTION, OUT_OF_RANGE]
+
+    Measurement:
+      type: object
+      required: [label, value, unit, recorded_at, status]
+      properties:
+        label:
+          type: string
+        value:
+          type: ["string", "null"]
+        unit:
+          type: string
+        recorded_at:
+          type: string
+          format: date-time
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/MeasurementStatus"
+            - type: "null"
+
+    PatientProfile:
+      allOf:
+        - $ref: "#/components/schemas/Patient"
+        - type: object
+          required: [care_team, conditions, allergies, medications, measurements]
+          properties:
+            care_team:
+              type: ["string", "null"]
+            conditions:
+              type: array
+              items:
+                type: string
+            allergies:
+              type: array
+              items:
+                type: string
+            medications:
+              type: array
+              items:
+                type: string
+            measurements:
+              type: array
+              items:
+                $ref: "#/components/schemas/Measurement"
+
+    PaginatedPatientList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Patient"
+
+    TimelineEventType:
+      type: string
+      enum: [assessment, report, measurement, note, alert]
+
+    TimelineEvent:
+      type: object
+      required: [id, title, detail, occurred_at, type]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        type:
+          $ref: "#/components/schemas/TimelineEventType"
+
+    AiSummary:
+      type: object
+      required: [summary, generated_at, context, disclaimer, highlights]
+      properties:
+        summary:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        context:
+          type: string
+        disclaimer:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          description: Present ("blocked") only for a safe non-answer.
+        outcome:
+          type: string
+        message:
+          type: string
+
+    ReportProcessingState:
+      type: string
+      enum:
+        - RECEIVED
+        - VALIDATING_FILE
+        - EXTRACTING
+        - CLASSIFYING
+        - STRUCTURING
+        - RECONCILING
+        - REVIEW_REQUIRED
+        - FINALIZED
+        - REJECTED
+
+    ReportClass:
+      type: string
+      enum:
+        - CBC
+        - LIPID
+        - GLUCOSE
+        - HBA1C
+        - LIVER
+        - KIDNEY
+        - URINALYSIS
+        - PATHOLOGY
+        - RADIOLOGY
+        - PRESCRIPTION
+        - DISCHARGE
+        - CLINICAL_NOTE
+        - OTHER
+
+    ReportTest:
+      type: object
+      required: [name, value_raw, unit_raw, value_normalized, unit_normalized, state, validation_status]
+      properties:
+        name:
+          type: string
+        loinc_code:
+          type: string
+        value_raw:
+          type: ["string", "null"]
+        unit_raw:
+          type: string
+        value_normalized:
+          type: ["string", "null"]
+        unit_normalized:
+          type: string
+        conversion_rule_version:
+          type: string
+        reference_range:
+          type: string
+        abnormal_flag:
+          type: string
+        method:
+          type: string
+        state:
+          type: string
+        validation_status:
+          type: string
+        ocr_confidence:
+          type: ["string", "null"]
+        entity_confidence:
+          type: ["string", "null"]
+        context_confidence:
+          type: ["string", "null"]
+        observed_at:
+          type: ["string", "null"]
+          format: date-time
+
+    ReportFinding:
+      type: object
+      required: [category, text, confidence]
+      properties:
+        category:
+          type: string
+        text:
+          type: string
+        confidence:
+          type: ["string", "null"]
+
+    ReportSection:
+      type: object
+      required: [name, ordinal]
+      properties:
+        name:
+          type: string
+        ordinal:
+          type: number
+        detection_confidence:
+          type: ["string", "null"]
+
+    ReportQuality:
+      type: object
+      required: [report_id, completeness, extraction_reliability, validation, consistency, required_fields_missing, tests_total, tests_validated, note]
+      properties:
+        report_id:
+          type: string
+        completeness:
+          type: string
+        extraction_reliability:
+          type: string
+        validation:
+          type: string
+        consistency:
+          type: string
+        required_fields_missing:
+          type: number
+        tests_total:
+          type: number
+        tests_validated:
+          type: number
+        note:
+          type: string
+
+    MedicalReport:
+      type: object
+      required:
+        [id, patient_id, patient_name, title, report_class, processing_state, validation_status, created_at, tests, findings]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        title:
+          type: string
+        uploaded_by:
+          type: ["string", "null"]
+        report_class:
+          type: string
+        class_hint:
+          type: string
+        classification_confidence:
+          type: ["string", "null"]
+        processing_state:
+          $ref: "#/components/schemas/ReportProcessingState"
+        completeness_status:
+          type: string
+        validation_status:
+          type: string
+        review_reason:
+          type: string
+        facility:
+          type: string
+        ordering_provider:
+          type: string
+        specimen:
+          type: string
+        collected_at:
+          type: ["string", "null"]
+          format: date-time
+        reported_at:
+          type: ["string", "null"]
+          format: date-time
+        original_filename:
+          type: string
+        file_size:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportSection"
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportTest"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFinding"
+
+    PaginatedMedicalReportList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicalReport"
+
+    RiskFactorDirection:
+      type: string
+      enum: [INCREASES, DECREASES]
+
+    RiskFactor:
+      type: object
+      required: [feature_name, direction, contribution, rank]
+      properties:
+        feature_name:
+          type: string
+        direction:
+          $ref: "#/components/schemas/RiskFactorDirection"
+        contribution:
+          type: string
+        rank:
+          type: number
+
+    AssessmentLifecycleState:
+      type: string
+      description: >-
+        How far this request got. Not every calculation is a finalized
+        clinical assessment (spec section 40).
+      enum:
+        - REQUESTED
+        - VALIDATING
+        - INSUFFICIENT_DATA
+        - READY_FOR_INFERENCE
+        - INFERENCE_COMPLETE
+        - REVIEW_REQUIRED
+        - CLINICALLY_REVIEWED
+        - FINALIZED
+        - CANCELLED
+
+    ClinicalReviewDecision:
+      type: string
+      enum: [ACCEPTED, REJECTED, NEEDS_MORE_DATA, ESCALATED]
+
+    ClinicalReview:
+      type: object
+      required: [id, decision, reviewer, created_at]
+      properties:
+        id:
+          type: string
+        decision:
+          $ref: "#/components/schemas/ClinicalReviewDecision"
+        rationale:
+          type: string
+        reviewer:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RiskAssessment:
+      type: object
+      required:
+        [id, patient_id, task, status, outcome_code, sufficiency, reliability_status, created_at, factors]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        task:
+          type: string
+        status:
+          type: string
+          enum: [COMPLETED, BLOCKED]
+        outcome_code:
+          type: string
+        sufficiency:
+          type: string
+        reliability_status:
+          type: string
+        calibrated_score:
+          type: ["string", "null"]
+        raw_score:
+          type: ["string", "null"]
+        model:
+          type: ["string", "null"]
+        feature_schema_version:
+          type: string
+        preprocessing_version:
+          type: string
+        calibration_version:
+          type: string
+        explanation_version:
+          type: string
+        missing_features:
+          type: array
+          items:
+            type: string
+        conflicts:
+          type: array
+          items:
+            type: string
+        correlation_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        lifecycle_state:
+          $ref: "#/components/schemas/AssessmentLifecycleState"
+        limitations:
+          type: array
+          description: >-
+            Known limitations of this model/prediction. Must be surfaced with
+            the score, never hidden to tidy the UI (spec section 58).
+          items:
+            type: string
+        factors:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskFactor"
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalReview"
+        safety_notice:
+          oneOf:
+            - $ref: "#/components/schemas/SafetyNotice"
+            - type: "null"
+          description: >-
+            Present on an elevated result. A risk estimate speaks to a horizon,
+            not to today, so an elevated band carries explicit urgent-symptom
+            guidance for a reader with no clinician present.
+        interpretation:
+          oneOf:
+            - $ref: "#/components/schemas/RiskInterpretation"
+            - type: "null"
+          description: >-
+            How this result should be read, composed server-side from the
+            model's governance record. Null for anything that did not produce
+            a score.
+        blocked_explanation:
+          oneOf:
+            - $ref: "#/components/schemas/BlockedExplanation"
+            - type: "null"
+          description: >-
+            What a safe refusal means and what would resolve it. Null unless
+            the assessment was blocked.
+        superseded_by_new_data:
+          type: boolean
+          description: >-
+            True when model-readable results were recorded after this was
+            calculated, so the figure no longer reflects the record.
+
+    PaginatedRiskAssessmentList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskAssessment"
+
+    AlertCategory:
+      type: string
+      description: Free-text workflow category (e.g. clinical_review, followup)
+
+    AlertSeverity:
+      type: string
+      enum: [INFO, LOW, MEDIUM, HIGH]
+
+    AlertStatus:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, RESOLVED, DISMISSED]
+
+    Alert:
+      type: object
+      required: [id, patient_id, patient_name, category, severity, title, detail, status, created_at]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        category:
+          type: string
+        severity:
+          $ref: "#/components/schemas/AlertSeverity"
+        title:
+          type: string
+        detail:
+          type: string
+        status:
+          $ref: "#/components/schemas/AlertStatus"
+        source_workflow:
+          type: string
+        acknowledged_at:
+          type: ["string", "null"]
+          format: date-time
+        resolved_at:
+          type: ["string", "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    PaginatedAlertList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+
+    # ---- Write payloads: report upload -------------------------------------
+    ReportUploadRequest:
+      type: object
+      required: [patient_id, file]
+      properties:
+        patient_id:
+          type: string
+          description: Public id of an authorized patient.
+        file:
+          type: string
+          format: binary
+        class_hint:
+          $ref: "#/components/schemas/ReportClass"
+        extracted_text:
+          type: string
+          description: Optional plain text already obtained from the document.
+
+    # ---- Laboratory workflow --------------------------------------------
+    ClinicalDataState:
+      type: string
+      enum: [OBSERVED, DERIVED, NOT_REPORTED, NOT_APPLICABLE, PENDING]
+
+    ValidationStatus:
+      type: string
+      enum: [PENDING, PASSED, FAILED, REVIEW_REQUIRED]
+
+    LabOrderStatus:
+      type: string
+      enum: [REQUESTED, COLLECTED, IN_PROGRESS, RESULTED, CANCELLED]
+
+    LabResultValidation:
+      type: object
+      required: [status, validated_at]
+      properties:
+        status:
+          $ref: "#/components/schemas/ValidationStatus"
+        note:
+          type: string
+        validated_at:
+          type: string
+          format: date-time
+
+    LabResult:
+      type: object
+      required: [id, order_id, analyte, state, recorded_at, validations]
+      properties:
+        id:
+          type: string
+        order_id:
+          type: string
+        analyte:
+          type: string
+        loinc_code:
+          type: string
+        value_raw:
+          type: ["string", "null"]
+        unit_raw:
+          type: string
+        value_normalized:
+          type: ["string", "null"]
+        unit_normalized:
+          type: string
+        conversion_rule_version:
+          type: string
+        state:
+          $ref: "#/components/schemas/ClinicalDataState"
+        reference_low:
+          type: ["string", "null"]
+        reference_high:
+          type: ["string", "null"]
+        abnormal_flag:
+          type: string
+        method:
+          type: string
+        extraction_method:
+          type: string
+        observed_at:
+          type: ["string", "null"]
+          format: date-time
+        reported_at:
+          type: ["string", "null"]
+          format: date-time
+        recorded_at:
+          type: string
+          format: date-time
+        validations:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabResultValidation"
+
+    LabOrder:
+      type: object
+      required: [id, patient_id, laboratory, panel, status, requested_at, results]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        patient_mrn:
+          type: string
+        laboratory:
+          type: string
+        panel:
+          type: string
+        status:
+          $ref: "#/components/schemas/LabOrderStatus"
+        requested_at:
+          type: string
+          format: date-time
+        collected_at:
+          type: ["string", "null"]
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabResult"
+
+    PaginatedLabOrderList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabOrder"
+
+    LabOrderCreateRequest:
+      type: object
+      required: [patient_id, panel]
+      properties:
+        patient_id:
+          type: string
+        panel:
+          type: string
+        laboratory_id:
+          type: string
+        collected_at:
+          type: string
+          format: date-time
+
+    LabResultEntryRequest:
+      type: object
+      required: [analyte, state]
+      properties:
+        analyte:
+          type: string
+        state:
+          $ref: "#/components/schemas/ClinicalDataState"
+        value:
+          type: ["string", "number", "null"]
+        unit:
+          type: string
+        observed_at:
+          type: string
+          format: date-time
+        method:
+          type: string
+
+    LabResultValidateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/ValidationStatus"
+        note:
+          type: string
+
+    # ---- Clinical record authoring ------------------------------------
+    ClinicalNoteType:
+      type: string
+      enum: [PROGRESS, ASSESSMENT, ADDENDUM]
+
+    ClinicalNote:
+      type: object
+      required: [id, patient_id, author, note_type, body, authored_at]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        author:
+          type: string
+        note_type:
+          $ref: "#/components/schemas/ClinicalNoteType"
+        body:
+          type: string
+        authored_at:
+          type: string
+          format: date-time
+        amends_id:
+          type: ["string", "null"]
+
+    PaginatedClinicalNoteList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalNote"
+
+    ClinicalNoteCreateRequest:
+      type: object
+      required: [patient_id, body]
+      properties:
+        patient_id:
+          type: string
+        body:
+          type: string
+        note_type:
+          $ref: "#/components/schemas/ClinicalNoteType"
+        amends_id:
+          type: string
+
+    MedicationStatus:
+      type: string
+      enum: [ACTIVE, STOPPED, COMPLETED, UNKNOWN]
+
+    Medication:
+      type: object
+      required: [id, patient_id, name, status, created_at]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        name:
+          type: string
+        dose:
+          type: string
+        route:
+          type: string
+        frequency:
+          type: string
+        status:
+          $ref: "#/components/schemas/MedicationStatus"
+        started_at:
+          type: ["string", "null"]
+          format: date
+        stopped_at:
+          type: ["string", "null"]
+          format: date
+        created_at:
+          type: string
+          format: date-time
+
+    PaginatedMedicationList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Medication"
+
+    MedicationCreateRequest:
+      type: object
+      required: [patient_id, name]
+      properties:
+        patient_id:
+          type: string
+        name:
+          type: string
+        dose:
+          type: string
+        route:
+          type: string
+        frequency:
+          type: string
+        status:
+          $ref: "#/components/schemas/MedicationStatus"
+        started_at:
+          type: string
+          format: date
+        stopped_at:
+          type: string
+          format: date
+
+    RegisterRequest:
+      type: object
+      required: [email, full_name, password]
+      properties:
+        email:
+          type: string
+        full_name:
+          type: string
+        password:
+          type: string
+          minLength: 12
+        date_of_birth:
+          type: ["string", "null"]
+          format: date
+          description: >-
+            Age is a required model input; without it the risk engine blocks
+            rather than assume a value.
+        sex:
+          $ref: "#/components/schemas/PatientSex"
+
+    PatientAccountLinkRequest:
+      type: object
+      required: [user_email]
+      properties:
+        user_email:
+          type: string
+
+    PatientRegisterRequest:
+      type: object
+      required: [mrn, given_name, family_name]
+      properties:
+        mrn:
+          type: string
+        given_name:
+          type: string
+        family_name:
+          type: string
+        date_of_birth:
+          type: ["string", "null"]
+          format: date
+        sex:
+          $ref: "#/components/schemas/PatientSex"
+        phone:
+          type: string
+        assign_doctor_id:
+          type: string
+          description: Optional clinician to place on the care team immediately.
+
+    PatientSex:
+      type: string
+      enum: [FEMALE, MALE, INTERSEX, UNKNOWN]
+
+    AdminUser:
+      type: object
+      required: [id, email, full_name, is_active, date_joined, roles]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        is_active:
+          type: boolean
+        date_joined:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRole"
+
+    AdminUserCreateRequest:
+      type: object
+      required: [email, full_name]
+      properties:
+        email:
+          type: string
+        full_name:
+          type: string
+        is_active:
+          type: boolean
+        password:
+          type: string
+          minLength: 12
+
+    RoleGrantRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/UserRole"
+
+    RevokedSessions:
+      type: object
+      properties:
+        revoked:
+          type: number
+
+    Doctor:
+      type: object
+      required: [id, email, registration_number, is_active]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        registration_number:
+          type: string
+        specialty:
+          type: string
+        is_active:
+          type: boolean
+
+    DoctorCreateRequest:
+      type: object
+      required: [user_email, registration_number]
+      properties:
+        user_email:
+          type: string
+        registration_number:
+          type: string
+        specialty:
+          type: string
+
+    Assignment:
+      type: object
+      required: [id, doctor_id, patient_id, status, assigned_at]
+      properties:
+        id:
+          type: string
+        doctor_id:
+          type: string
+        doctor_name:
+          type: string
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        patient_mrn:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, ENDED]
+        reason:
+          type: string
+        assigned_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: ["string", "null"]
+          format: date-time
+
+    AssignmentCreateRequest:
+      type: object
+      required: [doctor_id, patient_id]
+      properties:
+        doctor_id:
+          type: string
+        patient_id:
+          type: string
+        reason:
+          type: string
+
+    AssignmentEndRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+
+    Laboratory:
+      type: object
+      required: [id, code, name, is_active]
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        is_active:
+          type: boolean
+
+    LaboratoryCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+
+    LabTechnician:
+      type: object
+      required: [id, email, laboratory_id, laboratory_code, is_active]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        laboratory_id:
+          type: string
+        laboratory_code:
+          type: string
+        employee_id:
+          type: string
+        is_active:
+          type: boolean
+
+    LabTechnicianCreateRequest:
+      type: object
+      required: [user_email, laboratory_id]
+      properties:
+        user_email:
+          type: string
+        laboratory_id:
+          type: string
+        employee_id:
+          type: string
+
+    AuditLogEntry:
+      type: object
+      required: [id, created_at, action, result]
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        actor_label:
+          type: string
+        actor_roles:
+          type: array
+          items:
+            type: string
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        result:
+          type: string
+        reason:
+          type: string
+        request_id:
+          type: string
+        client_ip:
+          type: ["string", "null"]
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ReconciliationItem:
+      type: object
+      required: [resource_type, resource_id, role_in_conflict]
+      properties:
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        role_in_conflict:
+          type: string
+        snapshot:
+          type: object
+          additionalProperties: true
+
+    ReconciliationEvent:
+      type: object
+      required: [id, kind, status, detected_at, items]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: ["string", "null"]
+        kind:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+        detected_by_workflow:
+          type: string
+        resolved_at:
+          type: ["string", "null"]
+          format: date-time
+        resolution:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReconciliationItem"
+
+    MissingDataTask:
+      type: object
+      required: [id, patient_id, requested_data, status, created_at]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        requested_data:
+          type: string
+        reason:
+          type: string
+        source_workflow:
+          type: string
+        priority:
+          type: string
+        assigned_role:
+          type: string
+        status:
+          type: string
+        lookup_state:
+          type: string
+        escalation_level:
+          type: number
+        sla_hours:
+          type: number
+        due_at:
+          type: ["string", "null"]
+          format: date-time
+        last_escalated_at:
+          type: ["string", "null"]
+          format: date-time
+        acknowledged_at:
+          type: ["string", "null"]
+          format: date-time
+        resolved_at:
+          type: ["string", "null"]
+          format: date-time
+        resolution_note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    PaginatedAdminUserList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUser"
+
+    PaginatedDoctorList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Doctor"
+
+    PaginatedAssignmentList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Assignment"
+
+    PaginatedLaboratoryList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Laboratory"
+
+    PaginatedLabTechnicianList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabTechnician"
+
+    PaginatedAuditLogList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+
+    PaginatedReconciliationEventList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReconciliationEvent"
+
+    PaginatedMissingDataTaskList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/MissingDataTask"
+
+    AppointmentStatus:
+      type: string
+      enum: [REQUESTED, CONFIRMED, DECLINED, CANCELLED, COMPLETED]
+
+    AvailabilitySlot:
+      type: object
+      required: [id, doctor_id, starts_at, ends_at, is_open, is_booked]
+      properties:
+        id:
+          type: string
+        doctor_id:
+          type: string
+        doctor_name:
+          type: string
+        specialty:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        is_open:
+          type: boolean
+        is_booked:
+          type: boolean
+
+    AvailabilityCreateRequest:
+      type: object
+      required: [starts_at, ends_at]
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+
+    Appointment:
+      type: object
+      required: [id, patient_id, doctor_id, status, starts_at, ends_at, created_at]
+      properties:
+        id:
+          type: string
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        doctor_id:
+          type: string
+        doctor_name:
+          type: string
+        specialty:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        reason:
+          type: string
+        outcome_note:
+          type: string
+        resolution_reason:
+          type: string
+        confirmed_at:
+          type: ["string", "null"]
+          format: date-time
+        completed_at:
+          type: ["string", "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    AppointmentCreateRequest:
+      type: object
+      required: [slot_id]
+      properties:
+        slot_id:
+          type: string
+        reason:
+          type: string
+          description: The concern in the patient's own words. Reported, not diagnostic.
+        assessment_id:
+          type: string
+          description: Optional link to the risk analysis that prompted the booking.
+
+    AppointmentReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+
+    AppointmentCompleteRequest:
+      type: object
+      properties:
+        note:
+          type: string
+
+    DoctorDirectoryEntry:
+      type: object
+      required: [id, full_name]
+      properties:
+        id:
+          type: string
+        full_name:
+          type: string
+        specialty:
+          type: string
+
+    DoctorDirectoryList:
+      type: object
+      required: [count, results]
+      properties:
+        count:
+          type: number
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorDirectoryEntry"
+
+    PaginatedAvailabilitySlotList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilitySlot"
+
+    PaginatedAppointmentList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        next:
+          type: ["string", "null"]
+        previous:
+          type: ["string", "null"]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appointment"
+
+    SafetyNotice:
+      type: object
+      required: [level, headline, detail]
+      properties:
+        level:
+          type: string
+          enum: [URGENT_SYMPTOMS]
+        headline:
+          type: string
+        detail:
+          type: string
+        emergency_number:
+          type: string
+
+    RiskRequest:
+      type: object
+      required: [patient_id, task]
+      properties:
+        patient_id:
+          type: string
+        task:
+          type: string
+          description: The prediction task, e.g. "cvd".
+
+    RiskRequestOutcome:
+      type: object
+      required: [assessment, missing_data_tasks]
+      properties:
+        assessment:
+          oneOf:
+            - $ref: "#/components/schemas/RiskAssessment"
+            - type: "null"
+        missing_data_tasks:
+          type: array
+          description: Tasks opened to chase information the analysis needed.
+          items:
+            type: string
+        status:
+          type: string
+          description: Present only on a blocked outcome.
+        outcome:
+          type: string
+          description: Machine-readable reason code when blocked.
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    EvidenceGrade:
+      type: object
+      required: [code, label, detail]
+      properties:
+        code:
+          type: string
+          enum: [NOT_CLINICALLY_VALIDATED, INTERNALLY_VALIDATED, EXTERNALLY_VALIDATED]
+        label:
+          type: string
+        detail:
+          type: string
+
+    NextStep:
+      type: object
+      required: [action, label, detail]
+      properties:
+        action:
+          type: string
+          enum: [BOOK_APPOINTMENT, ADD_RESULTS, KEEP_MONITORING, DISCUSS_SYMPTOMS]
+        label:
+          type: string
+        detail:
+          type: string
+
+    RiskInterpretation:
+      type: object
+      required:
+        [band, band_label, headline, what_it_means, what_it_does_not_mean, show_score, evidence_grade, next_steps]
+      properties:
+        band:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        band_label:
+          type: string
+        headline:
+          type: string
+        what_it_means:
+          type: string
+        what_it_does_not_mean:
+          type: string
+        horizon:
+          type: string
+          description: Empty when the model card does not commit to a timeframe.
+        prediction_target:
+          type: string
+        show_score:
+          type: boolean
+          description: >-
+            False when the model has no external validation record, or this
+            input failed the reliability check. A lay reader must not be given
+            a figure the model card cannot stand behind.
+        score_percent:
+          type: ["number", "null"]
+        score_withheld_reason:
+          type: string
+        evidence_grade:
+          $ref: "#/components/schemas/EvidenceGrade"
+        reliability_note:
+          type: string
+        next_steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/NextStep"
+
+    DataGap:
+      type: object
+      required: [feature, label, source, how_to_supply]
+      properties:
+        feature:
+          type: string
+        label:
+          type: string
+        source:
+          type: string
+          enum: ["", LAB_REPORT, MEASUREMENT, PROFILE]
+        how_to_supply:
+          type: string
+
+    BlockedExplanation:
+      type: object
+      required: [outcome, headline, detail, data_needed, resolvable_by_patient]
+      properties:
+        outcome:
+          type: string
+        headline:
+          type: string
+        detail:
+          type: string
+        data_needed:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataGap"
+        resolvable_by_patient:
+          type: boolean
+
+    Notification:
+      type: object
+      required: [id, category, subject, body, status, created_at]
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        priority:
+          type: string
+        status:
+          type: string
+        related_resource_type:
+          type: string
+        related_resource_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: ["string", "null"]
+          format: date-time
+
+    PaginatedNotificationList:
+      type: object
+      required: [count, page, page_size, num_pages, results]
+      properties:
+        count:
+          type: number
+        page:
+          type: number
+        page_size:
+          type: number
+        num_pages:
+          type: number
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"

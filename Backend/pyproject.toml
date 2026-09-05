@@ -1,0 +1,87 @@
+[project]
+name = "caresense-backend"
+version = "0.1.0"
+description = "CareSense AI - healthcare / public-health decision-support backend"
+requires-python = ">=3.11"
+
+# NOTE: This project deliberately keeps its dependency surface small.
+# Runtime deps are grouped by the service that needs them.
+dependencies = [
+    # Primary application backend (Django owns identity + authorization + DB)
+    "Django>=5.1,<5.2",
+    "djangorestframework>=3.15",
+    "mysqlclient>=2.2",            # MySQL 8.x driver for the Django ORM
+    "python-dotenv>=1.0",
+    "PyJWT[crypto]>=2.8",          # OIDC access-token validation
+    "pypdf>=4.0",                  # PDF text extraction for the report pipeline
+    "drf-spectacular>=0.27",       # OpenAPI 3 schema + Swagger UI
+    # Shared validation
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+]
+
+[project.optional-dependencies]
+intelligence = [
+    # FastAPI intelligence/computation service (no DB access, no authz decisions)
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "polars>=1.0",
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "joblib>=1.3",
+    "xgboost>=2.0",
+    "shap>=0.45",
+]
+observability = [
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-api>=1.25",
+    "opentelemetry-instrumentation-django>=0.46b0",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-django>=4.8",
+    "httpx>=0.27",
+    "reportlab>=4.0",   # generate real PDFs in report-pipeline tests
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "django-stubs>=5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Explicit, rather than relying on flat-layout auto-discovery: the app also
+# writes to a runtime `media/` directory (report uploads) alongside these
+# source packages, which auto-discovery cannot tell apart from a package.
+include = ["apps*", "config*", "intelligence*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "tests.py"]
+pythonpath = ["."]
+testpaths = ["tests", "apps"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ", "S", "C4"]
+ignore = ["S101"]  # assert used in tests
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+plugins = ["mypy_django_plugin.main"]
+exclude = ["migrations/"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"

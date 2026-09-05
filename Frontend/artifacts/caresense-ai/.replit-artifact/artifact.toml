@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CareSense AI"
+description = "A premium healthcare operations platform for patients, clinicians, lab technicians, and administrators, with explainable AI risk insights, secure health records, and role-aware workflows."
+version = "1.0.0"
+id = "artifacts/caresense-ai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18104
+
+[services.development]
+run = "pnpm --filter @workspace/caresense-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/caresense-ai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/caresense-ai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18104"
+BASE_PATH = "/"

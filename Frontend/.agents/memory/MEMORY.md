@@ -1,0 +1,1 @@
+- [OpenAPI codegen compatibility](openapi-codegen-compatibility.md) — keep generated Zod schemas compatible with the workspace's installed Zod version and avoid barrel export collisions.
