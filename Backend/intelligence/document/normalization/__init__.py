@@ -1,9 +1,31 @@
-"""Stage 7 (Phase 3): canonicalise terminology and units.
+"""Stage 7: canonical analyte names and canonical units.
 
-Not yet implemented. Maps analyte aliases to canonical names and converts
-values to the schema's canonical unit using an explicit, versioned rule set -
-the same ``apps.common.units`` rules the Django pipeline uses, so a value
-normalised here and one normalised there agree. A unit it does not have a rule
-for is left raw and flagged, never guessed.
+``canonical_analyte`` maps a printed label to a known analyte or ``None``.
+``normalize_value`` converts a value to the analyte's canonical unit using a
+versioned rule table copied from ``apps.common.units`` so the two agree. A
+label or unit pair that is not covered is carried through unchanged and
+flagged, never guessed.
 """
 from __future__ import annotations
+
+from intelligence.document.normalization.analytes import (
+    CANONICAL_ANALYTES,
+    canonical_analyte,
+)
+from intelligence.document.normalization.units import (
+    CANONICAL_UNIT,
+    RULESET_VERSION,
+    NormalizedValue,
+    normalize_unit_token,
+    normalize_value,
+)
+
+__all__ = [
+    "canonical_analyte",
+    "CANONICAL_ANALYTES",
+    "normalize_value",
+    "normalize_unit_token",
+    "NormalizedValue",
+    "CANONICAL_UNIT",
+    "RULESET_VERSION",
+]

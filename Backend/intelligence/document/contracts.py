@@ -63,6 +63,27 @@ class CompletenessOutcome(str, Enum):  # noqa: UP042 - str mixin kept for JSON/D
     CONFLICTING = "CONFLICTING"
 
 
+class ReferenceStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
+    WITHIN = "WITHIN_REFERENCE_RANGE"
+    ABOVE = "ABOVE_REFERENCE_RANGE"
+    BELOW = "BELOW_REFERENCE_RANGE"
+    #: No range on the report, a qualitative range, or one that could not be
+    #: parsed. The value is not compared against a guess.
+    UNKNOWN = "UNKNOWN"
+
+
+class ValueStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
+    #: Passed every deterministic check; safe to treat as an observed value.
+    OBSERVED = "OBSERVED"
+    #: Extracted, but something a human must resolve before it is trusted -
+    #: an unrecognised unit, a non-numeric value, a printed flag that disagrees
+    #: with the computed reference status, an unparseable range.
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    #: Outside the plausibility bounds for the analyte: a read error, not a
+    #: sick patient. Never persisted as a clinical value.
+    REJECTED = "REJECTED"
+
+
 class ReportType(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
     """Report categories this module recognises.
 
