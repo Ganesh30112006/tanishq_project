@@ -19,6 +19,11 @@ _EXTRA_ALIASES: dict[str, str] = {
     "tlc": "wbc", "white blood cell count": "wbc", "white cell count": "wbc",
     "leucocyte count": "wbc", "wbc count": "wbc",
     "platelet count": "platelets", "plt": "platelets",
+    "mean corpuscular volume": "mcv", "mean cell volume": "mcv",
+    "serum ferritin": "ferritin", "ferritin level": "ferritin",
+    "eosinophil": "eosinophils", "eosinophil count": "eosinophils",
+    "absolute eosinophil count": "eosinophils", "aec": "eosinophils",
+
     "total cholesterol": "cholesterol", "cholesterol total": "cholesterol",
     "serum cholesterol": "cholesterol",
     "hdl cholesterol": "hdl", "hdl-c": "hdl", "hdl - c": "hdl",
@@ -52,6 +57,10 @@ def _build_table() -> dict[str, str]:
             table[_key(spec.name)] = spec.name
             for alias in spec.aliases:
                 table[_key(alias)] = spec.name
+    # A canonical name must also resolve to itself: "MCV" on a report is not an
+    # alias of anything, it IS the analyte, and it appears in no schema.
+    for name in set(table.values()):
+        table.setdefault(_key(name), name)
     return table
 
 

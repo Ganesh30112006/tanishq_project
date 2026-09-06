@@ -90,12 +90,16 @@ asserts the OpenAPI schema has no `path` / `patient_id` / `content_reference`.
 `DocumentResult` with the disposition, the validated values with provenance, a
 schema completeness roll-up, and typed `Issue`s.
 
-## What is not built yet
+## What comes after extraction
 
-The gold-standard benchmark (clinician-annotated reports; needs data), the
-finding knowledge layer, and the small LLM module - in that order. The LLM,
-when it lands, receives the validated structured evidence this pipeline
-produces, never a raw document.
+Validated values feed the finding and disease framework - see
+[finding-detection.md](finding-detection.md). Levels 2 and 3 are built; level 4
+is the governed risk model in Django and stays frozen.
+
+Still missing: the gold-standard benchmark (clinician-annotated reports; needs
+data), and the LLM module. Every detector is `NOT_VALIDATED` until the
+benchmark exists. The LLM, when it lands, receives the validated structured
+findings this pipeline produces, never a raw document.
 
 ## The OCR adapter
 

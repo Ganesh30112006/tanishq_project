@@ -21,7 +21,10 @@ MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 
 #: Stages a caller may ask to stop after. Anything later than the last requested
 #: stage is skipped. Order matters.
-OPERATIONS = ("validate_file", "extract_text", "classify", "extract_values", "validate")
+OPERATIONS = (
+    "validate_file", "extract_text", "classify", "extract_values", "validate",
+    "detect_findings",
+)
 
 
 class DocumentProcessRequest(BaseModel):
@@ -35,7 +38,21 @@ class DocumentProcessRequest(BaseModel):
     #: Optional hint. The deterministic classifier still runs and may disagree.
     document_type_hint: str = ""
     requested_operations: list[str] = Field(default_factory=lambda: list(OPERATIONS))
+    #: Clinical context needed to pick a reference interval. These are
+    #: attributes, not identifiers: the service cannot resolve them to a person
+    #: and does not try. Sex is "male" / "female" / "" (unknown, which widens
+    #: the interval and is recorded as a caveat on any finding that used it).
+    patient_sex: str = ""
+    patient_age_years: float | None = None
     correlation_id: str = Field(min_length=1)
+
+    @field_validator("patient_sex")
+    @classmethod
+    def _known_sex(cls, value: str) -> str:
+        cleaned = (value or "").strip().lower()
+        if cleaned not in ("", "male", "female"):
+            raise ValueError("patient_sex must be 'male', 'female' or empty")
+        return cleaned
 
     @field_validator("requested_operations")
     @classmethod
@@ -140,6 +157,43 @@ class ValueOut(BaseModel):
         )
 
 
+class EvidenceRefOut(BaseModel):
+    key: str
+    kind: str
+    value: float | None = None
+    unit: str = ""
+    reference_text: str = ""
+    reference_source: str = ""
+    reference_status: str = ""
+    page: int | None = None
+    section: str = ""
+    source_text: str = ""
+
+
+class FindingOut(BaseModel):
+    code: str
+    label: str
+    level: int
+    category: str
+    detector: str
+    confidence: str
+    validation_status: str
+    human_review_required: bool
+    explanation: str
+    evidence_used: list[EvidenceRefOut] = Field(default_factory=list)
+    evidence_missing: list[str] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+
+
+class FindingsOut(BaseModel):
+    findings: list[FindingOut] = Field(default_factory=list)
+    unusable_evidence: list[str] = Field(default_factory=list)
+    detectors_run: int = 0
+    range_table_version: str = ""
+    knowledge_version: str = ""
+    needs_human_review: bool = False
+
+
 class ClassificationOut(BaseModel):
     type: str | None
     confidence: float
@@ -174,6 +228,7 @@ class DocumentProcessResponse(BaseModel):
     report_type: str | None = None
     values: list[ValueOut] = Field(default_factory=list)
     completeness: CompletenessOut | None = None
+    findings: FindingsOut | None = None
     issues: list[IssueOut] = Field(default_factory=list)
     capabilities: dict[str, CapabilityOut] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
@@ -184,6 +239,7 @@ class DocumentProcessResponse(BaseModel):
         document_id: str,
         result: DocumentResult,
         capabilities: dict[str, CapabilityOut],
+        findings=None,
     ) -> DocumentProcessResponse:
         classification = None
         if result.classification is not None:
@@ -213,11 +269,50 @@ class DocumentProcessResponse(BaseModel):
             report_type=result.report_type.value if result.report_type else None,
             values=[ValueOut.of(r.value, r.provenance) for r in result.values],
             completeness=completeness,
+            findings=findings_out(findings),
             issues=[IssueOut(code=i.code, severity=i.severity, detail=i.detail)
                     for i in result.issues],
             capabilities=capabilities,
             notes=list(result.notes),
         )
+
+
+def findings_out(report) -> FindingsOut | None:
+    if report is None:
+        return None
+    from intelligence.knowledge.findings import KNOWLEDGE_VERSION
+
+    return FindingsOut(
+        findings=[
+            FindingOut(
+                code=f.code, label=f.label, level=int(f.level.value),
+                category=f.category, detector=f.detector,
+                confidence=f.confidence.value,
+                validation_status=f.validation_status.value,
+                human_review_required=f.human_review_required,
+                explanation=f.explanation,
+                evidence_used=[
+                    EvidenceRefOut(
+                        key=e.key, kind=e.kind, value=e.value, unit=e.unit,
+                        reference_text=e.reference_text,
+                        reference_source=e.reference_source,
+                        reference_status=e.reference_status,
+                        page=e.page, section=e.section,
+                        source_text=e.source_text,
+                    )
+                    for e in f.evidence_used
+                ],
+                evidence_missing=list(f.evidence_missing),
+                caveats=list(f.caveats),
+            )
+            for f in report.findings
+        ],
+        unusable_evidence=list(report.unusable_evidence),
+        detectors_run=report.detectors_run,
+        range_table_version=report.range_table_version,
+        knowledge_version=KNOWLEDGE_VERSION,
+        needs_human_review=report.needs_human_review,
+    )
 
 
 def to_dict(response: DocumentProcessResponse) -> dict[str, Any]:

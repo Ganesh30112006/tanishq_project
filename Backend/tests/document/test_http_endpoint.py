@@ -168,3 +168,76 @@ def test_the_capability_probe_lists_stage_availability():
 @pytest.mark.parametrize("path", ["/v1/documents/capabilities"])
 def test_capability_probe_needs_the_token(path):
     assert client.get(path).status_code in (401, 503)
+
+
+# --- findings come back over the same call ------------------------
+ANEMIA_CBC = [
+    "COMPLETE BLOOD COUNT",
+    "Hemoglobin 9.8 g/dL 13.0 - 17.0 L",
+    "MCV 72 fL 80 - 100 L",
+    "WBC 7.2 10^9/L 4.0 - 11.0",
+    "Platelet Count 240 10^9/L 150 - 450",
+]
+
+
+def test_findings_are_returned_with_their_level_and_validation_status():
+    body = _post(_body(_pdf(ANEMIA_CBC), patient_sex="male")).json()
+    block = body["findings"]
+
+    codes = {f["code"]: f for f in block["findings"]}
+    assert "ANEMIA_PATTERN" in codes
+    assert "MICROCYTOSIS_PATTERN" in codes
+    assert codes["ANEMIA_PATTERN"]["level"] == 2
+    assert block["needs_human_review"] is True
+    assert block["range_table_version"] and block["knowledge_version"]
+
+    for finding in block["findings"]:
+        assert finding["validation_status"] == "NOT_VALIDATED"
+        assert finding["human_review_required"] is True
+        assert finding["explanation"].strip()
+        assert ":" in finding["detector"]
+
+
+def test_a_level_3_finding_names_the_evidence_it_lacked():
+    body = _post(_body(_pdf(ANEMIA_CBC), patient_sex="male")).json()
+    iron = next(
+        f for f in body["findings"]["findings"]
+        if f["code"] == "POSSIBLE_IRON_DEFICIENCY_ANEMIA"
+    )
+    assert iron["level"] == 3
+    assert iron["confidence"] == "PROVISIONAL"
+    assert iron["evidence_missing"] == ["ferritin"]
+    assert {e["key"] for e in iron["evidence_used"]} >= {
+        "ANEMIA_PATTERN", "MICROCYTOSIS_PATTERN"
+    }
+
+
+def test_evidence_is_traceable_back_to_the_page_and_line():
+    body = _post(_body(_pdf(ANEMIA_CBC), patient_sex="male")).json()
+    anemia = next(
+        f for f in body["findings"]["findings"] if f["code"] == "ANEMIA_PATTERN"
+    )
+    used = anemia["evidence_used"][0]
+    assert used["key"] == "hemoglobin"
+    assert used["reference_source"] == "report"
+    assert used["page"] == 1
+    assert used["source_text"].strip()
+
+
+def test_findings_can_be_skipped_by_not_requesting_them():
+    body = _post(_body(
+        _pdf(ANEMIA_CBC),
+        requested_operations=["extract_text", "classify", "extract_values", "validate"],
+    )).json()
+    assert body["findings"] is None
+
+
+def test_an_unknown_patient_sex_value_is_refused():
+    resp = _post(_body(_pdf(ANEMIA_CBC), patient_sex="unspecified"))
+    assert resp.status_code == 422
+
+
+def test_the_capability_probe_reports_finding_detection():
+    body = _post(_body(_pdf(ANEMIA_CBC))).json()
+    assert body["capabilities"]["finding_detection"]["available"] is True
+    assert "NOT_VALIDATED" in body["capabilities"]["finding_detection"]["detail"]

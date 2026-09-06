@@ -25,6 +25,9 @@ CANONICAL_UNIT: dict[str, str] = {
     "hba1c": "mmol/mol",
     "wbc": "10^9/L",
     "platelets": "10^9/L",
+    "mcv": "fL",
+    "ferritin": "ng/mL",
+    "eosinophils": "%",
 }
 
 # (analyte, normalised from-unit) -> (factor, offset), converting into the
@@ -50,6 +53,13 @@ _RULES: dict[tuple[str, str], tuple[float, float]] = {
     ("platelets", "10^9/l"): (1.0, 0.0),
     ("platelets", "10^3/ul"): (1.0, 0.0),
     ("platelets", "/ul"): (0.001, 0.0),
+    ("mcv", "fl"): (1.0, 0.0),
+    # ng/mL and ug/L are the same number for ferritin.
+    ("ferritin", "ng/ml"): (1.0, 0.0),
+    # An eosinophil PERCENTAGE only. There is deliberately no rule for an
+    # absolute count, so an absolute value is left unconvertible and never
+    # gets compared against a percentage reference range.
+    ("eosinophils", "%"): (1.0, 0.0),
 }
 
 _UNIT_ALIASES = {
@@ -63,6 +73,8 @@ _UNIT_ALIASES = {
     "10*9/l": "10^9/l", "10e9/l": "10^9/l", "10^3/ul": "10^3/ul",
     "x10^3/ul": "10^3/ul", "10*3/ul": "10^3/ul", "k/ul": "10^3/ul",
     "/ul": "/ul", "/µl": "/ul", "/μl": "/ul", "cells/ul": "/ul",
+    "fl": "fl", "fL": "fl", "femtolitre": "fl",
+    "ng/ml": "ng/ml", "ng/mL": "ng/ml", "ug/l": "ng/ml",
 }
 
 

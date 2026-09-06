@@ -18,6 +18,7 @@ from intelligence.document.wire import (
     DocumentProcessRequest,
     DocumentProcessResponse,
 )
+from intelligence.findings import build_evidence, detect
 from intelligence.security import verify_service_request
 
 router = APIRouter(tags=["documents"])
@@ -46,6 +47,14 @@ def _capabilities() -> dict[str, CapabilityOut]:
         "ocr": CapabilityOut(available=ocr_ok, detail=ocr_detail),
         "classification": CapabilityOut(available=True, detail="deterministic keyword vote"),
         "extraction": CapabilityOut(available=True, detail="deterministic, regex-line 1.0"),
+        "finding_detection": CapabilityOut(
+            available=True,
+            detail=(
+                "deterministic level-2 patterns and level-3 condition "
+                "likelihoods; every detector NOT_VALIDATED until a "
+                "gold-standard set exists"
+            ),
+        ),
         "llm": CapabilityOut(available=False, detail="not implemented; fails closed"),
         "rag": CapabilityOut(available=False, detail="not implemented; fails closed"),
     }
@@ -83,7 +92,18 @@ async def process(
     # runs in full; this only controls what is returned.
     _truncate(result, payload.requested_operations)
 
-    return DocumentProcessResponse.of(payload.document_id, result, _capabilities())
+    findings = None
+    if "detect_findings" in payload.requested_operations and result.values:
+        evidence = build_evidence(
+            result.values,
+            sex=payload.patient_sex or None,
+            age_years=payload.patient_age_years,
+        )
+        findings = detect(evidence)
+
+    return DocumentProcessResponse.of(
+        payload.document_id, result, _capabilities(), findings
+    )
 
 
 def _truncate(result, operations: list[str]) -> None:

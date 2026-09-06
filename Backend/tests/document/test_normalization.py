@@ -62,10 +62,20 @@ def test_hba1c_percent_uses_the_ifcc_affine_rule():
 
 
 def test_an_unknown_analyte_is_passed_through_without_an_error_note():
-    result = normalize_value("eosinophils", 9.2, "%")
+    result = normalize_value("serum rhubarb", 9.2, "%")
     assert not result.convertible
     assert result.detail == ""          # not an error - just nothing to do
     assert result.value == 9.2
+
+
+def test_an_absolute_eosinophil_count_has_no_conversion_rule_on_purpose():
+    """So it can never be compared against a percentage reference range."""
+    percentage = normalize_value("eosinophils", 9.2, "%")
+    assert percentage.convertible and percentage.unit == "%"
+
+    absolute = normalize_value("eosinophils", 0.4, "10^9/L")
+    assert not absolute.convertible
+    assert "no conversion rule" in absolute.detail
 
 
 def test_a_known_analyte_in_a_bad_unit_is_flagged():
