@@ -41,7 +41,7 @@ def _pdf_text(file_field) -> str:
     finally:
         try:
             file_field.close()
-        except Exception:  # pragma: no cover
+        except Exception:  # noqa: S110 - closing a handle must not mask the result
             pass
 
 

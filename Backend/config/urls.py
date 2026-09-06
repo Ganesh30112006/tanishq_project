@@ -75,6 +75,7 @@ api_v1 = [
     path("reconciliation/", include("apps.reconciliation.urls")),
     path("ai/", include("apps.ai.urls")),
     path("audit/", include("apps.audit.urls")),
+    path("privacy/", include("apps.privacy.urls")),
 ]
 
 urlpatterns = [

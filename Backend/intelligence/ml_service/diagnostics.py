@@ -16,7 +16,6 @@ Two questions the headline metrics cannot answer:
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import make_pipeline

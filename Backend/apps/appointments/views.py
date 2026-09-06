@@ -29,8 +29,7 @@ from apps.appointments.serializers import (
     AvailabilitySlotSerializer,
 )
 from apps.appointments.services import AppointmentService, AvailabilityService
-from apps.common.enums import Role
-from apps.common.errors import AccessDenied, ResourceNotFound, ValidationFailed
+from apps.common.errors import AccessDenied, ResourceNotFound
 from apps.doctors.models import Doctor
 from apps.patients.models import Patient
 from apps.risk.models import RiskAssessment

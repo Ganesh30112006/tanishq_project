@@ -20,7 +20,7 @@ from apps.common.errors import AuthenticationRequired
 
 pytestmark = pytest.mark.django_db
 
-PASSWORD = "CorrectHorseBatteryStaple9"
+PASSWORD = "CorrectHorseBatteryStaple9"  # noqa: S105 - a fixture, not a credential
 
 
 @pytest.fixture

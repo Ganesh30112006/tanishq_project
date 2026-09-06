@@ -11,7 +11,6 @@ about a specific report.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
 from decimal import Decimal, InvalidOperation
 
 from apps.ai.models import AiInteraction, AiKnowledgeDocument

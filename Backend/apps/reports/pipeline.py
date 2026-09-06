@@ -34,7 +34,7 @@ from apps.common.units import convert
 from apps.medical_records.models import Provenance
 from apps.reconciliation.services import ReconciliationService
 from apps.reports.extraction import extract_text
-from apps.reports.models import Report, ReportFinding, ReportSection, ReportTest
+from apps.reports.models import Report, ReportSection, ReportTest
 from apps.reports.schema_engine import SchemaEngine, active_schema
 
 _HEADING_RE = re.compile(r"^[A-Z][A-Z0-9 /&()\-]{3,}$")
@@ -383,7 +383,7 @@ class ReportPipeline(BaseService):
         )
 
 
-def _dec(value) -> "object":
+def _dec(value) -> object:
     from decimal import Decimal
 
     return Decimal(str(value))

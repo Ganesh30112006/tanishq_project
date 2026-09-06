@@ -29,7 +29,7 @@ def validator(rsa_key, monkeypatch):
 
 
 def _token(rsa_key, **overrides):
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     claims = {
         "sub": "user-123", "iss": ISSUER, "aud": AUDIENCE,
         "iat": now, "exp": now + dt.timedelta(minutes=5),
@@ -53,7 +53,7 @@ def test_wrong_audience_is_rejected(validator, rsa_key):
 def test_expired_token_is_rejected(validator, rsa_key):
     from apps.accounts.oidc import OIDCValidationError
 
-    past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+    past = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
     with pytest.raises(OIDCValidationError):
         validator.validate(_token(rsa_key, exp=past, iat=past - dt.timedelta(minutes=5)))
 

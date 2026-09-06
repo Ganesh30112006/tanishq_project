@@ -32,6 +32,7 @@ _VITAL_KIND: dict[str, str] = {
     "weight": MeasurementKind.WEIGHT,
     "height": MeasurementKind.HEIGHT,
     "bmi": MeasurementKind.BMI,
+    "current_smoker": MeasurementKind.SMOKING_STATUS,
 }
 
 # feature name -> laboratory analyte
@@ -49,7 +50,7 @@ _LAB_ANALYTE: dict[str, str] = {
 
 @dataclass(slots=True)
 class AssembledFeatures:
-    values: dict[str, "object"] = field(default_factory=dict)  # name -> FeatureValue
+    values: dict[str, object] = field(default_factory=dict)  # name -> FeatureValue
     not_found: list[str] = field(default_factory=list)
 
     def lab_backed(self, name: str) -> bool:

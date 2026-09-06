@@ -73,7 +73,16 @@ extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ", "S", "C4"]
-ignore = ["S101"]  # assert used in tests
+ignore = [
+    "S101",  # assert used in tests
+    # Line length is DEFERRED, not accepted. 142 lines in the pre-existing code
+    # exceed 100 characters. `ruff format` would fix nearly all of them, but it
+    # rewrites 192 of 321 files, which would bury every real change in a review.
+    # Enforcing this rule is a one-commit formatting pass someone should make
+    # deliberately; until then it is excluded so that CI can enforce every
+    # substantive rule instead of failing on cosmetics and being switched off.
+    "E501",
+]
 
 [tool.mypy]
 python_version = "3.11"

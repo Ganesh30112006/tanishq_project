@@ -14,14 +14,13 @@ its own, wider view of the data.
 """
 from __future__ import annotations
 
-from apps.common.display import display_term
-
 from dataclasses import dataclass
 from datetime import datetime
 
 from django.conf import settings
 from django.db.models import OuterRef, Subquery
 
+from apps.common.display import display_term
 from apps.common.enums import (
     JobState,
     MissingDataTaskStatus,
@@ -149,8 +148,8 @@ class DashboardService:
 
     # -- DOCTOR -------------------------------------------------------------
     def _doctor_view(self, user) -> tuple[list[Metric], list[ActivityItem]]:
-        from apps.authz.relationships import visible_patient_queryset
         from apps.alerts.models import Alert
+        from apps.authz.relationships import visible_patient_queryset
         from apps.notifications.models import MissingDataTask
         from apps.risk.models import RiskAssessment
 

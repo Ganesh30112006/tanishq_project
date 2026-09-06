@@ -45,11 +45,11 @@ class Decision:
     reason: str = ""
 
     @classmethod
-    def allow(cls, policy: str, reason: str = "") -> "Decision":
+    def allow(cls, policy: str, reason: str = "") -> Decision:
         return cls(True, policy, reason)
 
     @classmethod
-    def deny(cls, policy: str, reason: str = "") -> "Decision":
+    def deny(cls, policy: str, reason: str = "") -> Decision:
         return cls(False, policy, reason)
 
 

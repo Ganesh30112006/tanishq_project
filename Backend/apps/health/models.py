@@ -24,6 +24,11 @@ class MeasurementKind(models.TextChoices):
     WEIGHT = "WEIGHT", "Body weight"
     HEIGHT = "HEIGHT", "Height"
     BMI = "BMI", "Body mass index"
+    # Recorded as a measurement rather than a free-text note so it inherits
+    # the same machinery as every other model input: a clinical data state,
+    # an observation date, and the freshness rule that blocks a prediction
+    # built on a stale answer. 1 = smokes now, 0 = does not.
+    SMOKING_STATUS = "SMOKING_STATUS", "Currently smokes"
 
 
 class HealthMeasurement(UUIDTimeStampedModel):

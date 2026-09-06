@@ -34,6 +34,7 @@ _HOW: dict[str, str] = {
 _TERMS: dict[str, tuple[str, str]] = {
     "age": ("Your date of birth", SOURCE_PROFILE),
     "is_male": ("Sex recorded in your profile", SOURCE_PROFILE),
+    "current_smoker": ("Whether you smoke now", SOURCE_MEASUREMENT),
     # Laboratory analytes
     "glucose": ("Blood sugar (glucose)", SOURCE_LAB),
     "fasting_glucose": ("Fasting blood sugar", SOURCE_LAB),

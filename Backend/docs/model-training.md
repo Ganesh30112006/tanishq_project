@@ -22,11 +22,11 @@ python -m intelligence.ml_service.nhanes_download
 python -m intelligence.ml_service.nhanes_cohort
 
 # 3. Train, validate, and write the artifact + model card.
-python -m intelligence.ml_service.train_nhanes --version 2.3.0 --features deployable
+python -m intelligence.ml_service.train_nhanes --version 2.4.0 --features parsimonious
 
 # 4. Register it, then move it through the governed lifecycle.
-python manage.py register_model --meta intelligence/_artifacts/cvd-2.3.0.meta.json
-python manage.py govern_model --model cvd-nhanes-logreg --model-version 2.3.0 \
+python manage.py register_model --meta intelligence/_artifacts/cvd-2.4.0.meta.json
+python manage.py govern_model --model cvd-nhanes-logreg --model-version 2.4.0 \
     --to VALIDATION --by <approver-email> --reason "..."
 ```
 
@@ -82,8 +82,8 @@ On the held-out 2007-2010 period (n = 2,439, 129 events):
 |---|---|---|---|---|---|
 | Age alone | 1 | 0.7415 | 0.698-0.785 | — | — |
 | Original five | 5 | 0.7342 | 0.693-0.775 | 0.04853 | 0.979 |
-| **Deployable (ships)** | **5** | **0.7484** | **0.708-0.788** | **0.04823** | **0.993** |
-| Parsimonious | 6 | 0.7640 | 0.729-0.798 | 0.04836 | 0.888 |
+| Deployable (2.3.0, retired) | 5 | 0.7484 | 0.708-0.788 | 0.04823 | 0.993 |
+| **Parsimonious (2.4.0, ships)** | **6** | **0.7640** | **0.729-0.798** | **0.04836** | **0.888** |
 | Extended | 9 | 0.7658 | 0.731-0.800 | 0.04828 | 0.978 |
 | Gradient boosting | 5 | 0.7393 | 0.699-0.780 | 0.04832 | 0.939 |
 | Neural network (32,16) | 6 | 0.6201 | 0.570-0.668 | 0.04995 | 3.206 |
@@ -101,19 +101,20 @@ events none of these models can be *shown* to beat knowing the patient's age.
 The model card says so in those words, and it must keep saying so until there
 are enough events to settle it.
 
-Calibration is the part that is unambiguously good: slope 0.993 and predicted
-risk tracking observed risk across deciles from 0.6% to 14%. That matters more
-than AUC for a number shown to a person — a well-calibrated 4% means 4%.
+Calibration is the part that is unambiguously good: the shipped model's slope
+is 0.888 and predicted risk tracks observed risk across deciles from 0.4% to
+17%. That matters more than AUC for a number shown to a person — a
+well-calibrated 4% means 4%.
 
 ## Where it is weak
 
 Measured, not guessed. All of these are written into the model card's
 `known_failure_modes` by the training run itself:
 
-- **Discrimination within an age band collapses.** Overall AUC 0.748, but 0.593
-  in ages 70-79 and 0.630 in 55-69. Most of the headline number is age
+- **Discrimination within an age band collapses.** Overall AUC 0.764, but 0.615
+  in ages 70-79 and 0.646 in 55-69. Most of the headline number is age
   separating the young from the old.
-- **Under-prediction in the oldest patients**: predicted 9.5% against observed
+- **Under-prediction in the oldest patients**: predicted 10.4% against observed
   13.3% in ages 70-79. Partly the competing-risk framing above.
 - **Not validated in an Indian population.** Trained on a US survey. South
   Asian cardiovascular risk at a given risk-factor level is generally higher,
@@ -133,18 +134,28 @@ clinically backwards and points a patient the wrong way. Features whose sign is
 not stable are excluded rather than displayed with a caveat.
 
 The shipped model's six coefficients all point the way the biology does: age,
-male sex, systolic blood pressure, glucose and BMI all increase estimated risk.
+male sex, systolic blood pressure, glucose, current smoking and BMI each
+increase estimated risk. None of them would tell a patient something false if
+shown as a reason.
 
-## Why smoking is not in the model
+## Smoking: captured, and now in the shipped model
 
-It should be — it is in the parsimonious model and it helps. But **smoking
-status has no field anywhere in the data model**, so the application cannot
-assemble it and a model requiring it cannot be served. Capturing it is the
-single highest-value change available to this model: it is the one established
-risk factor that is missing and cheap to collect.
+Smoking had no field anywhere in the data model, so a model requiring it could
+not be served however good its metrics were. It is now recorded as
+`MeasurementKind.SMOKING_STATUS` — a dated measurement rather than a free-text
+note, so it inherits the same machinery as every other model input: a clinical
+data state, an observation date, and the freshness rule that blocks a
+prediction built on a stale answer. Someone who smoked two years ago may have
+stopped, and the system now knows to ask again rather than reusing it.
 
-`--features parsimonious` trains that model today; it just cannot be deployed
-until the record can hold the input.
+**"Not recorded" is not "does not smoke".** An unrecorded status blocks the
+prediction. Defaulting it to zero would have quietly under-estimated risk for
+exactly the population least likely to have been asked.
+
+That unlocked the parsimonious model, which now ships as **2.4.0**:
+ROC-AUC 0.7640 (95% CI 0.7286–0.7975) against 0.7484 for the five-feature
+version it replaces — a paired-bootstrap difference of +0.0327
+(95% CI +0.0078 to +0.0572), which is real rather than noise.
 
 ## Sex is never inferred
 

@@ -14,9 +14,9 @@ from django.test import override_settings
 from fastapi.testclient import TestClient
 
 from apps.common.intelligence import IntelligenceClient
+from intelligence import security
 from intelligence.main import app
 from intelligence.settings import IntelligenceSettings, get_settings
-from intelligence import security
 
 client = TestClient(app)
 

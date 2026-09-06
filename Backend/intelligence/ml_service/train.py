@@ -187,7 +187,8 @@ def build_demo_model(task: str, version: str, out_dir: str | Path, *, seed: int 
         },
         "known_failure_modes": [
             "Synthetic training distribution; real-world calibration is unknown.",
-            "Feature median imputation is not used - a missing required feature blocks the prediction.",
+            "Feature median imputation is not used - a missing required feature "
+            "blocks the prediction.",
         ],
         "limitations": (
             "Trained on synthetic data for demonstration. Not clinically validated. "

@@ -37,7 +37,6 @@ def test_dashboard_summary_honors_a_role_the_caller_actually_has(auth_client, ma
 def test_patient_timeline_is_scoped_and_chronological(
     auth_client, make_doctor, make_patient, assign_patient
 ):
-    from django.utils import timezone
 
     from apps.alerts.models import Alert
 

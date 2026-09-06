@@ -11,7 +11,7 @@ from .base import env_bool
 DEBUG = False
 
 # Fail loudly if a real secret was not provided.
-if SECRET_KEY == "insecure-dev-key-override-me":  # noqa: F405
+if SECRET_KEY == "insecure-dev-key-override-me":  # noqa: F405,S105 - the value being refused
     raise RuntimeError("DJANGO_SECRET_KEY must be set in production.")
 
 SECURE_SSL_REDIRECT = True

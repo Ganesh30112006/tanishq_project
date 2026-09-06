@@ -154,7 +154,6 @@ class ReportViewSet(
             return "HIGH" if fraction >= 0.95 else "MEDIUM" if fraction >= 0.75 else "LOW"
 
         extraction_score = sum(confidences) / len(confidences) if confidences else 0.0
-        validation_fraction = len(passed) / len(tests) if tests else 0.0
         return Response(
             {
                 "report_id": str(report.public_id),

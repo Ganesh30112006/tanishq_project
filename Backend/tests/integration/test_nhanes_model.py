@@ -211,3 +211,95 @@ def test_out_of_domain_age_is_refused_not_extrapolated(make_patient):
     )
     assert report.out_of_domain == ["age"]
     assert report.outcome_code() == "OUT_OF_DOMAIN"
+
+
+# --- smoking, the feature that unlocked the better model -----------------
+def test_smoking_status_is_a_dated_measurement_not_a_note(make_patient):
+    """It goes through the same machinery as every other model input.
+
+    Recording it as a free-text note would have put it outside the clinical
+    data state, the observation date and the freshness rule - so a prediction
+    could be built on an answer given years ago with nothing to flag it.
+    """
+    from apps.health.models import HealthMeasurement, MeasurementKind
+
+    patient = make_patient()
+    HealthMeasurement.objects.create(
+        patient=patient,
+        kind=MeasurementKind.SMOKING_STATUS,
+        value_num=Decimal("1"),
+        unit="",
+        state=ClinicalDataState.OBSERVED,
+        observed_at=timezone.now(),
+    )
+    result = FeatureAssembler().assemble(patient=patient, feature_names=["current_smoker"])
+    assert result.values["current_smoker"].value == Decimal("1")
+    assert result.values["current_smoker"].observed_at is not None
+
+
+def test_an_unrecorded_smoking_status_blocks_rather_than_assuming_non_smoker(make_patient):
+    """"Not recorded" is not "does not smoke".
+
+    Defaulting to 0 would quietly under-estimate risk for every patient nobody
+    had got round to asking, which is exactly the population least likely to
+    have been asked.
+    """
+    patient = make_patient()
+    result = FeatureAssembler().assemble(patient=patient, feature_names=["current_smoker"])
+    assert "current_smoker" not in result.values
+    assert result.not_found == ["current_smoker"]
+
+
+def test_a_stale_smoking_answer_is_not_reused_indefinitely(make_patient):
+    """Someone who smoked two years ago may have stopped."""
+    import datetime as dt
+
+    from apps.health.models import HealthMeasurement, MeasurementKind
+
+    patient = make_patient()
+    HealthMeasurement.objects.create(
+        patient=patient,
+        kind=MeasurementKind.SMOKING_STATUS,
+        value_num=Decimal("1"),
+        unit="",
+        state=ClinicalDataState.OBSERVED,
+        observed_at=timezone.now() - dt.timedelta(days=800),
+    )
+    definition = {
+        "required_features": [{"name": "current_smoker", "max_age_days": 365}],
+        "minimum_completeness": 1.0,
+        "max_data_age_days": 365,
+        "valid_domain": {"current_smoker": {"min": 0, "max": 1}},
+    }
+    assembled = FeatureAssembler().assemble(
+        patient=patient, feature_names=["current_smoker"]
+    )
+    report = DataSufficiencyEngine().evaluate(
+        definition=definition, features=assembled.values
+    )
+    assert report.stale == ["current_smoker"]
+    assert not report.is_sufficient
+
+
+@pytest.mark.parametrize("version", ["2.3.0", "2.4.0"])
+def test_a_built_model_requires_only_sourceable_features(version):
+    """Every required feature must be something the record can actually hold.
+
+    A model requiring a feature the application cannot assemble is not
+    deployable however good its metrics are - it would block every prediction.
+    This is checked against the built artifact rather than the database, so it
+    fails at build time instead of on the first patient.
+    """
+    from apps.risk.feature_assembly import _LAB_ANALYTE, _VITAL_KIND
+
+    meta_path = ARTIFACTS / f"cvd-{version}.meta.json"
+    if not meta_path.exists():
+        pytest.skip(f"cvd-{version} not built in this checkout")
+    meta = json.loads(meta_path.read_text())
+
+    sourceable = set(_VITAL_KIND) | set(_LAB_ANALYTE) | {"age", "is_male"}
+    unsourceable = [f for f in meta["feature_order"] if f not in sourceable]
+    assert not unsourceable, (
+        f"cvd-{version} requires {unsourceable}, which nothing in the record "
+        f"can supply, so every prediction would be blocked"
+    )

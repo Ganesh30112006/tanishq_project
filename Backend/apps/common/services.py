@@ -22,7 +22,7 @@ class ServiceResult(Generic[T]):
     details: dict[str, object] = field(default_factory=dict)
 
     @classmethod
-    def success(cls, value: T | None = None, *, message: str = "") -> "ServiceResult[T]":
+    def success(cls, value: T | None = None, *, message: str = "") -> ServiceResult[T]:
         return cls(ok=True, value=value, message=message)
 
     @classmethod
@@ -33,7 +33,7 @@ class ServiceResult(Generic[T]):
         *,
         value: T | None = None,
         details: dict[str, object] | None = None,
-    ) -> "ServiceResult[T]":
+    ) -> ServiceResult[T]:
         """A deliberate, safe non-completion (e.g. INSUFFICIENT_DATA).
 
         ``value`` may still carry a record that was persisted for traceability

@@ -36,7 +36,7 @@ from apps.medical_records.models import Allergy, Condition, Medication
 from apps.patients.models import Patient
 from apps.patients.services import PatientService
 
-DEMO_PASSWORD = "CareSenseDemo!2024"
+DEMO_PASSWORD = "CareSenseDemo!2024"  # noqa: S105 - demo seed data, never a deployment
 
 account_service = AccountService()
 assignment_service = AssignmentService()
@@ -154,7 +154,10 @@ class Command(BaseCommand):
         self._register_model(approver=admin)
         self._run_risk_assessments(doctor_user, created_patients)
 
-        self.stdout.write(self.style.SUCCESS("\nDemo accounts (password for all: %s):" % DEMO_PASSWORD))
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.SUCCESS(f"Demo accounts (password for all: {DEMO_PASSWORD}):")
+        )
         for spec, role in (
             ({"email": admin.email}, "ADMIN"),
             ({"email": doctor_user.email}, "DOCTOR"),

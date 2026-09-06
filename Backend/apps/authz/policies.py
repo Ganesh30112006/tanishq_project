@@ -11,7 +11,6 @@ from apps.authz.relationships import (
     is_assigned_doctor,
     is_self,
     lab_tech_has_workflow,
-    patient_for_user,
 )
 from apps.common.enums import Role
 

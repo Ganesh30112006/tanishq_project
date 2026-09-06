@@ -7,8 +7,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.audit import services as audit
-from apps.audit.services import audit_service
 from apps.authz.drf import ResourceAccessPermission
 from apps.authz.engine import Action, authorize
 from apps.authz.relationships import visible_patient_queryset

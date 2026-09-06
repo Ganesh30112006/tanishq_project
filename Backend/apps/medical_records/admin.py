@@ -6,8 +6,8 @@ from apps.medical_records.models import (
     Allergy,
     ClinicalNote,
     Condition,
-    Medication,
     MedicalHistory,
+    Medication,
     Provenance,
     Symptom,
 )

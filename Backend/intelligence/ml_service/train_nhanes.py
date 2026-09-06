@@ -329,7 +329,7 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
 
     # --- coefficients -------------------------------------------------------
     lr = logreg.named_steps["logisticregression"]
-    coefs = {n: round(float(c), 4) for n, c in zip(features, lr.coef_[0])}
+    coefs = {n: round(float(c), 4) for n, c in zip(features, lr.coef_[0], strict=True)}
     print("\n=== standardised coefficients (log-odds per SD) ===")
     for n, c in sorted(coefs.items(), key=lambda kv: -abs(kv[1])):
         direction = "increases risk" if c > 0 else "decreases risk"

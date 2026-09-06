@@ -29,7 +29,7 @@ from apps.accounts.permissions import (
 from apps.authz.drf import ResourceAccessPermission
 from apps.authz.engine import Action, authorize
 from apps.authz.relationships import visible_patient_queryset
-from apps.common.enums import ModelLifecycleState, Role
+from apps.common.enums import ModelLifecycleState
 from apps.common.errors import AccessDenied, AnalysisCooldown, ResourceNotFound
 from apps.risk.freshness import has_new_clinical_input_since
 from apps.risk.governance import ModelGovernanceService
@@ -119,6 +119,14 @@ class RiskAssessmentViewSet(
         if patient is None:
             raise ResourceNotFound("Patient not found or not accessible.")
         authorize(request.user, Action.REQUEST_RISK, patient)
+
+        # Permission says this user may act on this record; consent says this
+        # patient agreed to their record being analysed this way. They are
+        # different questions and both have to be yes.
+        from apps.privacy.models import ConsentPurpose
+        from apps.privacy.services import privacy_service
+
+        privacy_service.enforce_if_published(patient, ConsentPurpose.RISK_ANALYSIS)
 
         # Someone analysing their own record is the self-service path and is
         # paced; a clinician working a caseload is not.

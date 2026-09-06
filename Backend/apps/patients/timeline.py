@@ -7,10 +7,10 @@ its own; the caller has already resolved and authorized the patient.
 """
 from __future__ import annotations
 
-from apps.common.display import display_number, display_term
-
 from dataclasses import dataclass
 from datetime import datetime
+
+from apps.common.display import display_number, display_term
 
 
 @dataclass(slots=True)
@@ -23,8 +23,8 @@ class TimelineEvent:
 
 
 def _risk_events(patient, *, show_scores: bool) -> list[TimelineEvent]:
-    from apps.risk.models import RiskAssessment
     from apps.risk.interpretation import interpret
+    from apps.risk.models import RiskAssessment
 
     events = []
     for row in (

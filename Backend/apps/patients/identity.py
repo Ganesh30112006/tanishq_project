@@ -13,6 +13,7 @@ reconciliation event, and a human must approve before any merge.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -85,7 +86,7 @@ def jaro(a: str, b: str) -> float:
 def jaro_winkler(a: str, b: str, *, prefix_weight: float = 0.1) -> float:
     base = jaro(a, b)
     prefix = 0
-    for ca, cb in zip(a[:4], b[:4]):
+    for ca, cb in zip(a[:4], b[:4], strict=False):
         if ca == cb:
             prefix += 1
         else:
@@ -100,6 +101,8 @@ def _norm_name(value: str) -> str:
 def _norm_phone(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
+
+logger = logging.getLogger("caresense.patients.identity")
 
 @dataclass(slots=True)
 class Candidate:
@@ -264,7 +267,18 @@ class IdentityMergeService(BaseService):
                     try:
                         obj.save(update_fields=[field_name])
                         n += 1
-                    except Exception:  # noqa: BLE001
+                    except Exception as exc:  # noqa: BLE001
+                        # A row that will not re-point leaves clinical data
+                        # attached to the merged-away record. Skipping is the
+                        # safe action, but it must not be silent.
+                        logger.warning(
+                            "merge_repoint_failed",
+                            extra={
+                                "model": model.__name__,
+                                "field": field_name,
+                                "error": str(exc),
+                            },
+                        )
                         continue
             if n:
                 moved[model.__name__] = moved.get(model.__name__, 0) + n

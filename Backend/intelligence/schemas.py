@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 _ALLOW_MODEL_FIELDS = ConfigDict(protected_namespaces=())
 
 
-class ReliabilityStatus(str, Enum):
+class ReliabilityStatus(str, Enum):  # noqa: UP042 - str mixin is the wire contract
     VALID = "VALID"
     LOW_RELIABILITY = "LOW_RELIABILITY"
     OUT_OF_DOMAIN = "OUT_OF_DOMAIN"

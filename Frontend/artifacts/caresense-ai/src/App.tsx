@@ -14,6 +14,9 @@ import {
   NoAccessPage, PageButton, PageHeading, PageLoading, POSITIVE_BADGE, QueryError, relativeTime,
   SectionTitle, shortDate, Skeleton, titleCase,
 } from '@/components/ui-kit';
+import {
+  bandFill, bandHeadline, isRiskyLevel, shouldShowScore, withheldReason,
+} from '@/lib/risk-display';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -142,7 +145,6 @@ const ACRONYMS = new Set([
  * trailing zeros without rounding away real significant digits.
  */
 /** MRNs are often already prefixed ("MRN-DEMO-1001"); don't print "MRN MRN-…". */
-const isRiskyLevel = (value?: string | null) => value === 'HIGH' || value === 'CRITICAL';
 const riskClass = (value?: string | null) => value === 'CRITICAL' ? 'bg-[hsl(var(--destructive)/.1)] text-[hsl(var(--destructive))]' : value === 'HIGH' ? 'bg-[hsl(30_80%_92%)] text-[hsl(24_70%_34%)]' : value === 'MEDIUM' ? 'bg-[hsl(var(--accent)/.22)] text-[hsl(30_48%_26%)]' : 'bg-[hsl(162_28%_90%)] text-[hsl(162_42%_28%)]';
 const statusClass = (value?: string | null) => value === 'REVIEW_REQUIRED' || value === 'REJECTED' ? 'text-[hsl(var(--destructive))] bg-[hsl(var(--destructive)/.08)]' : value === 'MONITORING' || IN_PROGRESS_STATES.has(value || '') ? 'text-[hsl(30_54%_32%)] bg-[hsl(var(--accent)/.18)]' : 'text-[hsl(162_42%_28%)] bg-[hsl(162_28%_90%)]';
 
@@ -508,23 +510,23 @@ function RiskCard({ patient, assessment }: { patient: PatientProfile; assessment
         figure is still an answer someone can act on. */}
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className={`text-2xl font-semibold tracking-[-.035em] ${isRiskyLevel(patient.risk_level) ? 'text-[hsl(var(--destructive))]' : ''}`} data-testid="text-risk-band">{reading?.band_label || titleCase(patient.risk_level) || 'Not assessed'}</p>
+        <p className={`text-2xl font-semibold tracking-[-.035em] ${isRiskyLevel(patient.risk_level) ? 'text-[hsl(var(--destructive))]' : ''}`} data-testid="text-risk-band">{bandHeadline(reading, titleCase(patient.risk_level))}</p>
         {reading?.headline && <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">{reading.headline}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5">
-        {reading?.show_score && reading.score_percent != null && <p className="text-3xl font-semibold tracking-[-.05em]" data-testid="text-risk-score">{reading.score_percent}<span className="text-base text-muted-foreground">/100</span></p>}
+        {shouldShowScore(reading) && <p className="text-3xl font-semibold tracking-[-.05em]" data-testid="text-risk-score">{reading!.score_percent}<span className="text-base text-muted-foreground">/100</span></p>}
         <Badge className={riskClass(patient.risk_level)}>{titleCase(patient.trend) || 'Stable'}</Badge>
         {assessment.lifecycle_state && <Badge className={`whitespace-nowrap ${lifecycleBadgeClass(assessment.lifecycle_state)}`}>{titleCase(assessment.lifecycle_state)}</Badge>}
       </div>
     </div>
 
     <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary" role="presentation">
-      <div className={`h-full rounded-full ${isRiskyLevel(patient.risk_level) ? 'bg-[hsl(var(--destructive))]' : 'bg-[hsl(var(--accent))]'}`} style={{ width: `${BAND_FILL[reading?.band ?? ''] ?? Math.min(patient.risk_score ?? 0, 100)}%` }} />
+      <div className={`h-full rounded-full ${isRiskyLevel(patient.risk_level) ? 'bg-[hsl(var(--destructive))]' : 'bg-[hsl(var(--accent))]'}`} style={{ width: `${bandFill(reading, patient.risk_score)}%` }} />
     </div>
 
     {reading && <div className="mt-5 space-y-3 text-xs leading-relaxed">
       <p className="text-muted-foreground">{reading.what_it_means}{reading.horizon ? ` This estimate covers ${reading.horizon}.` : ''}</p>
-      {!reading.show_score && reading.score_withheld_reason && <p className="text-muted-foreground" data-testid="text-score-withheld">{reading.score_withheld_reason}</p>}
+      {withheldReason(reading) && <p className="text-muted-foreground" data-testid="text-score-withheld">{withheldReason(reading)}</p>}
       {reading.reliability_note && <p className="flex items-start gap-2 font-medium text-[hsl(30_54%_30%)]" data-testid="text-reliability-note"><AlertCircle size={13} className="mt-0.5 shrink-0" />{reading.reliability_note}</p>}
       <p className="flex items-start gap-2 rounded-xl bg-secondary/60 p-3 text-muted-foreground"><CircleHelp size={13} className="mt-0.5 shrink-0" />{reading.what_it_does_not_mean}</p>
     </div>}
@@ -575,9 +577,6 @@ function RiskCard({ patient, assessment }: { patient: PatientProfile; assessment
   </div>;
 }
 
-// A band, not a score, drives the bar: a withheld figure must not leave an
-// empty track that reads as "no risk".
-const BAND_FILL: Record<string, number> = { LOW: 20, MEDIUM: 45, HIGH: 72, CRITICAL: 94 };
 
 function UrgentNotice({ notice }: { notice: NonNullable<RiskAssessment['safety_notice']> }) {
   return <div className="mb-5 rounded-xl border-l-4 border-l-[hsl(var(--destructive))] border-y border-r border-y-[hsl(var(--destructive)/.25)] border-r-[hsl(var(--destructive)/.25)] bg-[hsl(var(--destructive)/.06)] p-4" role="alert" data-testid="banner-urgent-symptoms">

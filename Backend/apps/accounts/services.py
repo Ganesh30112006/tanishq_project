@@ -32,7 +32,7 @@ logger = logging.getLogger("caresense.accounts")
 
 #: Distinct from the access-token prefix so a refresh token presented as a
 #: bearer credential is rejected outright rather than merely failing lookup.
-REFRESH_TOKEN_PREFIX = "cs_refresh_"
+REFRESH_TOKEN_PREFIX = "cs_refresh_"  # noqa: S105 - a discriminator, not a secret
 
 
 class IssuedToken:
@@ -97,7 +97,7 @@ class AccountService(BaseService):
         family: str = "",
         client: str = "",
         ip: str | None = None,
-    ) -> "IssuedRefreshToken":
+    ) -> IssuedRefreshToken:
         ttl = settings.IDENTITY["REFRESH_TOKEN_TTL_SECONDS"]
         raw = REFRESH_TOKEN_PREFIX + secrets.token_urlsafe(48)
         record = RefreshToken.objects.create(
@@ -114,7 +114,7 @@ class AccountService(BaseService):
 
     def redeem_refresh_token(
         self, raw_token: str, *, client: str = "", ip: str | None = None
-    ) -> tuple["IssuedToken", "IssuedRefreshToken"]:
+    ) -> tuple[IssuedToken, IssuedRefreshToken]:
         """Exchange a refresh token for a fresh pair, once.
 
         A token that has already been redeemed is not merely invalid: it is
@@ -172,7 +172,7 @@ class AccountService(BaseService):
         assert result is not None
         return result
 
-    def _revoke_family(self, record: "RefreshToken", *, reason: str) -> int:
+    def _revoke_family(self, record: RefreshToken, *, reason: str) -> int:
         now = timezone.now()
         AccessToken.objects.filter(
             refresh_tokens__family=record.family, revoked_at__isnull=True

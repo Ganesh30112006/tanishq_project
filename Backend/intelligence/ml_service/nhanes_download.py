@@ -35,9 +35,13 @@ def fetch(url: str, dest: Path) -> str:
     if dest.exists() and dest.stat().st_size > 0:
         return f"cached  {dest.name} ({dest.stat().st_size:,}b)"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (research)"})
+    # The URL is built from the literal https templates above; nothing here
+    # is caller-supplied, so there is no scheme to smuggle.
+    req = urllib.request.Request(  # noqa: S310 - fixed https templates only
+        url, headers={"User-Agent": "Mozilla/5.0 (research)"}
+    )
     try:
-        with urllib.request.urlopen(req, timeout=180) as r:
+        with urllib.request.urlopen(req, timeout=180) as r:  # noqa: S310
             data = r.read()
     except Exception as exc:                      # noqa: BLE001 - report and continue
         return f"FAILED  {dest.name}: {type(exc).__name__} {exc}"

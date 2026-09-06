@@ -34,7 +34,7 @@ class _Card:
 
 def _result(**kwargs):
     """A stand-in assessment - the reading is pure, so no row is needed."""
-    fields = dict(
+    fields = dict(  # noqa: C408 - mirrors the model constructor
         status=RiskAssessment.Status.COMPLETED,
         Status=RiskAssessment.Status,
         calibrated_score=Decimal("0.30"),
@@ -48,7 +48,7 @@ def _result(**kwargs):
 
 
 def _assessment(patient, user, *, age_minutes: int = 0, **kwargs):
-    defaults = dict(
+    defaults = dict(  # noqa: C408 - mirrors the model constructor
         patient=patient,
         requested_by=user,
         task="cvd",

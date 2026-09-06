@@ -252,7 +252,7 @@ class HasPermission(BasePermission):
     required_code: str = ""
 
     @classmethod
-    def of(cls, code: str) -> type["HasPermission"]:
+    def of(cls, code: str) -> type[HasPermission]:
         return type(f"HasPermission_{code}", (cls,), {"required_code": code})
 
     def has_permission(self, request, view) -> bool:

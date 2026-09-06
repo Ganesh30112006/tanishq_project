@@ -155,9 +155,12 @@ def run_on_devices(onnx_path: Path, X: np.ndarray, reference: np.ndarray) -> dic
 
         batch = np.ascontiguousarray(X, dtype=np.float32)
 
-        def probs_for(arr):
-            req.infer({0: arr})
-            return req.get_output_tensor(0).data.ravel()
+        def probs_for(arr, _req=req):
+            # `_req` is bound at definition time on purpose: closing over the
+            # loop variable would silently start using the last device once
+            # anyone defers one of these calls.
+            _req.infer({0: arr})
+            return _req.get_output_tensor(0).data.ravel()
 
         probs = probs_for(batch)
         max_abs = float(np.max(np.abs(probs - reference)))
@@ -242,14 +245,14 @@ def main() -> dict:
     cpu = gpu.get("CPU")
     if f16 and not f16["agrees"]:
         drift_pp = f16["max_abs_diff_vs_sklearn"] * 100
-        print(f"  At its DEFAULT precision the iGPU disagrees with the validated model")
+        print("  At its DEFAULT precision the iGPU disagrees with the validated model")
         print(f"  by up to {drift_pp:.4f} percentage points of absolute risk. That is")
-        print(f"  small, but it is not nothing: it can move a patient across a")
-        print(f"  follow-up threshold. FP16 is therefore not acceptable here.")
+        print("  small, but it is not nothing: it can move a patient across a")
+        print("  follow-up threshold. FP16 is therefore not acceptable here.")
     if f32 and f32["agrees"]:
         print(f"  Pinned to FP32 the iGPU reproduces the validated model to "
               f"{f32['max_abs_diff_vs_sklearn']:.1e}, so it is safe to serve from,")
-        print(f"  and the model card's metrics describe what it returns.")
+        print("  and the model card's metrics describe what it returns.")
     elif f32:
         print("  Even at FP32 the iGPU diverges - do not serve predictions from it.")
     if cpu and f32:

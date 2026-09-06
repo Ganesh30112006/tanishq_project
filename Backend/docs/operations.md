@@ -1,0 +1,143 @@
+# Running this in earnest
+
+What has to be true before real patients touch this, and how to check each of
+them. Everything here is enforced or reported by code, not by convention.
+
+## Processes
+
+Four, and the third is the one people forget:
+
+| Process | Command | If it stops |
+|---|---|---|
+| Django API | `manage.py runserver` / gunicorn | Obvious — requests fail |
+| Intelligence service | `uvicorn intelligence.main:app --port 9001` | Risk requests return `UPSTREAM_UNAVAILABLE` |
+| **Job worker** | `manage.py run_worker` | **Nothing appears to fail.** Uploads still return 201 and every report sits at `RECEIVED` forever |
+| Frontend | `pnpm --filter @workspace/caresense-ai run dev` | Obvious |
+
+The worker is dangerous precisely because its failure is silent — the queue is
+a database table, so nothing raises when nobody is draining it. That is what
+`/readyz` exists for.
+
+## Health endpoints
+
+| Endpoint | Question | Use it for |
+|---|---|---|
+| `/healthz` | Is this process serving HTTP? | Liveness probe |
+| `/readyz` | Can the system do its work? | Readiness probe, monitoring, paging |
+
+They are deliberately different. `/healthz` touches nothing else: wiring a
+database check into a liveness probe turns a database outage into a container
+restart loop. `/readyz` checks the database and the job pipeline, returns 503
+when work is queued and no worker has reported in 90 seconds, and names the fix
+in its response:
+
+```json
+{"status": "unavailable",
+ "checks": {"jobs": {"status": "down",
+   "problems": ["No worker has reported in 90s and 3 job(s) are waiting.
+                 Uploaded reports are not being processed.
+                 Start one with: manage.py run_worker"]}}}
+```
+
+It is unauthenticated and returns only counts and states — no identifiers,
+nothing worth reading if it were exposed.
+
+## Uploads
+
+Report uploads are public, untrusted input. The extension and the
+`Content-Type` header both come from the uploader, so neither is evidence of
+anything: `payload.exe` renamed to `report.pdf` satisfies both.
+
+Two layers, and **the first cannot be switched off**:
+
+1. `apps/reports/scanning.py` always runs. It verifies the leading bytes match
+   the claimed type, names what the file actually is when they do not, rejects
+   PDFs carrying JavaScript, launch actions, embedded files or auto-run
+   actions, and catches the EICAR test string. This used to be a no-op unless
+   an operator configured a scanner — a deployment that forgot the setting
+   accepted anything at all.
+2. `REPORT_UPLOAD_SCANNER` adds a real antivirus engine. **Production refuses
+   to start without it**, because the built-in layer is a content-type gate and
+   recognises no malware families.
+
+Downloads are served with the content type the file was *verified* to be, never
+the one the uploader declared — echoing that back is how a stored file becomes
+stored XSS.
+
+## Sessions
+
+Access tokens last an hour. Refresh tokens last 14 days and are **single-use**:
+every redemption issues a new one and retires the access token it replaced.
+
+The property that makes a long-lived credential acceptable is what happens on
+reuse. A legitimate client discards its refresh token the moment it redeems
+one, so a *second* presentation means two parties hold it. There is no way to
+tell the thief from the victim, so the whole rotation family is revoked and
+both must sign in again. A forced re-login is a much better outcome than a
+silently shared session.
+
+Signing out revokes the refresh token too — otherwise "sign out" leaves a
+credential that mints a new session.
+
+## Consent, retention and erasure
+
+Run `manage.py check_privacy` to see the state of all three.
+
+**Consent is per purpose**, so withdrawing agreement to AI summaries does not
+end the record itself. Enforcement switches on per purpose when its wording is
+published (`manage.py seed_consent`): enforcing before anything is published
+would block every deployment on day one, and never enforcing would make consent
+decorative, so publishing is the deliberate act — and `check_privacy` reports
+any purpose still unpublished so the gap is visible rather than silent.
+Absence of a grant is never treated as consent.
+
+**Erasure is de-identification, not deletion**, and the system says so in those
+words. Clinical history is append-only and separately subject to a retention
+obligation, so "delete my data" cannot be a `DELETE`. What is destroyed: name,
+date of birth, phone, record number, and the login with every credential it
+holds. What survives: the measurements and results, attached to a record that
+identifies nobody. The person is told exactly that, including the date before
+which the retained rows may not be destroyed. Carrying one out is never
+self-service — a named person decides and the decision is audited.
+
+**Retention is report-first.** `manage.py apply_retention` prints what has
+expired and does nothing. `--apply` acts only on categories with no evidentiary
+value — expired credentials and delivered notifications. Clinical records,
+uploaded reports and the audit log are never destroyed by a cron job; they are
+listed for a person to decide on. Every policy carries a stated `basis`,
+because "we kept it for eight years" is only defensible if someone can say
+which obligation required eight years.
+
+The default periods are starting points that a compliance owner must review
+against the obligations that actually bind the deployment. They are not legal
+advice.
+
+## Model governance
+
+`register_model` always lands a version in `DRAFT`. Making it serve patients
+requires `govern_model` with a named approver and a recorded reason. The
+synthetic demonstration models are `RETIRED` and cannot serve.
+
+`/readyz` does not check this, deliberately: a model being retired is a
+governance state, not an outage.
+
+## What CI covers
+
+`.github/workflows/ci.yml`, at the repository root — an earlier copy lived at
+`Backend/.github/workflows/`, where GitHub Actions never looks, so it had never
+run once and the MySQL job had never proved anything.
+
+| Job | Runs |
+|---|---|
+| `backend-sqlite` | Every push |
+| `backend-mysql` | Every push — MySQL 8 is the production target |
+| `lint` | Every push |
+| `migrations-are-complete` | Every push — a model edited without a migration passes every test and then fails on deploy |
+| `frontend` | Every push — typecheck and tests |
+| `model-pipeline` | Weekly and on demand — downloads ~58 MB from the CDC, so it does not gate a push |
+
+Lint enforces every substantive rule. `E501` (line length) is deferred with the
+reason recorded in `pyproject.toml`: 142 pre-existing lines exceed 100
+characters, `ruff format` would fix nearly all of them but rewrites 192 of 321
+files, and burying every real change in a formatting diff is worse than the
+lines being long. It is a one-commit pass someone should make deliberately.

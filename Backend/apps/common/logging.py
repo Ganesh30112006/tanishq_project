@@ -19,7 +19,7 @@ _RESERVED = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys())
 class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
-            "ts": dt.datetime.fromtimestamp(record.created, dt.timezone.utc).isoformat(),
+            "ts": dt.datetime.fromtimestamp(record.created, dt.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -31,7 +31,8 @@ class StructuredFormatter(logging.Formatter):
             request_id = get_request_id()
             if request_id:
                 payload["request_id"] = request_id
-        except Exception:  # pragma: no cover - logging must never raise
+        except Exception:  # noqa: S110 - see comment
+            # A formatter that throws would take down the request it describes.
             pass
 
         for key, value in record.__dict__.items():

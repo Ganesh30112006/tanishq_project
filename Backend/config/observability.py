@@ -19,11 +19,11 @@ def configure_observability() -> bool:
         return False
     try:
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.instrumentation.django import DjangoInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.django import DjangoInstrumentor
     except ImportError:
         logger.warning("OTEL_ENABLED is set but opentelemetry packages are not installed.")
         return False

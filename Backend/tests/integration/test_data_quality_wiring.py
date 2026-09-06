@@ -76,7 +76,7 @@ def test_sweep_job_is_idempotent(make_patient):
     order = _order(make_patient())
     svc.enter_result(order=order, analyte="glucose", state=ClinicalDataState.OBSERVED,
                      value="5.4", unit="mmol/L")
-    first = sweep({"limit": 100})
+    sweep({"limit": 100})
     second = sweep({"limit": 100})
     # Everything was already assessed on entry / first sweep.
     assert second["assessed"] == 0

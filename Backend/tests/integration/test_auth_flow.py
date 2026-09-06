@@ -11,7 +11,7 @@ pytestmark = pytest.mark.django_db
 def test_login_returns_token_and_me_reports_permissions(api_client, make_user):
     from apps.common.enums import Role
 
-    make_user(Role.DOCTOR, email="doc@example.test", password="a strong passphrase 1")
+    make_user(Role.DOCTOR, email="doc@example.test", password="a strong passphrase 1")  # noqa: S106 - test fixture
 
     resp = api_client.post(
         "/api/v1/auth/login",
@@ -29,7 +29,7 @@ def test_login_returns_token_and_me_reports_permissions(api_client, make_user):
 
 
 def test_bad_password_is_rejected_and_audited(api_client, make_user):
-    make_user(email="x@example.test", password="the right passphrase")
+    make_user(email="x@example.test", password="the right passphrase")  # noqa: S106 - test fixture
     resp = api_client.post(
         "/api/v1/auth/login",
         {"email": "x@example.test", "password": "wrong"},

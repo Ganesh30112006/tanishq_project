@@ -13,7 +13,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
-class AiKind(str, Enum):
+class AiKind(str, Enum):  # noqa: UP042 - str mixin is the wire contract
     REPORT_SUMMARY = "REPORT_SUMMARY"
     HISTORY_SUMMARY = "HISTORY_SUMMARY"
     PLAIN_LANGUAGE = "PLAIN_LANGUAGE"

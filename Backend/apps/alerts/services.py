@@ -3,9 +3,9 @@ from __future__ import annotations
 from django.db import transaction
 from django.utils import timezone
 
+from apps.alerts.models import Alert
 from apps.audit import services as audit
 from apps.audit.services import audit_service
-from apps.alerts.models import Alert
 from apps.common.services import BaseService
 
 

@@ -51,7 +51,10 @@ async def infer(
             model=echo,
         )
 
-    if payload.feature_schema_version and payload.feature_schema_version != model.feature_schema_version:
+    if (
+        payload.feature_schema_version
+        and payload.feature_schema_version != model.feature_schema_version
+    ):
         return InferenceResponse(
             reliability=ReliabilityBlock(
                 status=ReliabilityStatus.REVIEW_REQUIRED,

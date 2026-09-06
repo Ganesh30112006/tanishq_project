@@ -11,7 +11,7 @@ from django.db.models import QuerySet
 from apps.common.enums import Role
 
 
-def patient_for_user(user) -> "object | None":
+def patient_for_user(user) -> object | None:
     from apps.patients.models import Patient
 
     return Patient.objects.filter(user_id=user.pk).first()

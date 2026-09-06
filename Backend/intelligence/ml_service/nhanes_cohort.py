@@ -204,17 +204,17 @@ def main(drop_competing: bool = False) -> pd.DataFrame:
                     "fasting_weight", "uid"]
     out = df[keep].reset_index(drop=True)
 
-    print(f"\n=== outcome ===")
+    print("\n=== outcome ===")
     print(f"  10-year CVD deaths : {int(out.y.sum()):,}")
     print(f"  event rate         : {out.y.mean():.4f}  ({out.y.mean()*100:.2f}%)")
     print(f"  any death in window: {int((out.died & (out.months<=120)).sum()):,}")
-    print(f"\n=== by cycle ===")
+    print("\n=== by cycle ===")
     print(out.groupby('cycle').agg(n=('y','size'), events=('y','sum'),
                                    rate=('y','mean')).to_string())
-    print(f"\n=== by sex ===")
+    print("\n=== by sex ===")
     print(out.groupby('sex').agg(n=('y','size'), events=('y','sum'),
                                  rate=('y','mean')).to_string())
-    print(f"\n=== feature summary ===")
+    print("\n=== feature summary ===")
     print(out[feats].describe().T.to_string())
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

@@ -2,8 +2,6 @@
 SAFE OUTCOME (spec section 57)."""
 from __future__ import annotations
 
-import datetime as dt
-
 import pytest
 from django.utils import timezone
 
@@ -80,7 +78,7 @@ def test_no_active_model_is_a_safe_block(make_patient, make_user):
 
 
 def test_reliability_block_from_model_is_persisted(make_patient, make_user):
-    mv = _enable_task("dm")
+    _enable_task("dm")
     now = timezone.now()
 
     class OODClient:

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.common.enums import ClinicalReviewDecision, ModelLifecycleState
 from apps.risk.freshness import has_new_clinical_input_since
 from apps.risk.interpretation import (
     describe_block,
     interpret,
     viewer_sees_raw_output,
 )
-from apps.risk.safety import urgent_care_notice
-
-from apps.common.enums import ClinicalReviewDecision, ModelLifecycleState
 from apps.risk.models import ClinicalReview, ModelVersion, RiskAssessment, RiskFactor
+from apps.risk.safety import urgent_care_notice
 
 
 class RiskRequestSerializer(serializers.Serializer):

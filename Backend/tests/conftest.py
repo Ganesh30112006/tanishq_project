@@ -24,7 +24,12 @@ def api_client() -> APIClient:
 
 @pytest.fixture
 def make_user(db):
-    def _make(role: str | None = None, *, email: str | None = None, password: str = "correct horse battery") -> User:
+    def _make(
+        role: str | None = None,
+        *,
+        email: str | None = None,
+        password: str = "correct horse battery",  # noqa: S107 - test fixture
+    ) -> User:
         email = email or f"user-{uuid.uuid4().hex[:10]}@example.test"
         user = User.objects.create_user(email=email, password=password, full_name="Test User")
         if role:

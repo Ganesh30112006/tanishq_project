@@ -51,6 +51,14 @@ class AiAskView(APIView):
             raise ResourceNotFound("Patient not found or not accessible.")
         authorize(request.user, Action.USE_AI, patient)
 
+        # An AI summary restates the record, so it is processing of the record
+        # and needs the patient's agreement, separately from the clinician's
+        # permission to act on it.
+        from apps.privacy.models import ConsentPurpose
+        from apps.privacy.services import privacy_service
+
+        privacy_service.enforce_if_published(patient, ConsentPurpose.AI_ASSISTANCE)
+
         report = None
         if data.get("report_id"):
             report = (

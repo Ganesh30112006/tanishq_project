@@ -40,6 +40,12 @@ APPOINTMENT_CHANGE = "appointment.change"
 RECONCILIATION_ACTION = "reconciliation.action"
 MISSING_DATA_ACTION = "missing_data.action"
 ACCESS_DENIED = "access.denied"
+# Privacy actions are audited like clinical ones: a consent change or an
+# erasure is a decision about a person that somebody must be able to review.
+CONSENT_CHANGE = "privacy.consent.change"
+ERASURE_REQUEST = "privacy.erasure.request"
+ERASURE_EXECUTE = "privacy.erasure.execute"
+RETENTION_SWEEP = "privacy.retention.sweep"
 
 
 class AuditService:

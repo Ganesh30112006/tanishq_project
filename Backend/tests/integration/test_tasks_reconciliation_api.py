@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from apps.common.enums import Role
-from apps.notifications.models import MissingDataTask
 from apps.notifications.services import MissingDataService
 from apps.reconciliation.models import ReconciliationEvent
 from apps.reconciliation.services import ReconciliationService

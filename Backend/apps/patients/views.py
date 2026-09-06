@@ -8,10 +8,10 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import (
     AI_USE,
+    LAB_PATIENT_IDENTITY_READ_MIN,
     PATIENT_READ_ASSIGNED,
     PATIENT_READ_OWN,
     PATIENT_REGISTER,
-    LAB_PATIENT_IDENTITY_READ_MIN,
     STAFF_MANAGE,
     USERS_MANAGE,
     PermissionResolver,
@@ -25,6 +25,7 @@ from apps.authz.relationships import visible_patient_queryset
 from apps.common.enums import Role
 from apps.common.errors import AccessDenied, ResourceNotFound, ValidationFailed
 from apps.patients import presentation
+from apps.patients.models import Patient
 from apps.patients.serializers import (
     AiPatientSummarySerializer,
     PatientAccountLinkSerializer,
@@ -35,7 +36,6 @@ from apps.patients.serializers import (
     TimelineEventSerializer,
 )
 from apps.patients.services import PatientService
-from apps.patients.models import Patient
 from apps.patients.timeline import build_timeline
 from apps.risk.interpretation import viewer_sees_raw_output
 
