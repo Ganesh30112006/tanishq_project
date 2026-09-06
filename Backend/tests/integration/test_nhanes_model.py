@@ -281,7 +281,7 @@ def test_a_stale_smoking_answer_is_not_reused_indefinitely(make_patient):
     assert not report.is_sufficient
 
 
-@pytest.mark.parametrize("version", ["2.3.0", "2.4.0"])
+@pytest.mark.parametrize("version", ["2.3.0", "2.4.0", "3.0.0"])
 def test_a_built_model_requires_only_sourceable_features(version):
     """Every required feature must be something the record can actually hold.
 

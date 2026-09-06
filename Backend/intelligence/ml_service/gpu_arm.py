@@ -30,7 +30,7 @@ import numpy as np
 
 from intelligence.ml_service.evaluation import evaluate
 from intelligence.ml_service.train_nhanes import (
-    PARSIMONIOUS_FEATURES,
+    CLINICAL_FEATURES,
     load_cohort,
     split,
 )
@@ -195,10 +195,13 @@ def run_on_devices(onnx_path: Path, X: np.ndarray, reference: np.ndarray) -> dic
     return results
 
 
-def main() -> dict:
-    features = PARSIMONIOUS_FEATURES
+def main(cohort: str = "clinical") -> dict:
+    # Validate the deployment target against the feature set that actually
+    # ships. Checking a retired model's inputs would prove the GPU agrees about
+    # arithmetic nobody runs.
+    features = CLINICAL_FEATURES
     print("=== data ===")
-    df = load_cohort(features)
+    df = load_cohort(features, cohort)
     tr, ca, te = split(df)
     Xtr = tr[features].to_numpy(float)
     Xca = ca[features].to_numpy(float)
@@ -259,7 +262,8 @@ def main() -> dict:
         print(f"  Latency, one patient: CPU {cpu['single_patient_ms']:.4f} ms vs "
               f"GPU {f32['single_patient_ms']:.4f} ms.")
         if f32["single_patient_ms"] > cpu["single_patient_ms"]:
-            print("  The CPU is faster. For a six-feature linear model the GPU's")
+            print(f"  The CPU is faster. For a {len(features)}-feature linear "
+                  f"model the GPU's")
             print("  dispatch overhead exceeds the arithmetic it is dispatching, so")
             print("  there is no performance case for using it here.")
     return {"models": rows, "devices": gpu}

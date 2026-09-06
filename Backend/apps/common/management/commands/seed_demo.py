@@ -26,7 +26,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.accounts.services import AccountService
 from apps.alerts.models import Alert
-from apps.common.enums import ClinicalDataState, Role
+from apps.common.enums import ClinicalDataState, ModelLifecycleState, Role
 from apps.doctors.models import Doctor
 from apps.doctors.services import AssignmentService
 from apps.health.models import HealthMeasurement, MeasurementKind
@@ -45,13 +45,17 @@ patient_service = PatientService()
 
 _PATIENTS = [
     {
-        "email": "maya.chen@demo.caresense.dev",
+        # SMOKING_STATUS is 1 = smokes now, 0 = does not. It is required by the
+    # shipped cvd model, so without it every demo risk assessment is correctly
+    # blocked - "not recorded" is never read as "does not smoke".
+    "email": "maya.chen@demo.caresense.dev",
         "mrn": "MRN-DEMO-1001",
         "given_name": "Maya",
         "family_name": "Chen",
         "sex": "FEMALE",
         "age": 42,
-        "vitals": {"SYSTOLIC_BP": 142, "DIASTOLIC_BP": 91, "HEART_RATE": 78, "SPO2": 98, "BMI": 29},
+        "vitals": {"SYSTOLIC_BP": 142, "DIASTOLIC_BP": 91, "HEART_RATE": 78, "SPO2": 98,
+                   "BMI": 29, "SMOKING_STATUS": 0},
         "labs": {"glucose": 118, "hdl": 38},  # mg/dL
         "conditions": ["Hypertension", "Elevated LDL cholesterol"],
         "allergies": ["Penicillin"],
@@ -65,7 +69,8 @@ _PATIENTS = [
         "family_name": "Williams",
         "sex": "MALE",
         "age": 58,
-        "vitals": {"SYSTOLIC_BP": 128, "DIASTOLIC_BP": 82, "HEART_RATE": 72, "SPO2": 97, "BMI": 27},
+        "vitals": {"SYSTOLIC_BP": 128, "DIASTOLIC_BP": 82, "HEART_RATE": 72, "SPO2": 97,
+                   "BMI": 27, "SMOKING_STATUS": 1},
         "labs": {"glucose": 105, "hdl": 45},
         "conditions": ["Type 2 diabetes"],
         "allergies": [],
@@ -79,7 +84,8 @@ _PATIENTS = [
         "family_name": "Okafor",
         "sex": "FEMALE",
         "age": 31,
-        "vitals": {"SYSTOLIC_BP": 112, "DIASTOLIC_BP": 74, "HEART_RATE": 66, "SPO2": 99, "BMI": 22},
+        "vitals": {"SYSTOLIC_BP": 112, "DIASTOLIC_BP": 74, "HEART_RATE": 66, "SPO2": 99,
+                   "BMI": 22, "SMOKING_STATUS": 0},
         "labs": {"glucose": 88, "hdl": 65},
         "conditions": [],
         "allergies": [],
@@ -224,15 +230,38 @@ class Command(BaseCommand):
                 "--out intelligence/_artifacts` first."
             ))
             return
+        from apps.risk.governance import ModelGovernanceService
+        from apps.risk.models import ModelVersion, RiskModel
+
+        # Never take the cvd task away from a model that is already serving it.
+        # This used to activate the synthetic demonstration model unconditionally,
+        # so re-seeding a development database silently replaced the real
+        # NHANES-trained model with the fake one - and every risk assessment
+        # afterwards was produced by a model that had never seen real data,
+        # while still looking completely normal in the UI.
+        live = RiskModel.objects.filter(task="cvd", is_enabled=True).first()
+        if live and live.active_version and live.active_version.model_id != "cvd-logreg":
+            self.stdout.write(self.style.WARNING(
+                f"cvd is already served by {live.active_version.model_id}:"
+                f"{live.active_version.version} - leaving it alone and NOT "
+                f"activating the synthetic demo model."
+            ))
+            return
+
         call_command("register_model", meta=str(meta_path))
         # Walk the demo model through the full governed lifecycle so the task
         # is live - with a recorded approver and reason at every step, exactly
         # as a real deployment must (spec section 54).
-        from apps.risk.governance import ModelGovernanceService
-        from apps.risk.models import ModelVersion
-
         mv = ModelVersion.objects.filter(model_id="cvd-logreg", version="1.0.0").first()
         if mv is None:
+            return
+        # RETIRED is terminal, by design. If someone has deliberately
+        # withdrawn the demo model, do not try to walk it forward - that
+        # would fail loudly on every seed run for no useful reason.
+        if mv.lifecycle_state == ModelLifecycleState.RETIRED:
+            self.stdout.write(self.style.WARNING(
+                f"{mv.model_id}:{mv.version} is RETIRED - not reactivating it."
+            ))
             return
         gov = ModelGovernanceService()
         steps = [

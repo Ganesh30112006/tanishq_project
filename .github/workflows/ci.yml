@@ -150,12 +150,17 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev,intelligence]"
       - run: python -m intelligence.ml_service.nhanes_download
-      - run: python -m intelligence.ml_service.nhanes_cohort
-      - run: python -m intelligence.ml_service.train_nhanes --version 2.3.0 --features deployable
-      - run: pytest -q tests/integration/test_nhanes_model.py
+      - run: python -m intelligence.ml_service.nhanes_cohort --sample clinical
+      - run: python -m intelligence.ml_service.train_nhanes --version 3.0.0 --features clinical --cohort clinical
+      # Every coefficient must still be safe to show a patient as a reason:
+      # sign-stable, agreeing adjusted and unadjusted, and not a straight line
+      # drawn through a bent relationship. This exits non-zero on failure only
+      # via the assertions in the test below; the diagnostics run is for the log.
+      - run: python -m intelligence.ml_service.diagnostics --cohort clinical --features clinical --baseline clinical
+      - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
       - uses: actions/upload-artifact@v4
         with:
           name: model-card
-          path: Backend/intelligence/_artifacts/cvd-2.3.0.meta.json
+          path: Backend/intelligence/_artifacts/cvd-3.0.0.meta.json

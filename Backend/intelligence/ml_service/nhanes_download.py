@@ -3,9 +3,10 @@
 Everything here is public-use data published by the US CDC/NCHS. Files are
 cached on disk so the pipeline is re-runnable without re-downloading.
 
-NHANES gives the five features the cvd model consumes (age, glucose,
-systolic_bp, bmi, hdl); the NCHS public-use linkage gives a real, dated
-cardiovascular death outcome. Together they replace the synthetic generator.
+NHANES gives the features the cvd model consumes (age, sex, systolic_bp, bmi,
+smoking, and a glycaemic marker - fasting glucose or HbA1c); the NCHS
+public-use linkage gives a real, dated cardiovascular death outcome. Together
+they replace the synthetic generator.
 """
 from __future__ import annotations
 
@@ -20,14 +21,20 @@ MORT_BASE = (
     "linked_mortality/NHANES_{start}_{end}_MORT_2019_PUBLIC.dat"
 )
 
-# (start_year, end_year, suffix, hdl_file, glucose_file)
+# (start_year, end_year, suffix, hdl_file, glucose_file, hba1c_file)
+#
+# ``glucose_file`` is the FASTING morning subsample - roughly half of the
+# examined sample, because it requires an 8-hour fast and a morning session.
+# ``hba1c_file`` (glycohemoglobin) is measured on the FULL sample and needs no
+# fast, so a cohort built on it is about twice the size. That difference is the
+# whole reason the full-sample cohort exists: see nhanes_cohort.py.
 CYCLES = [
-    (1999, 2000, "",   "LAB13",  "LAB10AM"),
-    (2001, 2002, "_B", "L13_B",  "L10AM_B"),
-    (2003, 2004, "_C", "L13_C",  "L10AM_C"),
-    (2005, 2006, "_D", "HDL_D",  "GLU_D"),
-    (2007, 2008, "_E", "HDL_E",  "GLU_E"),
-    (2009, 2010, "_F", "HDL_F",  "GLU_F"),
+    (1999, 2000, "",   "LAB13",  "LAB10AM", "LAB10"),
+    (2001, 2002, "_B", "L13_B",  "L10AM_B", "L10_B"),
+    (2003, 2004, "_C", "L13_C",  "L10AM_C", "L10_C"),
+    (2005, 2006, "_D", "HDL_D",  "GLU_D",   "GHB_D"),
+    (2007, 2008, "_E", "HDL_E",  "GLU_E",   "GHB_E"),
+    (2009, 2010, "_F", "HDL_F",  "GLU_F",   "GHB_F"),
 ]
 
 
@@ -50,9 +57,10 @@ def fetch(url: str, dest: Path) -> str:
 
 
 def main() -> None:
-    for start, end, suf, hdl, glu in CYCLES:
+    for start, end, suf, hdl, glu, a1c in CYCLES:
         print(f"--- NHANES {start}-{end} ---", flush=True)
-        names = [f"DEMO{suf}", f"BMX{suf}", f"BPX{suf}", hdl, glu, f"SMQ{suf}", f"DIQ{suf}"]
+        names = [f"DEMO{suf}", f"BMX{suf}", f"BPX{suf}", hdl, glu, a1c,
+                 f"SMQ{suf}", f"DIQ{suf}"]
         # Total cholesterol has its own file from the 2005-2006 cycle onward;
         # before that it sits alongside HDL in the lipid file.
         if start >= 2005:

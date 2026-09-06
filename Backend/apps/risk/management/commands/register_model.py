@@ -10,6 +10,20 @@ with ``manage.py govern_model`` or the ``/api/v1/risk/models`` API, so that a
 named approver and a recorded reason always stand behind a live clinical model
 (spec sections 5, 54).
 
+**A version that has left DRAFT is immutable.** This command used to
+``update_or_create`` with ``lifecycle_state=DRAFT`` in the defaults, which meant
+re-running it silently reset any existing version back to DRAFT and overwrote
+its weights, domain and metrics. Two things were broken by that. RETIRED stopped
+being terminal - a model withdrawn from service could be brought back by
+re-registering it - and, worse, a version identifier stopped meaning anything: a
+``RiskAssessment`` row recorded months ago naming ``cvd-nhanes-logreg:3.0.0``
+could end up pointing at a registry row describing an entirely different model,
+with different features and different validation numbers. An audit trail that
+can be rewritten from the outside is not an audit trail.
+
+A changed model needs a new version number. Re-registering a byte-identical
+version is a no-op, so re-running a provisioning script stays safe.
+
 Usage::
 
     python manage.py register_model --meta intelligence/_artifacts/cvd-1.0.0.meta.json
@@ -50,40 +64,72 @@ class Command(BaseCommand):
             "max_data_age_days": meta.get("max_data_age_days", 365),
             "valid_domain": meta["domain"],
         }
+        existing = ModelVersion.objects.filter(
+            model_id=meta["model_id"], version=meta["model_version"]
+        ).first()
+        fields = {
+            "name": meta["name"],
+            "task": meta["task"],
+            "model_type": meta.get("model_type", ""),
+            "prediction_target": meta.get("prediction_target", ""),
+            "training_dataset_version": meta.get("training_dataset_version", ""),
+            "validation_dataset_version": meta.get("validation_dataset_version", ""),
+            "external_validation_dataset_version": meta.get(
+                "external_validation_dataset_version", ""
+            ),
+            "preprocessing_version": meta["preprocessing_version"],
+            "calibration_version": meta["calibration_version"],
+            "explanation_version": meta["explanation_version"],
+            "intended_use": meta.get("intended_use", {}),
+            "validation_metrics": meta.get("validation_metrics", {}),
+            "subgroup_metrics": meta.get("subgroup_metrics", {}),
+            "population_domain": meta.get("population_domain", {}),
+            "known_failure_modes": meta.get("known_failure_modes", []),
+            "limitations": meta.get("limitations", ""),
+        }
+
+        # Decide BEFORE writing anything. The feature schema carries
+        # ``valid_domain`` - the gate that refuses to score a patient outside the
+        # range the model was fitted on - so it must never be rewritten under an
+        # approved version either. The surrounding transaction would roll a bad
+        # write back anyway, but a check that depends on a rollback to be correct
+        # is one refactor away from not being correct.
+        if existing is not None and existing.lifecycle_state != ModelLifecycleState.DRAFT:
+            changed = sorted(
+                name for name, value in fields.items()
+                if name != "feature_schema" and getattr(existing, name) != value
+            )
+            if existing.feature_schema.definition != definition:
+                changed.append("feature_schema.definition")
+            if existing.feature_schema.version != meta["feature_schema_version"]:
+                changed.append("feature_schema.version")
+            if not changed:
+                self.stdout.write(
+                    f"{existing} is already registered and unchanged - nothing to do."
+                )
+                return
+            raise CommandError(
+                f"{existing.model_id}:{existing.version} is {existing.lifecycle_state}, "
+                f"not DRAFT, and this artifact differs from the registered one "
+                f"({', '.join(changed)}). A version that has left DRAFT is immutable: "
+                f"every audit record naming this version must keep meaning the model "
+                f"that was approved. Train and register a new version number instead."
+            )
+
         schema, _ = FeatureSchema.objects.update_or_create(
             task=meta["task"],
             version=meta["feature_schema_version"],
             defaults={"definition": definition},
         )
+        fields["feature_schema"] = schema
 
         model_version, created = ModelVersion.objects.update_or_create(
             model_id=meta["model_id"],
             version=meta["model_version"],
-            defaults={
-                "name": meta["name"],
-                "task": meta["task"],
-                "model_type": meta.get("model_type", ""),
-                "prediction_target": meta.get("prediction_target", ""),
-                "feature_schema": schema,
-                "training_dataset_version": meta.get("training_dataset_version", ""),
-                "validation_dataset_version": meta.get("validation_dataset_version", ""),
-                "external_validation_dataset_version": meta.get(
-                    "external_validation_dataset_version", ""
-                ),
-                "preprocessing_version": meta["preprocessing_version"],
-                "calibration_version": meta["calibration_version"],
-                "explanation_version": meta["explanation_version"],
-                "intended_use": meta.get("intended_use", {}),
-                "validation_metrics": meta.get("validation_metrics", {}),
-                "subgroup_metrics": meta.get("subgroup_metrics", {}),
-                "population_domain": meta.get("population_domain", {}),
-                "known_failure_modes": meta.get("known_failure_modes", []),
-                "limitations": meta.get("limitations", ""),
-                "lifecycle_state": ModelLifecycleState.DRAFT,
-            },
+            defaults={**fields, "lifecycle_state": ModelLifecycleState.DRAFT},
         )
 
-        verb = "Created" if created else "Updated"
+        verb = "Created" if created else "Updated the DRAFT"
         self.stdout.write(
             f"{verb} {model_version} (schema {schema}). "
             f"Registered as DRAFT - use `govern_model` to advance it."

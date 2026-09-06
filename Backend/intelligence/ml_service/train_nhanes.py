@@ -32,7 +32,11 @@ from intelligence.ml_service.evaluation import (
     net_benefit,
     subgroup_report,
 )
+from intelligence.ml_service.nhanes_cohort import PLAUSIBLE
 
+# Feature sets are written with "glucose" as the glycaemic marker and rewritten
+# to "hba1c" when training on the full sample - see resolve_features().
+#
 # The five features the deployed pipeline already assembles from the record.
 CORE_FEATURES = ["age", "glucose", "systolic_bp", "bmi", "hdl"]
 # The established cardiovascular risk factors. Every published CVD equation
@@ -50,20 +54,55 @@ EXTENDED_FEATURES = CORE_FEATURES + [
 PARSIMONIOUS_FEATURES = [
     "age", "is_male", "systolic_bp", "glucose", "current_smoker", "bmi",
 ]
-# What the application can actually assemble from the record today. Smoking
-# status has no field anywhere in the data model, so a model that requires it
-# cannot be served until that is captured; sex is on Patient already. This set
-# is PARSIMONIOUS minus smoking, and it is the one that ships.
+# Everything a community health worker can obtain without a laboratory: a
+# blood-pressure cuff, one question about smoking, and the age and sex already
+# on the record. Deliberately contains no analyte, so it can be served where
+# there is no phlebotomy - which is most of where cardiovascular screening
+# actually has to happen.
+#
+# BMI is deliberately absent. Ten-year cardiovascular death is U-shaped in BMI:
+# in this cohort the LEANEST quintile has the highest event rate of all five
+# (5.38%, against 4.01% in the middle), because low weight in older adults is
+# often illness rather than health. A linear coefficient cannot express that,
+# and the one that gets fitted is positive and stable - so it passes sign
+# stability, and then tells a frail underweight patient that their weight is
+# reducing their risk. Since this system shows per-feature reasons to patients,
+# that is the same failure HDL was excluded for.
+#
+# It costs almost nothing to leave out: AUC 0.7782 with BMI against 0.7735
+# without, a paired-bootstrap difference of +0.0047 whose lower bound is
+# +0.0001. Every non-linear encoding tried (|BMI-27|, BMI + BMI-squared) buys
+# no more and is not significant at all. diagnostics.py --features clinical
+# re-checks this on every run.
+CLINICAL_FEATURES = [
+    "age", "is_male", "systolic_bp", "current_smoker",
+]
+# PARSIMONIOUS minus smoking. Kept as a fallback for a deployment that does not
+# capture smoking status; it no longer ships, because the record now carries
+# MeasurementKind.SMOKING_STATUS and the parsimonious set beats it.
 DEPLOYABLE_FEATURES = ["age", "is_male", "systolic_bp", "glucose", "bmi"]
 
 FEATURE_SETS = {
+    "clinical": CLINICAL_FEATURES,
     "core": CORE_FEATURES,
     "extended": EXTENDED_FEATURES,
     "parsimonious": PARSIMONIOUS_FEATURES,
     "deployable": DEPLOYABLE_FEATURES,
 }
 
-COHORT = Path(__file__).resolve().parents[1] / "_data" / "cohort.parquet"
+DATA = Path(__file__).resolve().parents[1] / "_data"
+
+# (cohort file, glycaemic marker). The fasting cohort is the NHANES morning
+# subsample and is about half the size; the full cohort substitutes HbA1c,
+# which is measured on everyone, and roughly doubles both n and the event
+# count. Event count is the binding constraint on every comparison here, so
+# which one is used changes what can be concluded, not just the decimals.
+COHORTS = {
+    "fasting": ("cohort.parquet", "glucose"),
+    "full": ("cohort_full.parquet", "hba1c"),
+    # No laboratory result required at all.
+    "clinical": ("cohort_clinical.parquet", None),
+}
 
 DEV_CYCLES = [1999, 2001, 2003, 2005]
 TEST_CYCLES = [2007, 2009]
@@ -72,30 +111,43 @@ PREPROCESSING_VERSION = "pp-nhanes-1"
 EXPLANATION_VERSION = "linear-shap-1"
 HORIZON_YEARS = 10
 
-# Physiologically impossible; a BMI above 100 is a recording error, not a person.
-PLAUSIBLE = {
-    "bmi": (12.0, 100.0),
-    "glucose": (2.0, 40.0),
-    "systolic_bp": (60.0, 260.0),
-    "hdl": (0.1, 6.0),
-    "age": (40.0, 79.0),
-}
+def resolve_features(names: list[str], marker: str | None) -> list[str]:
+    """Point a feature set at whichever glycaemic marker the cohort provides."""
+    if marker is None:
+        if "glucose" in names:
+            raise SystemExit(
+                "This feature set needs a glycaemic marker, and the 'clinical' "
+                "cohort has no laboratory result. Use --features clinical, or "
+                "--cohort fasting/full."
+            )
+        return list(names)
+    return [marker if n == "glucose" else n for n in names]
 
 
-def load_cohort(features: list[str]) -> pd.DataFrame:
-    df = pd.read_parquet(COHORT)
+def load_cohort(features: list[str], cohort: str = "fasting") -> pd.DataFrame:
+    file_name, _marker = COHORTS[cohort]
+    df = pd.read_parquet(DATA / file_name)
     df["is_male"] = (df.sex == "Male").astype(float)
 
-    before = len(df)
+    # Physiologic plausibility is enforced during cohort derivation, where it is
+    # printed as a numbered exclusion step. Re-checking it here would either
+    # duplicate the bounds or silently disagree with them, so this asserts
+    # instead: if a nonsense value ever reaches training, fail loudly rather
+    # than quietly trim it out of sight.
     for col, (lo, hi) in PLAUSIBLE.items():
-        df = df[(df[col] >= lo) & (df[col] <= hi)]
-    if before != len(df):
-        print(f"  dropped {before - len(df)} row(s) outside physiological plausibility")
+        if col not in df.columns:
+            continue
+        bad = df[col].notna() & ((df[col] < lo) | (df[col] > hi))
+        if bad.any():
+            raise RuntimeError(
+                f"{int(bad.sum())} row(s) of {col} are outside the physiologic range "
+                f"{lo}-{hi}; rebuild the cohort with nhanes_cohort.py"
+            )
 
     before = len(df)
     df = df.dropna(subset=features)
     if before != len(df):
-        print(f"  dropped {before - len(df)} row(s) missing an extended feature")
+        print(f"  dropped {before - len(df)} row(s) missing a required feature")
     return df.reset_index(drop=True)
 
 
@@ -152,6 +204,8 @@ def _calibrator(kind: str):
     from sklearn.isotonic import IsotonicRegression
     from sklearn.linear_model import LogisticRegression
 
+    if kind == "none":
+        return None
     if kind == "isotonic":
         return IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
     return LogisticRegression(max_iter=2000)  # Platt
@@ -171,15 +225,68 @@ def _to_logit(p):
 
 
 def _apply_calibrator(cal, kind, raw):
+    if kind == "none":
+        return np.asarray(raw, dtype=float)
     if kind == "isotonic":
         return cal.predict(raw)
     return cal.predict_proba(_to_logit(raw))[:, 1]
 
 
 def _fit_calibrator(cal, kind, raw, y):
+    if kind == "none":
+        return None
     if kind == "isotonic":
         return cal.fit(raw, y)
     return cal.fit(_to_logit(raw), y)
+
+
+CALIBRATIONS = ("none", "platt", "isotonic")
+
+
+def select_calibrator(dev, features, seed=7, folds=5):
+    """Choose the calibration method using development data only.
+
+    A logistic regression already outputs a probability, so a calibrator is not
+    automatically an improvement - on some feature sets it adds variance and
+    makes the fit worse. Which one wins therefore has to be decided, not assumed.
+
+    It must NOT be decided by trying all three on the test set and keeping the
+    best. That is selection on the very data the headline numbers are supposed
+    to be honest about, and it would quietly turn the reported calibration slope
+    into a best-of-three. So this cross-validates inside the development cycles:
+    each fold fits the estimator on part of the development data, fits each
+    candidate calibrator on a slice the estimator never saw, and scores all of
+    them on the held-out fold. The test cycles are never touched.
+
+    Brier score decides, because it is a proper scoring rule - it rewards being
+    both well ranked and correctly scaled, which is exactly what a number shown
+    to a patient has to be.
+    """
+    from sklearn.metrics import brier_score_loss
+    from sklearn.model_selection import StratifiedKFold
+
+    X = dev[features].to_numpy(float)
+    y = dev.y.to_numpy(int)
+    rng = np.random.default_rng(seed)
+    scores = {k: [] for k in CALIBRATIONS}
+
+    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
+    for fit_pool, held in splitter.split(X, y):
+        order = rng.permutation(len(fit_pool))
+        cut = int(len(fit_pool) * 0.75)
+        fit_idx, cal_idx = fit_pool[order[:cut]], fit_pool[order[cut:]]
+        est = _fit_logistic(X[fit_idx], y[fit_idx])
+        raw_held = est.predict_proba(X[held])[:, 1]
+        raw_cal = est.predict_proba(X[cal_idx])[:, 1]
+        for kind in CALIBRATIONS:
+            cal = _fit_calibrator(_calibrator(kind), kind, raw_cal, y[cal_idx])
+            scores[kind].append(
+                brier_score_loss(y[held], _apply_calibrator(cal, kind, raw_held))
+            )
+
+    mean = {k: round(float(np.mean(v)), 6) for k, v in scores.items()}
+    best = min(mean, key=lambda k: mean[k])
+    return best, mean
 
 
 def missing_feature_ablation(estimator, X, y, train_medians, features):
@@ -200,13 +307,15 @@ def missing_feature_ablation(estimator, X, y, train_medians, features):
 
 
 def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
-         feature_set: str = "core") -> Path:
+         feature_set: str = "core", cohort: str = "fasting") -> Path:
     import joblib
 
-    features = FEATURE_SETS[feature_set]
-    print(f"=== loading cohort (feature set: {feature_set}) ===")
+    file_name, marker = COHORTS[cohort]
+    features = resolve_features(FEATURE_SETS[feature_set], marker)
+    print(f"=== loading cohort (feature set: {feature_set}, cohort: {cohort}) ===")
+    print(f"  file:     {file_name}   glycaemic marker: {marker}")
     print(f"  features: {features}")
-    df = load_cohort(features)
+    df = load_cohort(features, cohort)
     train, calib, test = split(df, seed)
     print(
         f"  train       {len(train):>5,} rows, {int(train.y.sum()):>3} events  "
@@ -239,6 +348,16 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
     print(f"\n=== logistic regression ({len(features)} features) ===")
     logreg = _fit_logistic(Xtr, ytr)
     kind = calibration
+    if calibration == "auto":
+        dev = pd.concat([train, calib], ignore_index=True)
+        kind, cal_scores = select_calibrator(dev, features, seed)
+        print("  calibrator chosen on development cycles only "
+              "(5-fold, Brier; test set untouched):")
+        for name, score in sorted(cal_scores.items(), key=lambda kv: kv[1]):
+            mark = "  <-- chosen" if name == kind else ""
+            print(f"    {name:<9} {score:.6f}{mark}")
+    else:
+        cal_scores = {}
     cal = _fit_calibrator(
         _calibrator(kind), kind, logreg.predict_proba(Xca)[:, 1], yca
     )
@@ -327,6 +446,19 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
             f"{str(useful):>7}"
         )
 
+    # --- is it better than age alone? ---------------------------------------
+    # The model card used to assert non-significance as a fixed string. It is a
+    # measured quantity, so measure it: the same patients, the same bootstrap
+    # resamples, scored by both models.
+    from intelligence.ml_service.diagnostics import paired_bootstrap_auc_diff
+
+    vs_age = paired_bootstrap_auc_diff(yte, p_age, p_cal)
+    beats_age = vs_age["ci"][0] > 0
+    print("\n=== vs age alone (paired bootstrap on the test set) ===")
+    print(f"  AUC difference {vs_age['mean_diff']:+.4f}  "
+          f"95% CI {vs_age['ci'][0]:+.4f} to {vs_age['ci'][1]:+.4f}")
+    print(f"  significant at the 5% level: {beats_age}")
+
     # --- coefficients -------------------------------------------------------
     lr = logreg.named_steps["logisticregression"]
     coefs = {n: round(float(c), 4) for n, c in zip(features, lr.coef_[0], strict=True)}
@@ -359,7 +491,13 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
         "events_train": int(ytr.sum()),
         "events_test": int(yte.sum()),
         "feature_set": feature_set,
+        "calibration": kind,
+        "calibration_selection": cal_scores,
+        "cohort": cohort,
+        "glycaemic_marker": marker,
         "features": list(features),
+        "vs_age_alone": vs_age,
+        "beats_age_alone": bool(beats_age),
         "leakage_check": "passed: no participant id shared across splits",
         "split_design": (
             f"development cycles {DEV_CYCLES}; "
@@ -395,7 +533,8 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
     )
     meta_path = out / f"cvd-{version}.meta.json"
     meta_path.write_text(json.dumps(
-        build_model_card(version, features, feature_set, kind, domain, metrics, sub),
+        build_model_card(version, features, feature_set, kind, domain, metrics,
+                         sub, cohort),
         indent=2, default=str,
     ))
     print(f"\nwrote {path}")
@@ -403,14 +542,87 @@ def main(version: str, out_dir: str, calibration: str = "platt", seed: int = 7,
     return path
 
 
-def build_model_card(version, features, feature_set, kind, domain, metrics, subgroups):
+def build_model_card(version, features, feature_set, kind, domain, metrics,
+                     subgroups, cohort="fasting"):
     """The model card, written to be read by someone deciding whether to trust it.
 
     Every limitation below is a measured result from this run, not boilerplate.
     """
     primary = metrics["primary"]
     baseline = metrics["age_only_baseline"]
-    beats_age = primary["roc_auc"] - baseline["roc_auc"]
+    vs_age = metrics["vs_age_alone"]
+    lo, hi = vs_age["ci"]
+    significant = metrics["beats_age_alone"]
+
+    # Whether this model beats age alone is a result, not a constant. Earlier
+    # versions hardcoded "NOT statistically significant" into the card, which
+    # was true when it was written and would have kept being printed after it
+    # stopped being true. State the interval and read the verdict off it.
+    if significant:
+        age_verdict = (
+            f"a paired-bootstrap difference of {vs_age['mean_diff']:+.4f} "
+            f"(95% CI {lo:+.4f} to {hi:+.4f}), which excludes zero and is "
+            f"therefore a real improvement rather than noise."
+        )
+        age_limitation = (
+            f"Improvement over age alone is statistically significant "
+            f"({vs_age['mean_diff']:+.4f}, 95% CI {lo:+.4f} to {hi:+.4f}) but "
+            f"modest; age remains the dominant input."
+        )
+    else:
+        age_verdict = (
+            f"a paired-bootstrap difference of {vs_age['mean_diff']:+.4f} "
+            f"(95% CI {lo:+.4f} to {hi:+.4f}), which includes zero, so this "
+            f"model canNOT be shown to beat knowing the patient's age."
+        )
+        age_limitation = (
+            "Improvement over age alone is not statistically significant."
+        )
+
+    # Calibration slope, described rather than asserted. 1.0 is perfect. Below
+    # 1 the predictions are spread too wide, so extreme risks are overstated;
+    # above 1 they are squeezed too narrow, so the highest-risk patients are not
+    # separated enough from the middle. "Calibration is good" used to be a fixed
+    # string here and would have gone on being printed at any slope at all.
+    slope = primary["calibration_slope"]
+    if abs(slope - 1.0) <= 0.15:
+        calib_verdict = f"Calibration is good (slope {slope}, where 1.0 is perfect)."
+    elif slope > 1.0:
+        calib_verdict = (
+            f"Calibration is imperfect: the slope is {slope}, above the ideal 1.0, "
+            f"which means the predicted risks are compressed towards the average. "
+            f"The highest-risk patients are given a number that is too close to "
+            f"the middle of the range, so this model understates how far above "
+            f"average the worst cases are."
+        )
+    else:
+        calib_verdict = (
+            f"Calibration is imperfect: the slope is {slope}, below the ideal 1.0, "
+            f"which means the predicted risks are spread too wide. Extreme "
+            f"predictions in both directions are more extreme than the observed "
+            f"outcomes justify."
+        )
+
+    marker_note = {
+        "fasting": (
+            "Fasting glucose is measured in an NHANES morning subsample, so the "
+            "training cohort is a subset of survey participants and may differ "
+            "from the population that will actually be scored."
+        ),
+        "full": (
+            "The glycaemic marker is HbA1c, measured on the whole examined "
+            "sample, so the cohort is not restricted to the fasting subsample. "
+            "HbA1c and fasting glucose are not interchangeable: this model "
+            "requires hba1c and blocks when only glucose is recorded."
+        ),
+        "clinical": (
+            "This model requires no laboratory result, which is what makes it "
+            "usable outside a clinic - but it therefore cannot see a blood "
+            "sugar, a cholesterol or a kidney function that a clinician can. A "
+            "normal score here is not evidence that those are normal, and it "
+            "must never be read as a reason not to test them."
+        ),
+    }[cohort]
 
     worst = min(
         (s for s in subgroups if s.get("roc_auc") is not None),
@@ -467,9 +679,7 @@ def build_model_card(version, features, feature_set, kind, domain, metrics, subg
             ("Trained on a United States survey population. Calibration in an "
              "Indian population is unknown and very likely different; South Asian "
              "cardiovascular risk at a given risk-factor level is generally higher."),
-            ("Fasting glucose is measured in an NHANES morning subsample, so the "
-             "training cohort is a subset of survey participants and may differ "
-             "from the population that will actually be scored."),
+            marker_note,
             ("Required features are never imputed - a missing one blocks the "
              "prediction instead of being filled in."),
         ],
@@ -481,9 +691,7 @@ def build_model_card(version, features, feature_set, kind, domain, metrics, subg
             f"Discrimination on that held-out period is ROC-AUC "
             f"{primary['roc_auc']} (95% CI {primary['roc_auc_ci'][0]}-"
             f"{primary['roc_auc_ci'][1]}), against {baseline['roc_auc']} for age "
-            f"alone - a difference of {beats_age:+.4f}, which is NOT statistically "
-            f"significant at this event count. Calibration is good "
-            f"(slope {primary['calibration_slope']}). This model has not been "
+            f"alone - {age_verdict} {calib_verdict} This model has not been "
             f"prospectively validated, has not been validated in an Indian "
             f"population, and is not a medical device. It supports a clinician's "
             f"judgement; it does not replace it."
@@ -520,7 +728,7 @@ def build_model_card(version, features, feature_set, kind, domain, metrics, subg
             "known_limitations": [
                 "US survey population; not validated in India.",
                 "No prospective validation.",
-                "Improvement over age alone is not statistically significant.",
+                age_limitation,
                 "Weak discrimination within narrow age bands.",
             ],
             "output_interpretation": (
@@ -546,8 +754,13 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="2.0.0")
     ap.add_argument("--out", default="intelligence/_artifacts")
-    ap.add_argument("--calibration", choices=["platt", "isotonic"], default="platt")
+    ap.add_argument("--calibration", choices=[*CALIBRATIONS, "auto"], default="auto",
+                    help="auto = choose on the development cycles by cross-validated "
+                         "Brier score, never on the test set")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--features", choices=list(FEATURE_SETS), default="core")
+    ap.add_argument("--cohort", choices=list(COHORTS), default="fasting",
+                    help="fasting = NHANES morning subsample with fasting glucose; "
+                         "full = whole examined sample with HbA1c (about 2x the events)")
     a = ap.parse_args()
-    main(a.version, a.out, a.calibration, a.seed, a.features)
+    main(a.version, a.out, a.calibration, a.seed, a.features, a.cohort)

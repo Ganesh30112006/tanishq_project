@@ -114,12 +114,33 @@ advice.
 
 ## Model governance
 
-`register_model` always lands a version in `DRAFT`. Making it serve patients
-requires `govern_model` with a named approver and a recorded reason. The
-synthetic demonstration models are `RETIRED` and cannot serve.
+`register_model` always lands a *new* version in `DRAFT`. Making it serve
+patients requires `govern_model` with a named approver and a recorded reason.
+The synthetic demonstration models are `RETIRED` and cannot serve.
 
-`/readyz` does not check this, deliberately: a model being retired is a
+**A version that has left `DRAFT` is immutable.** Re-registering a
+byte-identical artifact is a no-op, so provisioning scripts are safe to re-run;
+re-registering anything *different* is refused and names what differs. This
+closed two silent failures. `RETIRED` had not actually been terminal - a
+withdrawn model could be brought back simply by registering it again, which is
+how `seed_demo` came to hand the live `cvd` task to a model fitted on invented
+data. And a version identifier had not actually identified anything - the
+registry row behind `cvd-nhanes-logreg:3.0.0` could be rewritten to describe a
+different model, so a `RiskAssessment` recorded months earlier would no longer
+reconstruct. The `FeatureSchema`, which holds the `valid_domain` gate that
+refuses out-of-range patients, is checked in its own right.
+
+`seed_demo` will not take the `cvd` task from a model it did not install, and
+says so rather than doing it quietly.
+
+`/readyz` does not check any of this, deliberately: a model being retired is a
 governance state, not an outage.
+
+Check what is actually serving:
+
+```bash
+python manage.py shell -c "from apps.risk.models import RiskModel;   m = RiskModel.objects.get(task='cvd');   print(m.active_version.model_id, m.active_version.version, m.is_enabled)"
+```
 
 ## What CI covers
 
