@@ -142,6 +142,43 @@ Check what is actually serving:
 python manage.py shell -c "from apps.risk.models import RiskModel;   m = RiskModel.objects.get(task='cvd');   print(m.active_version.model_id, m.active_version.version, m.is_enabled)"
 ```
 
+## Clinical validation
+
+`register_model` and `govern_model` check that a *person* approved a model.
+They do not check whether the model is defensible. That is a separate run:
+
+```bash
+python -m intelligence.ml_service.clinical_validation --version <version>
+```
+
+It measures coverage, abstention, subgroup reliability and clinical utility
+against `intelligence/ml_service/acceptance_criteria.py`, which states every
+threshold and the clinical reason for it. It exits non-zero when a criterion
+fails and writes `cvd-<version>.clinical.json` beside the model card.
+
+**Run it before advancing a version to `APPROVED_FOR_EVALUATION`,** and put the
+result in the transition reason. The current model passes 9 of 10; the open
+failure is recorded below rather than waived.
+
+### Open finding: unequal coverage
+
+`coverage.group_disparity` fails at 2.06x against a 1.5x ceiling. Black
+non-Hispanic participants are refused at 8.80% and Other/multiple at 10.43%,
+against 5.07% for White non-Hispanic. Almost all of it is a missing systolic
+blood-pressure reading, so nothing in the model or the code will fix it - it is
+a measurement-completeness problem wherever the readings are taken. It is
+tracked here because unequal coverage is unequal care and appears in no
+accuracy metric.
+
+### A version means one model, including its schema
+
+Adding `risk_direction` to the feature schema required a new model version -
+3.0.0 was already approved, and an approved schema is immutable, so
+`register_model` refused the change. The estimator in 3.1.0 is byte-identical
+to 3.0.0; only the schema differs. That is the rule working as intended: the
+`valid_domain` gate lives in the schema, so a schema that can be edited under an
+approved version is a gate that can be edited under an approved version.
+
 ## What CI covers
 
 `.github/workflows/ci.yml`, at the repository root — an earlier copy lived at

@@ -57,12 +57,27 @@ class Command(BaseCommand):
             {"name": name, "max_age_days": meta.get("max_data_age_days", 365)}
             for name in meta["feature_order"]
         ]
+        # Which direction each feature moves risk in, taken from the fitted
+        # standardised coefficients. The sufficiency engine needs this to tell
+        # a dangerous out-of-domain reading from a harmless one: a blood
+        # pressure above the validated ceiling and one below the floor are both
+        # "out of domain", but only one of them is the record's most alarming
+        # number. Sign only - the magnitude is never shown to anyone from here.
+        coefficients = (meta.get("validation_metrics") or {}).get(
+            "standardised_coefficients", {}
+        )
+        risk_direction = {
+            name: (1 if float(value) > 0 else -1 if float(value) < 0 else 0)
+            for name, value in coefficients.items()
+            if name in meta["feature_order"]
+        }
         definition = {
             "required_features": required,
             "optional_features": [],
             "minimum_completeness": 1.0,
             "max_data_age_days": meta.get("max_data_age_days", 365),
             "valid_domain": meta["domain"],
+            "risk_direction": risk_direction,
         }
         existing = ModelVersion.objects.filter(
             model_id=meta["model_id"], version=meta["model_version"]

@@ -124,6 +124,14 @@ def net_benefit(y, p, thresholds=None):
         out.append({
             "threshold": t,
             "flagged": int(flagged.sum()),
+            # Kept, rather than discarded after computing net benefit, because
+            # a clinician plans capacity in these units. "Flag 34% of the list
+            # to catch 4 in 5 of the deaths" is actionable; a net benefit of
+            # 0.02 is not.
+            "true_positives": tp,
+            "false_positives": fp,
+            "number_needed_to_flag": round(int(flagged.sum()) / tp, 1) if tp else None,
+            "sensitivity": round(tp / max(int(y.sum()), 1), 4),
             "net_benefit_model": round(float(nb), 5),
             "net_benefit_treat_all": round(float(nb_all), 5),
             "beats_treat_all": bool(nb > nb_all),

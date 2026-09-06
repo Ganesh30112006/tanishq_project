@@ -205,6 +205,117 @@ Measured, not guessed. All of these are written into the model card's
   cardiovascular risk at a given risk-factor level is generally higher, so the
   calibration that looks good here should not be assumed to hold.
 
+## Is it defensible, not just accurate?
+
+Accuracy is measured on the people the model *could* score. That is not the
+population it will be pointed at, and the gap between the two is where the
+clinically important failures live. `clinical_validation.py` asks the questions
+the training battery cannot:
+
+```bash
+python -m intelligence.ml_service.clinical_validation --version 3.1.0
+```
+
+It judges the model against `acceptance_criteria.py`, which states each
+threshold **and the clinical reason for it**, separately from the code that
+measures it. Criteria written after seeing a result are not criteria, they are a
+description of that result. The file records an honest caveat about its own
+first version: the coverage thresholds were written after the first coverage
+numbers existed, because until that analysis was run nobody knew coverage was a
+question. They are justified on clinical grounds rather than fitted to let the
+current model pass - and the current model fails one of them.
+
+The run exits non-zero on failure, so it can gate a build.
+
+### Coverage: who can this actually serve?
+
+Of **16,097** adults aged 40-79 with a known 10-year outcome:
+
+| | People | Event rate |
+|---|---|---|
+| Can be scored | 15,047 (93.5%) | 4.92% |
+| Refused - a required input was never recorded | 729 | 5.32% |
+| Refused - a value outside the validated range | 321 | 9.94% |
+
+### The refusal that was hiding the worst readings
+
+Splitting that last row by which bound was crossed is the finding that changed
+the code:
+
+| Breach | People | Event rate |
+|---|---|---|
+| Systolic BP **above** the validated 193.3 | 137 | **16.06%** |
+| Systolic BP below the validated 94.0 | 184 | 4.89% |
+
+The people refused for a blood pressure above the ceiling die of cardiovascular
+causes at **more than three times** the rate of the people the model serves. The
+ones below the floor are indistinguishable from the served population.
+
+Both used to receive the same message - *"This tool was not built for a record
+like yours."* True, and for the first group it reads as a shrug at the single
+most alarming number in their record.
+
+The model still may not extrapolate: a risk estimate at a reading it was never
+fitted on would be invented. But it may not be silent either. The feature schema
+now carries `risk_direction` - the sign of each fitted coefficient, written at
+registration - so the sufficiency engine can tell a dangerous breach from a
+harmless one, and:
+
+- **The patient is told what was seen.** *"Your record has BP - the upper number
+  saved as 204. That is above the range this tool was tested on, so it has not
+  given an estimate - any number would be unreliable. Please show this reading
+  to a doctor."* No estimate, no diagnosis, no invented value: it repeats a
+  reading already in the record and routes it.
+- **The clinician gets the reason in the limitations**, naming the value, the
+  bound and the direction.
+- The response carries `reading_needs_review` so a front end can escalate rather
+  than showing a dead end.
+
+### Coverage is not equal, and that is still open
+
+| Group | Refused |
+|---|---|
+| White non-Hispanic | 5.07% |
+| Mexican American | 6.96% |
+| Other Hispanic | 7.06% |
+| Black non-Hispanic | 8.80% |
+| Other/multiple | 10.43% |
+
+`coverage.group_disparity` **FAILS** at 2.06x against a 1.5x ceiling. It is
+driven almost entirely by a missing systolic blood-pressure reading - 714 of the
+729 missing-input refusals - so no change to the model or its code will fix it.
+It is a measurement-completeness problem in whoever collects the data, and it is
+recorded as an open finding rather than waived. Unequal coverage is unequal
+care, and it appears in no accuracy metric.
+
+### Clinical utility, in units a clinician can plan with
+
+At a **5% 10-year risk of cardiovascular death** decision threshold - a
+placeholder that a responsible clinician must replace, recorded in
+`acceptance_criteria.DECISION_THRESHOLD` so the assumed number is visible:
+
+| | |
+|---|---|
+| Flagged | 1,833 of 5,351 (34.3% of the list) |
+| Deaths caught | 194 of 272 (71.3%) |
+| Flagged per death caught | 9.4 |
+| Net benefit | +0.02013, against +0.00088 for treating everyone |
+
+Net benefit says acting on the output beats both strategies that need no model.
+The other three rows are what a clinic actually plans around.
+
+### The current verdict
+
+**9 of 10 criteria pass.** The one failure is `coverage.group_disparity`, above.
+Two are worth calling out as passing narrowly rather than comfortably:
+`discrimination.subgroup_above_chance` is carried by ages 70-79 at a lower bound
+of 0.546, and `calibration.subgroup_error` by Black non-Hispanic participants at
+19.4% relative under-prediction against a 25% ceiling.
+
+A criterion that cannot be measured is reported as `not assessed` and does not
+count as a pass - "we checked and it was fine" and "there was nothing to check"
+are different claims.
+
 ## Why BMI is not in the model
 
 BMI is not excluded for being weak. It is excluded for being **bent**.

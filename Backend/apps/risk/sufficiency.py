@@ -35,6 +35,18 @@ class SufficiencyReport:
     stale: list[str] = field(default_factory=list)
     conflicting: list[str] = field(default_factory=list)
     out_of_domain: list[str] = field(default_factory=list)
+    #: Structured detail for each out-of-domain feature: which bound was
+    #: crossed, in which direction, and whether that is the direction the model
+    #: associates with higher risk.
+    #:
+    #: The names alone are not enough. A blood pressure below the validated
+    #: floor and one above the ceiling are both "out_of_domain", and in this
+    #: cohort the people above the ceiling die of cardiovascular causes at
+    #: 16.1% against 4.9% for those the model serves. Telling both groups the
+    #: same thing hides, from the second group, the single most alarming number
+    #: in their record. The model still must not extrapolate - but the refusal
+    #: has to name what it saw.
+    domain_breaches: list[dict] = field(default_factory=list)
 
     @property
     def is_sufficient(self) -> bool:
@@ -65,6 +77,10 @@ class DataSufficiencyEngine:
         required = definition.get("required_features", [])
         default_max_age = definition.get("max_data_age_days")
         valid_domain = definition.get("valid_domain", {})
+        # Sign of each feature's standardised coefficient, written into the
+        # schema at registration. Absent for older schemas, in which case no
+        # breach can be called dangerous and the generic wording is used.
+        risk_direction = definition.get("risk_direction", {})
         min_completeness = float(definition.get("minimum_completeness", 1.0))
 
         report = SufficiencyReport(status=DataSufficiency.INSUFFICIENT, completeness=0.0)
@@ -94,8 +110,25 @@ class DataSufficiencyEngine:
 
             bounds = valid_domain.get(name) or {}
             lo, hi = bounds.get("min"), bounds.get("max")
-            if (lo is not None and numeric < lo) or (hi is not None and numeric > hi):
+            below = lo is not None and numeric < lo
+            above = hi is not None and numeric > hi
+            if below or above:
                 report.out_of_domain.append(name)
+                side = "above" if above else "below"
+                # Positive coefficient means larger values carry more risk, so
+                # a breach above the ceiling is the dangerous direction.
+                direction = float(risk_direction.get(name, 0.0) or 0.0)
+                report.domain_breaches.append({
+                    "feature": name,
+                    "value": numeric,
+                    "min": lo,
+                    "max": hi,
+                    "side": side,
+                    "higher_risk_side": bool(
+                        (side == "above" and direction > 0)
+                        or (side == "below" and direction < 0)
+                    ),
+                })
                 continue
 
             report.present.append(name)

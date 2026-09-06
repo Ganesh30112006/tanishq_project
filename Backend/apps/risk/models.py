@@ -260,6 +260,12 @@ class RiskAssessment(AppendOnlyModel):
     input_snapshot = models.JSONField(default=dict)
     missing_features = models.JSONField(default=list, blank=True)
     conflicts = models.JSONField(default=list, blank=True)
+    # Which validated bound a required input crossed, and in which direction.
+    # Kept structured rather than folded into missing_features because the
+    # direction is the clinically important part: a reading above the ceiling
+    # on the higher-risk side must be reported as what it is, not as a generic
+    # "we cannot score you".
+    domain_breaches = models.JSONField(default=list, blank=True)
     correlation_id = models.CharField(max_length=128, blank=True)
 
     class Meta:

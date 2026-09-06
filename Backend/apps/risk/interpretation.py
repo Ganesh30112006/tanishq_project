@@ -31,7 +31,7 @@ from decimal import Decimal
 
 from apps.common.enums import ReliabilityStatus
 from apps.patients.presentation import risk_band
-from apps.risk.plain_language import describe_gaps
+from apps.risk.plain_language import describe_feature, describe_gaps
 from apps.risk.safety import ELEVATED_BANDS
 
 # --- what a band is called, and what it does and does not mean -------------
@@ -346,6 +346,14 @@ _BLOCK_FALLBACK = {
 }
 
 
+def _dangerous_breach(assessment):
+    """The first out-of-range reading that sits on the higher-risk side, if any."""
+    for breach in getattr(assessment, "domain_breaches", None) or []:
+        if breach.get("higher_risk_side"):
+            return breach
+    return None
+
+
 def describe_block(assessment) -> dict | None:
     """Explain a blocked outcome, and what would unblock it."""
     if assessment.status != assessment.Status.BLOCKED:
@@ -353,6 +361,27 @@ def describe_block(assessment) -> dict | None:
     code = assessment.outcome_code or ""
     copy = _BLOCK_COPY.get(code, _BLOCK_FALLBACK)
     gaps = describe_gaps(assessment.missing_features)
+
+    # A reading beyond the validated range on the higher-risk side gets its own
+    # wording. The generic out-of-domain message - "this tool was not built for
+    # a record like yours" - is true but reads as a shrug, and the people it is
+    # shown to are the ones whose record contains the most alarming number in
+    # it. Nothing here estimates a risk, names a condition, or invents a value:
+    # it repeats the reading that is already saved and says to show it to a
+    # doctor.
+    breach = _dangerous_breach(assessment)
+    if breach is not None:
+        label = describe_feature(breach["feature"])["label"]
+        copy = {
+            "headline": "This reading is higher than the tool can check.",
+            "detail": (
+                f"Your record has {label} saved as {breach['value']:g}. That is "
+                f"above the range this tool was tested on, so it has not given "
+                f"an estimate - any number would be unreliable. Please show "
+                f"this reading to a doctor."
+            ),
+        }
+
     return {
         "outcome": code,
         "headline": copy["headline"],
@@ -360,4 +389,5 @@ def describe_block(assessment) -> dict | None:
         "data_needed": gaps,
         # Out-of-domain is not a gap a person can fill by uploading anything.
         "resolvable_by_patient": bool(gaps) and code != "OUT_OF_DOMAIN",
+        "reading_needs_review": breach is not None,
     }

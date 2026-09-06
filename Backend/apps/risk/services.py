@@ -78,8 +78,11 @@ class RiskAssessmentService(BaseService):
                 sufficiency=report.status,
                 missing=report.missing + report.stale + report.invalid,
                 conflicts=report.conflicting,
+                domain_breaches=report.domain_breaches,
                 lifecycle_state=AssessmentLifecycleState.INSUFFICIENT_DATA,
-                limitations=self._limitations(model, sufficiency=report.status),
+                limitations=self._limitations(
+                    model, sufficiency=report.status, breaches=report.domain_breaches
+                ),
             )
             audit_service.record(
                 audit.RISK_ASSESSMENT, actor=requested_by, resource=assessment,
@@ -161,6 +164,7 @@ class RiskAssessmentService(BaseService):
     def _blocked(
         self, patient, requested_by, task, model, outcome, correlation_id,
         *, sufficiency="", reliability="", missing=None, conflicts=None,
+        domain_breaches=None,
         lifecycle_state=AssessmentLifecycleState.INSUFFICIENT_DATA, limitations=None,
     ) -> RiskAssessment:
         return RiskAssessment.objects.create(
@@ -178,11 +182,14 @@ class RiskAssessmentService(BaseService):
             input_snapshot={},
             missing_features=missing or [],
             conflicts=conflicts or [],
+            domain_breaches=domain_breaches or [],
             correlation_id=correlation_id,
         )
 
     @staticmethod
-    def _limitations(model, *, sufficiency: str = "", reliability: str = "") -> list[str]:
+    def _limitations(
+        model, *, sufficiency: str = "", reliability: str = "", breaches=None
+    ) -> list[str]:
         """Compose the structured limitation strings surfaced with a result
         (spec section 58). Model-card limitations first, then anything specific
         to this request."""
@@ -193,6 +200,20 @@ class RiskAssessmentService(BaseService):
             out.append("Some required evidence was missing, stale or invalid for this patient.")
         if reliability == ReliabilityStatus.LOW_RELIABILITY:
             out.append("The input is near the edge of the model's validated domain.")
+        for breach in breaches or []:
+            # Say what was seen. The model cannot extrapolate to this reading,
+            # but a clinician reading this record must not have to work out for
+            # themselves that the refusal was caused by an extreme value rather
+            # than an unremarkable one.
+            if not breach.get("higher_risk_side"):
+                continue
+            bound = breach.get("max") if breach.get("side") == "above" else breach.get("min")
+            out.append(
+                f"No estimate was produced because {breach['feature']} = "
+                f"{breach['value']:g} lies {breach['side']} the validated range "
+                f"(tested to {bound:g}), on the side this model associates with "
+                f"higher risk. The reading itself has not been assessed."
+            )
         return out
 
     def _store_factors(self, assessment: RiskAssessment, shap: list[dict]) -> None:
