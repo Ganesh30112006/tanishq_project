@@ -45,6 +45,49 @@ _ALLOWED: dict[str, set[str]] = {
 _APPROVAL_STATES = {S.APPROVED_FOR_EVALUATION, S.APPROVED_FOR_CLINICAL_REVIEW}
 
 
+
+def _require_acknowledged_gaps(model_version: ModelVersion, evidence: dict) -> None:
+    """An approver must name what is still unknown before approving.
+
+    Open evidence gaps do not block approval. A model whose transportability is
+    unproven can still be a reasonable thing to put in front of a clinician who
+    knows that, and a rule that blocked it would only push the gaps out of the
+    record and into somebody's judgement.
+
+    What is blocked is approving *without saying so*. The approver has to list
+    the open questions in the transition evidence, which puts them in the
+    lifecycle event, the audit log and the approval itself. Later, when someone
+    asks whether anyone knew the model had never been validated in the
+    population it was used on, the answer is a record rather than a
+    recollection.
+    """
+    open_questions = set(model_version.open_evidence_questions())
+    if not open_questions:
+        return
+    acknowledged = set(evidence.get("acknowledged_evidence_gaps") or [])
+    unacknowledged = sorted(open_questions - acknowledged)
+    if unacknowledged:
+        answers = {a["key"]: a for a in model_version.evidence_dossier.get("answers", [])}
+        raise ValidationFailed(
+            "This model has open evidence gaps that the approval does not "
+            "acknowledge. Approving it may still be the right decision, but it "
+            "has to be an explicit one: list these keys in "
+            "evidence.acknowledged_evidence_gaps.",
+            details={
+                "unacknowledged_evidence_gaps": unacknowledged,
+                "what_is_open": [
+                    {
+                        "key": key,
+                        "question": answers.get(key, {}).get("question", ""),
+                        "status": answers.get(key, {}).get("status", ""),
+                        "to_answer_this": answers.get(key, {}).get("to_answer_this", ""),
+                    }
+                    for key in unacknowledged
+                ],
+            },
+        )
+
+
 class ModelGovernanceService(BaseService):
     @transaction.atomic
     def transition(
@@ -86,11 +129,17 @@ class ModelGovernanceService(BaseService):
                 problems.append("subgroup_metrics is empty")
             if not model_version.calibration_version:
                 problems.append("calibration_version is not set")
+            if not model_version.evidence_dossier:
+                problems.append(
+                    "no evidence dossier is recorded - run "
+                    "intelligence.ml_service.evidence and re-register"
+                )
             if problems:
                 raise ValidationFailed(
                     "The model is not ready for clinical-review approval.",
                     details={"problems": problems},
                 )
+            _require_acknowledged_gaps(model_version, evidence or {})
 
         model_version.lifecycle_state = to_state
         if to_state in _APPROVAL_STATES:

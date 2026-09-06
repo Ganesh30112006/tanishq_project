@@ -171,6 +171,15 @@ def test_seeding_refuses_to_take_a_task_from_a_real_model(
 
     _register(tmp_path, card, model_id="real-model", model_version="9.9.9")
     real = ModelVersion.objects.get(model_id="real-model", version="9.9.9")
+    # A model reaching the clinic now needs an evidence dossier, and its open
+    # questions have to be named in the approval. This one is a fixture, so it
+    # gets a dossier with nothing open.
+    real.evidence_dossier = {
+        "questions_version": "evidence-questions-1",
+        "status_counts": {"answered": 11, "partial": 0, "unanswered": 0},
+        "answers": [{"key": "development_population", "status": "answered"}],
+    }
+    real.save(update_fields=["evidence_dossier"])
     governance = ModelGovernanceService()
     for state in (
         ModelLifecycleState.VALIDATION,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.common.enums import ModelLifecycleState, Role
 from apps.risk.models import FeatureSchema, ModelVersion, RiskModel
@@ -42,9 +43,21 @@ def test_register_model_is_idempotent(tmp_path):
 
 
 def test_govern_model_walks_lifecycle_and_activates(tmp_path, make_user):
+    """The whole path, including naming what is still unknown.
+
+    The synthetic demo model has essentially no evidence behind it, so its
+    dossier is almost entirely open questions. Approving it therefore requires
+    listing them - which is the point: the rule does not care whether a model
+    is a demo, and there is no second route to clinical state that skips it.
+    """
+    import json
+
+    from intelligence.ml_service import evidence as EV
     from intelligence.ml_service.train import build_demo_model
 
     build_demo_model("cvd", "1.0.0", tmp_path, seed=0)
+    dossier = EV.build_dossier("1.0.0", artifacts=tmp_path)
+    (tmp_path / "cvd-1.0.0.evidence.json").write_text(json.dumps(dossier))
     call_command("register_model", meta=str(tmp_path / "cvd-1.0.0.meta.json"))
     approver = make_user(Role.ADMIN)
 
@@ -53,10 +66,24 @@ def test_govern_model_walks_lifecycle_and_activates(tmp_path, make_user):
             "govern_model", model="cvd-logreg", model_version="1.0.0",
             to=to_state, by=approver.email, reason=f"move to {to_state}",
         )
+
+    registered = ModelVersion.objects.get(model_id="cvd-logreg", version="1.0.0")
+    gaps = registered.open_evidence_questions()
+    assert gaps, "a model fitted on invented data should have open questions"
+
+    with pytest.raises(CommandError) as excinfo:
+        call_command(
+            "govern_model", model="cvd-logreg", model_version="1.0.0",
+            to="APPROVED_FOR_CLINICAL_REVIEW", by=approver.email,
+            reason="governance board sign-off", activate_task=True,
+        )
+    assert "acknowledge" in str(excinfo.value).lower()
+
     call_command(
         "govern_model", model="cvd-logreg", model_version="1.0.0",
         to="APPROVED_FOR_CLINICAL_REVIEW", by=approver.email,
         reason="governance board sign-off", activate_task=True,
+        acknowledged_gaps=gaps,
     )
 
     mv = ModelVersion.objects.get(model_id="cvd-logreg", version="1.0.0")

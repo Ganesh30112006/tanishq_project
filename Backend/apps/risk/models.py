@@ -114,6 +114,16 @@ class ModelVersion(UUIDTimeStampedModel):
     known_failure_modes = models.JSONField(default=list, blank=True)
     limitations = models.TextField(blank=True)
 
+    # The eleven-question evidence dossier assembled by
+    # ``intelligence.ml_service.evidence``: where the model was developed and
+    # validated, who was represented and excluded, how often and why it
+    # abstains, how it discriminates and calibrates, whether performance varies
+    # by subgroup, whether it transports - and, derived from all of those, what
+    # is still unknown. It is stored on the version rather than recomputed
+    # because an approval has to be defensible against the evidence as it stood
+    # on the day it was given, not against whatever the artifacts say later.
+    evidence_dossier = models.JSONField(default=dict, blank=True)
+
     lifecycle_state = models.CharField(
         max_length=32,
         choices=ModelLifecycleState.choices,
@@ -138,6 +148,21 @@ class ModelVersion(UUIDTimeStampedModel):
     @property
     def is_clinically_approved(self) -> bool:
         return self.lifecycle_state == ModelLifecycleState.APPROVED_FOR_CLINICAL_REVIEW
+
+    def open_evidence_questions(self) -> list[str]:
+        """Questions the dossier records as not fully answered.
+
+        Empty when there is no dossier, which is a different thing from having
+        no gaps - callers that gate on this must check ``evidence_dossier``
+        first, and :mod:`apps.risk.governance` does.
+        """
+        answers = (self.evidence_dossier or {}).get("answers", [])
+        return [
+            answer["key"] for answer in answers
+            if answer.get("key") != "missing_evidence"
+            and answer.get("status") != "answered"
+        ]
+
 
     def structured_limitations(self) -> list[str]:
         """Human-readable limitation strings drawn from the model card, for the

@@ -79,6 +79,22 @@ class Command(BaseCommand):
             "valid_domain": meta["domain"],
             "risk_direction": risk_direction,
         }
+        # The evidence dossier sits beside the model card and is deliberately
+        # NOT part of the immutable comparison below. The model is fixed; the
+        # evidence about it is not, and is meant to accumulate - a validation
+        # run on a new cohort next year adds to what is known without changing
+        # a single weight. Freezing the dossier at approval time would make the
+        # record permanently claim less than is known.
+        #
+        # What stops that from becoming a hole is that the gaps acknowledged at
+        # approval live in the ModelLifecycleEvent, which is append-only. A
+        # later dossier can close a gap; it cannot make it look as though the
+        # gap was never there when somebody signed.
+        dossier_path = meta_path.with_name(
+            f"{meta['task']}-{meta['model_version']}.evidence.json"
+        )
+        dossier = json.loads(dossier_path.read_text()) if dossier_path.exists() else {}
+
         existing = ModelVersion.objects.filter(
             model_id=meta["model_id"], version=meta["model_version"]
         ).first()
@@ -119,6 +135,16 @@ class Command(BaseCommand):
             if existing.feature_schema.version != meta["feature_schema_version"]:
                 changed.append("feature_schema.version")
             if not changed:
+                if dossier and existing.evidence_dossier != dossier:
+                    existing.evidence_dossier = dossier
+                    existing.save(update_fields=["evidence_dossier", "updated_at"])
+                    self.stdout.write(
+                        f"{existing} is unchanged; updated its evidence dossier "
+                        f"({dossier['status_counts']['answered']} answered, "
+                        f"{dossier['status_counts']['partial']} partial, "
+                        f"{dossier['status_counts']['unanswered']} unanswered)."
+                    )
+                    return
                 self.stdout.write(
                     f"{existing} is already registered and unchanged - nothing to do."
                 )
@@ -141,7 +167,8 @@ class Command(BaseCommand):
         model_version, created = ModelVersion.objects.update_or_create(
             model_id=meta["model_id"],
             version=meta["model_version"],
-            defaults={**fields, "lifecycle_state": ModelLifecycleState.DRAFT},
+            defaults={**fields, "evidence_dossier": dossier,
+                      "lifecycle_state": ModelLifecycleState.DRAFT},
         )
 
         verb = "Created" if created else "Updated the DRAFT"
@@ -149,3 +176,17 @@ class Command(BaseCommand):
             f"{verb} {model_version} (schema {schema}). "
             f"Registered as DRAFT - use `govern_model` to advance it."
         )
+        if not dossier:
+            self.stdout.write(self.style.WARNING(
+                f"No evidence dossier at {dossier_path.name}. This version "
+                f"cannot be approved for clinical review until one exists - "
+                f"run `python -m intelligence.ml_service.evidence "
+                f"--version {meta['model_version']}` and register again."
+            ))
+        else:
+            open_questions = model_version.open_evidence_questions()
+            if open_questions:
+                self.stdout.write(self.style.WARNING(
+                    "Open evidence gaps: " + ", ".join(open_questions)
+                    + ". An approver must name these to advance this version."
+                ))

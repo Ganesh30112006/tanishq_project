@@ -34,6 +34,17 @@ class Command(BaseCommand):
         parser.add_argument("--by", required=True, help="email of the approving user")
         parser.add_argument("--reason", required=True)
         parser.add_argument(
+            "--acknowledge-gap",
+            action="append",
+            default=[],
+            dest="acknowledged_gaps",
+            metavar="QUESTION_KEY",
+            help="An open evidence-dossier question you are approving in spite "
+            "of, e.g. --acknowledge-gap transportability. Repeat for each one. "
+            "Approving for clinical review requires every open question to be "
+            "named; run `manage.py model_evidence --gaps-only` to see them.",
+        )
+        parser.add_argument(
             "--activate-task",
             action="store_true",
             help="On APPROVED_FOR_CLINICAL_REVIEW, also enable this version for its task.",
@@ -63,6 +74,10 @@ class Command(BaseCommand):
                 to_state=options["to"],
                 actor=actor,
                 reason=options["reason"],
+                evidence=(
+                    {"acknowledged_evidence_gaps": options["acknowledged_gaps"]}
+                    if options["acknowledged_gaps"] else {}
+                ),
             )
             if (
                 options["activate_task"]

@@ -178,7 +178,14 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
           DJANGO_SECRET_KEY: ci-only-not-a-real-secret
-      - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py tests/integration/test_clinical_validation.py tests/integration/test_external_validation.py
+      # Assemble the eleven-question evidence dossier from everything above:
+      # where the model was developed and validated, who was represented and
+      # excluded, how often and why it abstains, discrimination, calibration,
+      # subgroup variation, transport - and, derived from those, what is still
+      # unknown. It exits non-zero only if the dossier contradicts itself; open
+      # questions are the expected output, not a failure.
+      - run: python -m intelligence.ml_service.evidence --version 3.1.0
+      - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py tests/integration/test_clinical_validation.py tests/integration/test_external_validation.py tests/integration/test_evidence_dossier.py tests/integration/test_cohort_contract.py
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
       - uses: actions/upload-artifact@v4
@@ -189,3 +196,4 @@ jobs:
             Backend/intelligence/_artifacts/cvd-3.1.0.meta.json
             Backend/intelligence/_artifacts/cvd-3.1.0.clinical.json
             Backend/intelligence/_artifacts/cvd-3.1.0.external.json
+            Backend/intelligence/_artifacts/cvd-3.1.0.evidence.json

@@ -31,6 +31,7 @@ subgroup and survey-representativeness reporting. They are NOT model inputs.
 """
 from __future__ import annotations
 
+import json
 import warnings
 from pathlib import Path
 
@@ -294,9 +295,14 @@ def main(drop_competing: bool = False, sample: str = "fasting") -> pd.DataFrame:
 
     print("=== cohort derivation ===")
     prev = None
+    derivation = []
     for label, n in steps:
         delta = "" if prev is None else f"  (-{prev - n:,})"
         print(f"  {n:>7,}  {label}{delta}")
+        derivation.append({
+            "step": label, "remaining": int(n),
+            "removed": None if prev is None else int(prev - n),
+        })
         prev = n
 
     df["sex"] = np.where(df.RIAGENDR == 1, "Male", "Female")
@@ -322,6 +328,20 @@ def main(drop_competing: bool = False, sample: str = "fasting") -> pd.DataFrame:
     dest = OUT.parent / out_name
     dest.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(dest, index=False)
+
+    # "Who was excluded" is a question the record has to answer without anyone
+    # remembering a terminal session. The stated exclusion criteria say what
+    # was meant to be removed; only this ladder says how many people each step
+    # actually removed, and the two are different questions.
+    ladder = dest.with_suffix(".derivation.json")
+    ladder.write_text(json.dumps({
+        "sample": sample,
+        "note": spec["note"],
+        "horizon_months": HORIZON_MONTHS,
+        "drop_competing_risks": bool(drop_competing),
+        "steps": derivation,
+    }, indent=2))
+    print(f"wrote {ladder}")
     print(f"\nsample={sample}  ({spec['note']})  weight={weight_col}")
     print(f"wrote {dest}  ({len(out):,} rows)")
     return out

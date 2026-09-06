@@ -48,6 +48,7 @@ import numpy as np
 import pandas as pd
 
 from intelligence.ml_service import acceptance_criteria as AC
+from intelligence.ml_service import cohort_contract as CC
 from intelligence.ml_service.clinical_validation import (
     classify_service,
     coverage_report,
@@ -69,8 +70,43 @@ ARTIFACTS = Path(__file__).resolve().parents[1] / "_artifacts"
 #: Never used for fitting, calibration or model selection.
 EXTERNAL_CYCLES = [(2011, "_G"), (2013, "_H")]
 
+#: What this population is, declared before it is scored. The horizon, the
+#: outcome definition and the caveats come from here rather than from the code
+#: below, so that a second cohort declares the same things in the same shape.
+SPEC = CC.CohortSpec(
+    key="nhanes-2011-2014",
+    label="NHANES 2011-2014, US adults aged 40-79",
+    provenance=(
+        "CDC National Health and Nutrition Examination Survey, cycles G and H, "
+        "linked to the NCHS public-use mortality file through December 2019"
+    ),
+    country="United States",
+    examined="2011-2014",
+    outcome="death from heart disease or cerebrovascular disease",
+    outcome_source=(
+        "NCHS linked mortality file, underlying cause coded to the leading-cause "
+        "recode; ascertained by national death-record linkage, not by follow-up "
+        "contact"
+    ),
+    horizon_months=60,
+    ethnicity_scheme=(
+        "RIDRETH3, which adds a Non-Hispanic Asian category that RIDRETH1 - used "
+        "in the development cycles - did not have"
+    ),
+    role=CC.EXTERNAL,
+    consent_basis="public-use de-identified survey data released by CDC/NCHS",
+    caveats=(
+        "Follow-up ends December 2019, so only 5 of the model's 10 years can be "
+        "observed. Calibration is therefore not reportable here.",
+        "Non-Hispanic Asian participants are US residents, and the category "
+        "aggregates East, Southeast and South Asian origins. It is the nearest "
+        "available proxy for the intended population and it is not that "
+        "population.",
+    ),
+)
+
 #: Five years, not ten. See the module docstring for what that costs.
-HORIZON_MONTHS = 60
+HORIZON_MONTHS = SPEC.horizon_months
 
 #: RIDRETH3, available from 2011. The training cycles used RIDRETH1, which has
 #: no Asian category - code 6 below simply did not exist for the model.
@@ -148,11 +184,24 @@ def external_cohort() -> pd.DataFrame:
 
     print("=== external cohort derivation ===")
     previous = None
+    derivation = []
     for label, n in steps:
         delta = "" if previous is None else f"  (-{previous - n:,})"
         print(f"  {n:>7,}  {label}{delta}")
+        derivation.append({
+            "step": label, "remaining": int(n),
+            "removed": None if previous is None else int(previous - n),
+        })
         previous = n
-    return df.reset_index(drop=True)
+    df = df.reset_index(drop=True)
+    # Who was excluded is a question the record has to be able to answer on its
+    # own. Printing the ladder and throwing it away means the only place the
+    # answer ever existed was a terminal scrollback.
+    df.attrs["derivation"] = derivation
+    return df
+
+
+CC.register(SPEC, external_cohort)
 
 
 def load_model(version: str):
@@ -211,7 +260,10 @@ def risk_gradient(y, p, bins: int = 5):
     return rows
 
 
-def main(version: str = "3.1.0") -> int:
+MODEL_HORIZON_MONTHS = 120
+
+
+def main(version: str = "3.1.0", cohort: str = "nhanes-2011-2014") -> int:
     card_path = ARTIFACTS / f"cvd-{version}.meta.json"
     if not card_path.exists():
         print(f"No model card at {card_path}. Train it first.")
@@ -221,16 +273,33 @@ def main(version: str = "3.1.0") -> int:
     domain = card["domain"]
     direction = card["validation_metrics"].get("standardised_coefficients", {})
 
-    print(f"=== external validation: cvd-{version} ===")
-    print("population : NHANES 2011-2014, never seen in fitting, calibration or")
-    print("             model selection")
-    print(f"outcome    : cardiovascular death within {HORIZON_MONTHS} months "
-          f"(the model predicts 120)")
-    print("             discrimination is comparable across horizons; calibration")
-    print("             is NOT, and is deliberately not reported")
+    spec, loader = CC.get(cohort)
+    reportable, refusal_reason = CC.calibration_reportable(spec, MODEL_HORIZON_MONTHS)
 
-    df = external_cohort()
+    print(f"=== external validation: cvd-{version} on {spec.key} ===")
+    print(f"population : {spec.label} ({spec.country}, examined {spec.examined})")
+    print(f"provenance : {spec.provenance}")
+    print(f"outcome    : {spec.outcome}, within {spec.horizon_months} months")
+    print(f"ascertained: {spec.outcome_source}")
+    print(f"role       : {spec.role}")
+    for caveat in spec.caveats:
+        print(f"caveat     : {caveat}")
+
+    df = loader()
     estimator, features = load_model(version)
+
+    # The contract is checked before anything is scored. A report produced from
+    # an unchecked frame looks exactly like a real one, which is what makes it
+    # dangerous.
+    problems = CC.validate_cohort(df, spec, features)
+    if problems:
+        print("\n=== cohort contract ===")
+        print(CC.describe_problems(problems))
+        if any(p.severity == "hard" for p in problems):
+            print("\nHard problems: refusing to score this cohort.")
+            return 2
+        print("Soft problems: the questions above cannot be answered for this "
+              "cohort and are reported as unanswered rather than skipped.")
 
     service = classify_service(df, features, domain)
     coverage = coverage_report(df, service, direction)
@@ -354,15 +423,29 @@ def main(version: str = "3.1.0") -> int:
     report = {
         "model_version": version,
         "replication": replication,
-        "population": "NHANES 2011-2014, never used in development",
-        "horizon_months": HORIZON_MONTHS,
-        "model_horizon_months": 120,
-        "calibration_reported": False,
-        "calibration_not_reported_because": (
-            "The model predicts 10-year risk and only 5 years of follow-up exist "
-            "for these cycles. Comparing the two would produce a calibration "
-            "slope that is wrong by construction and would read as a finding."
+        "cohort": {
+            "key": spec.key, "label": spec.label, "provenance": spec.provenance,
+            "country": spec.country, "examined": spec.examined,
+            "outcome": spec.outcome, "outcome_source": spec.outcome_source,
+            "ethnicity_scheme": spec.ethnicity_scheme, "role": spec.role,
+            "consent_basis": spec.consent_basis, "caveats": list(spec.caveats),
+        },
+        "derivation": df.attrs.get("derivation", []),
+        # The claim attached to the population name is the role the cohort
+        # declared, not a phrase typed next to it. A cohort that was used in
+        # development must never be described as if it had not been.
+        "population": (
+            f"{spec.label}, "
+            + {CC.EXTERNAL: "never used in development",
+               CC.INTERNAL_TEST: "held out from fitting but the same survey and "
+                                 "measurement protocol as development",
+               CC.DEVELOPMENT: "USED IN DEVELOPMENT - this is not an external "
+                               "validation"}[spec.role]
         ),
+        "horizon_months": spec.horizon_months,
+        "model_horizon_months": MODEL_HORIZON_MONTHS,
+        "calibration_reported": reportable,
+        "calibration_not_reported_because": refusal_reason,
         "coverage": coverage,
         "refusal_by_group": {
             column: refusal_by_group(df, service, column)
@@ -398,4 +481,7 @@ def main(version: str = "3.1.0") -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", default="3.1.0")
-    sys.exit(main(parser.parse_args().version))
+    parser.add_argument("--cohort", default="nhanes-2011-2014",
+                        choices=CC.registered())
+    args = parser.parse_args()
+    sys.exit(main(args.version, args.cohort))

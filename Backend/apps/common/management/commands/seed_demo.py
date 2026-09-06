@@ -263,16 +263,30 @@ class Command(BaseCommand):
                 f"{mv.model_id}:{mv.version} is RETIRED - not reactivating it."
             ))
             return
+        # The demo model is fitted on synthetic data and has no evidence behind
+        # it at all. Approving it therefore has to go through the same gate a
+        # real model would: the open evidence questions are named in the
+        # approval record rather than skipped because this is "only" a demo.
+        # A seeding path that could approve without naming them would be a
+        # second way into clinical state that bypasses the rule, and the last
+        # time this command had a shortcut it put a synthetic model in front of
+        # a live task.
         gov = ModelGovernanceService()
+        gaps = mv.open_evidence_questions()
         steps = [
-            ("VALIDATION", "seed_demo: technical validation of the demo model"),
-            ("APPROVED_FOR_EVALUATION", "seed_demo: shadow evaluation sign-off"),
-            ("APPROVED_FOR_CLINICAL_REVIEW", "seed_demo: demo governance board sign-off"),
+            ("VALIDATION", "seed_demo: technical validation of the demo model", {}),
+            ("APPROVED_FOR_EVALUATION", "seed_demo: shadow evaluation sign-off", {}),
+            ("APPROVED_FOR_CLINICAL_REVIEW",
+             "seed_demo: demonstration model on synthetic data, approved for a "
+             "demo database only. Every evidence question below is open.",
+             {"acknowledged_evidence_gaps": gaps,
+              "note": "synthetic demonstration model - not fit for any clinical use"}),
         ]
-        for to_state, reason in steps:
+        for to_state, reason, evidence in steps:
             if mv.lifecycle_state == to_state:
                 continue
-            mv = gov.transition(model_version=mv, to_state=to_state, actor=approver, reason=reason)
+            mv = gov.transition(model_version=mv, to_state=to_state, actor=approver,
+                                reason=reason, evidence=evidence)
         gov.activate_for_task(task="cvd", model_version=mv, actor=approver)
 
     def _run_risk_assessments(self, doctor_user: User, patients: list[Patient]) -> None:

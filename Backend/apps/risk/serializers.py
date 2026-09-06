@@ -135,9 +135,17 @@ class ModelVersionSerializer(serializers.ModelSerializer):
         source="approved_by.get_username", read_only=True, default=None
     )
     feature_schema = serializers.SerializerMethodField()
+    # Exposed beside the dossier so a caller reading this over the API sees the
+    # gaps without having to re-implement the rule that finds them. A client
+    # that has to derive "what is still unknown" for itself will eventually get
+    # it wrong, and it will get it wrong in the reassuring direction.
+    open_evidence_questions = serializers.SerializerMethodField()
 
     def get_feature_schema(self, obj: ModelVersion) -> str:
         return f"{obj.feature_schema.task}/{obj.feature_schema.version}"
+
+    def get_open_evidence_questions(self, obj: ModelVersion) -> list:
+        return obj.open_evidence_questions()
 
     class Meta:
         model = ModelVersion
@@ -163,6 +171,8 @@ class ModelVersionSerializer(serializers.ModelSerializer):
             "population_domain",
             "known_failure_modes",
             "limitations",
+            "evidence_dossier",
+            "open_evidence_questions",
             "approved_by",
             "approved_at",
             "rejected_at",
@@ -175,7 +185,15 @@ class ModelVersionSerializer(serializers.ModelSerializer):
 class ModelTransitionSerializer(serializers.Serializer):
     to_state = serializers.ChoiceField(choices=ModelLifecycleState.choices)
     reason = serializers.CharField(min_length=3)
-    evidence = serializers.DictField(required=False, default=dict)
+    evidence = serializers.DictField(
+        required=False,
+        default=dict,
+        help_text="Supporting evidence for this decision. Approving a version "
+        "for clinical review requires 'acknowledged_evidence_gaps': the list of "
+        "evidence-dossier question keys that are still open, taken from the "
+        "version's open_evidence_questions. Gaps do not block approval; "
+        "approving without naming them does.",
+    )
     activate_task = serializers.BooleanField(
         required=False,
         default=False,

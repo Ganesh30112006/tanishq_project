@@ -35,7 +35,22 @@ _FULL_INTENDED_USE = {
 }
 
 
-def _draft(*, intended_use=None, metrics=None, subgroups=None, calibration="cal-1") -> ModelVersion:
+# A dossier in which every question is answered. Most real models will not
+# have one - the point of the acknowledgement rule is what happens when they
+# do not - so tests that are about something else use this and stay short.
+_COMPLETE_DOSSIER = {
+    "questions_version": "evidence-questions-1",
+    "status_counts": {"answered": 11, "partial": 0, "unanswered": 0},
+    "fully_answered": True,
+    "answers": [
+        {"key": "development_population", "status": "answered"},
+        {"key": "missing_evidence", "status": "answered"},
+    ],
+}
+
+
+def _draft(*, intended_use=None, metrics=None, subgroups=None, calibration="cal-1",
+           dossier=None) -> ModelVersion:
     schema = FeatureSchema.objects.create(task="cvd", version="fs-1", definition={})
     return ModelVersion.objects.create(
         model_id="cvd-logreg", name="CVD", version="1.0.0", task="cvd",
@@ -43,6 +58,7 @@ def _draft(*, intended_use=None, metrics=None, subgroups=None, calibration="cal-
         intended_use=intended_use if intended_use is not None else dict(_FULL_INTENDED_USE),
         validation_metrics=metrics if metrics is not None else {"roc_auc": 0.8},
         subgroup_metrics=subgroups if subgroups is not None else {"by_sex": {"f": 0.79}},
+        evidence_dossier=_COMPLETE_DOSSIER if dossier is None else dossier,
     )
 
 

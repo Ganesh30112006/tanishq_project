@@ -462,6 +462,29 @@ on 338 refusals and the second on 61 people. What it does establish is that the
 development cohort was not enough to settle either, and that no wording may
 claim more than that.
 
+## The eleven questions, asked of every model
+
+Everything above is a set of measurements. What was missing was a single place
+that asks the same questions of every model in the same order, and makes the
+*absence* of an answer as visible as its presence:
+
+```
+python -m intelligence.ml_service.evidence --version 3.1.0
+```
+
+For 3.1.0 that comes back with **7 answered, 3 partial, 1 unanswered**. The
+open ones are representation (the development survey had no Asian category at
+all, so the count is unknown rather than small), exclusions (the cohort
+construction ladder was printed and thrown away), calibration outside the
+development survey, and transportability - which is reported as *unanswered*
+rather than "broadly similar", because an interval running down to 0.6611 is
+equally compatible with the model working and with it being materially worse.
+
+Approving a version for clinical review now requires naming the open questions
+in the approval record, and a new cohort goes through the same pipeline by
+declaring itself against a contract rather than by getting its own script.
+See [model-evidence.md](model-evidence.md).
+
 ## Sex is never inferred
 
 `FeatureAssembler._is_male` returns a value only for `MALE` and `FEMALE`. For
@@ -549,6 +572,8 @@ first.
 | `intelligence/ml_service/diagnostics.py` | Paired bootstrap, coefficient stability, shape check |
 | `intelligence/ml_service/gpu_arm.py` | ONNX export, OpenVINO GPU validation |
 | `intelligence/ml_service/train.py` | The original synthetic generator, kept for the tests |
+| `intelligence/ml_service/evidence.py` | The eleven-question evidence dossier |
+| `intelligence/ml_service/cohort_contract.py` | What a cohort must declare before it can be validated against |
 | `tests/integration/test_nhanes_model.py` | Sex is never guessed; the calibrator is applied correctly |
 | `tests/integration/test_model_pipeline_safety.py` | Units, plausibility, the shape check, the shipped card |
 | `tests/integration/test_model_registration_immutability.py` | A version means one model |
