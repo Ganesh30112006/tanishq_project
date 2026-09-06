@@ -65,6 +65,9 @@ python_files = ["test_*.py", "tests.py"]
 pythonpath = ["."]
 testpaths = ["tests", "apps"]
 addopts = "-ra --strict-markers"
+markers = [
+    "regression: pins the frozen clinical baseline - a failure means the CVD engine's behaviour changed and needs a new model version, not an edited expectation",
+]
 
 [tool.ruff]
 line-length = 100
