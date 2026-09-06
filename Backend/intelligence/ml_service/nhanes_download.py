@@ -38,6 +38,21 @@ CYCLES = [
 ]
 
 
+# Cycles the model has NEVER seen, kept apart from the development cycles so
+# they cannot be trained on by accident. Used only by external_validation.py.
+#
+# The public mortality linkage ends December 2019, so these cycles cannot
+# support the 10-year horizon the model was fitted for: a 2013 examination has
+# at most six years of follow-up. Only the first two cycles can be observed for
+# a full five years, which is why the external validation stops at 2014 and
+# reports a five-year outcome - with the consequences of that mismatch stated
+# rather than glossed.
+EXTERNAL_CYCLES = [
+    (2011, 2012, "_G"),
+    (2013, 2014, "_H"),
+]
+
+
 def fetch(url: str, dest: Path) -> str:
     if dest.exists() and dest.stat().st_size > 0:
         return f"cached  {dest.name} ({dest.stat().st_size:,}b)"
@@ -68,6 +83,14 @@ def main() -> None:
         for name in names:
             url = EXAM_BASE.format(year=start, name=name)
             print("  " + fetch(url, RAW / f"{start}" / f"{name}.xpt"), flush=True)
+        print("  " + fetch(MORT_BASE.format(start=start, end=end),
+                           RAW / f"{start}" / "mortality.dat"), flush=True)
+
+    for start, end, suf in EXTERNAL_CYCLES:
+        print(f"--- NHANES {start}-{end} (external validation only) ---", flush=True)
+        for name in (f"DEMO{suf}", f"BPX{suf}", f"SMQ{suf}"):
+            print("  " + fetch(EXAM_BASE.format(year=start, name=name),
+                               RAW / f"{start}" / f"{name}.xpt"), flush=True)
         print("  " + fetch(MORT_BASE.format(start=start, end=end),
                            RAW / f"{start}" / "mortality.dat"), flush=True)
 

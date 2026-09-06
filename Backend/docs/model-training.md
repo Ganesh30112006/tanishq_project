@@ -248,8 +248,15 @@ the code:
 | Systolic BP below the validated 94.0 | 184 | 4.89% |
 
 The people refused for a blood pressure above the ceiling die of cardiovascular
-causes at **more than three times** the rate of the people the model serves. The
-ones below the floor are indistinguishable from the served population.
+causes at **more than three times** the rate of the people the model serves.
+
+The floor looked harmless here - 4.89% against 4.92% for the served population -
+and **that did not replicate**. On NHANES 2011-2014 the same group ran at 8.20%
+against 1.59% served, which is 5.2x rather than level. It rests on 61 people and
+5 deaths, so it is not established either; what it establishes is that the
+development cohort was never enough to call the low side benign. Nothing in the
+system tells a patient it is: the low-side refusal uses the generic wording,
+which already says to see a doctor.
 
 Both used to receive the same message - *"This tool was not built for a record
 like yours."* True, and for the first group it reads as a shrug at the single
@@ -364,6 +371,96 @@ pressure passes it.
 The current shipped feature set passes all three checks - sign stability,
 adjusted-vs-unadjusted agreement, and shape - so every feature in it is safe to
 show a patient as a reason.
+
+## Validation on a population the model has never seen
+
+Everything above is measured on NHANES 1999-2010. The model was fitted on the
+first four cycles and tested on the last two - genuinely different people in a
+later period, but the same survey, country and measurement protocol.
+
+`external_validation.py` scores the shipped model on **NHANES 2011-2014**, which
+no part of training, calibration or model selection has touched:
+
+```bash
+python -m intelligence.ml_service.external_validation --version 3.1.0
+```
+
+### What it can and cannot establish
+
+The public mortality linkage ends in December 2019, so a 2013 examination has at
+most six years of follow-up. **The 10-year outcome the model predicts cannot be
+observed here at all.** This runs on a 5-year horizon, and that decides what may
+honestly be claimed:
+
+- **Discrimination transfers.** Whether the model ranks a higher-risk person
+  above a lower-risk one does not depend on the length of the window.
+- **Calibration does not, and is not reported.** Five-year risk is roughly half
+  of ten-year risk by construction, so a slope computed across the two would be
+  wrong by construction and would read as a finding. The report records
+  `calibration_reported: false` and the reason, and a test asserts that no
+  calibration statistic appears anywhere in it.
+- **Coverage and abstention transfer**, because they compare the served and
+  refused groups on the same horizon as each other.
+
+### What it found
+
+| | Internal (10-year) | External (5-year) |
+|---|---|---|
+| n | 5,351 | 6,110 |
+| Deaths | 272 | 97 |
+| ROC-AUC | 0.7653 (0.740-0.789) | **0.7116 (0.661-0.760)** |
+| Coverage | 93.5% | 94.8% |
+
+The point estimate is 0.054 lower and the intervals overlap. That is **not**
+evidence of degradation - and at 97 deaths it is **not** evidence of transfer
+either. The external interval reaches down to 0.66, which would be materially
+worse, and the study cannot tell the two apart. Overlapping intervals are a weak
+test, and the code says so rather than reporting "no degradation".
+
+Observed 5-year risk still rises monotonically across predicted bands, from
+0.49% in the lowest fifth to 3.93% in the highest. That is a statement about
+ordering, not level, and it is labelled as such.
+
+### The target population is still not validated
+
+The nearest available proxy is the **Non-Hispanic Asian** participants, a group
+the model is close to blind to: the training cycles coded ethnicity with
+`RIDRETH1`, which has no Asian category, so those participants were folded into
+"Other race including multi-racial".
+
+| Group | n | Deaths | ROC-AUC | Conclusion |
+|---|---|---|---|---|
+| White non-Hispanic | 2,334 | 40 | 0.691 (0.611-0.772) | supported |
+| Black non-Hispanic | 1,536 | 36 | 0.688 (0.593-0.783) | supported |
+| **Asian non-Hispanic** | **758** | **7** | 0.829 (0.650-0.957) | **too few deaths** |
+| Mexican American | 714 | 6 | 0.626 (0.434-0.752) | too few deaths |
+| Other Hispanic | 632 | 7 | 0.771 (0.635-0.903) | too few deaths |
+
+The Asian subgroup's 0.829 looks encouraging and means nothing: seven deaths
+give an interval compatible with the model working well and with it not working
+at all. It is reported so the gap is visible, not so it can be read as
+reassurance.
+
+And it is a proxy twice over. These are US residents, and "Non-Hispanic Asian"
+aggregates East, Southeast and South Asian. **Presenting this as validation in
+the intended population would be the most consequential overstatement this
+project could make**, and a test asserts the report does not.
+
+### What did not replicate
+
+The run checks development findings against the unseen population rather than
+assuming they hold:
+
+| Finding | Development | External | |
+|---|---|---|---|
+| Refused patients not markedly sicker | 1.36x | **2.05x** | does not hold |
+| Low-BP breach is benign | 4.89% vs 4.92% | **8.20% vs 1.59%** | does not hold |
+| High-BP breach is the dangerous side | 16.06% vs 4.92% | 3.85% vs 1.59% | holds |
+
+A finding that fails to replicate is not automatically wrong - the first rests
+on 338 refusals and the second on 61 people. What it does establish is that the
+development cohort was not enough to settle either, and that no wording may
+claim more than that.
 
 ## Sex is never inferred
 

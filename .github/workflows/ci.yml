@@ -170,7 +170,15 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
           DJANGO_SECRET_KEY: ci-only-not-a-real-secret
-      - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py tests/integration/test_clinical_validation.py
+      # Score the shipped model on NHANES 2011-2014, which no part of training
+      # has touched. Reports discrimination and coverage; deliberately reports
+      # no calibration, because only 5 years of follow-up exist for a model
+      # that predicts 10.
+      - run: python -m intelligence.ml_service.external_validation --version 3.1.0
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          DJANGO_SECRET_KEY: ci-only-not-a-real-secret
+      - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py tests/integration/test_clinical_validation.py tests/integration/test_external_validation.py
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
       - uses: actions/upload-artifact@v4
@@ -180,3 +188,4 @@ jobs:
           path: |
             Backend/intelligence/_artifacts/cvd-3.1.0.meta.json
             Backend/intelligence/_artifacts/cvd-3.1.0.clinical.json
+            Backend/intelligence/_artifacts/cvd-3.1.0.external.json
