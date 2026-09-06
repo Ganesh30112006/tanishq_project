@@ -42,6 +42,37 @@ class AiAnswerResult:
     flags: dict[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentProcessResult:
+    """The intelligence service's structured read of a document.
+
+    Every field here is advisory. Django decides what, if anything, becomes an
+    authoritative record and which workflow opens - see
+    :mod:`apps.reports.pipeline`. ``disposition`` is one of EXTRACTED /
+    NEEDS_REVIEW / UNREADABLE / REJECTED_FILE.
+    """
+
+    document_id: str
+    disposition: str
+    source_sha256: str
+    media_type: str
+    text_source: str
+    ocr_outcome: str | None
+    classification: dict[str, Any] | None
+    report_type: str | None
+    values: list[dict[str, Any]]
+    completeness: dict[str, Any] | None
+    issues: list[dict[str, Any]]
+    capabilities: dict[str, Any]
+    notes: list[str]
+
+    @property
+    def needs_human_review(self) -> bool:
+        return self.disposition != "EXTRACTED" or any(
+            issue.get("severity") == "HIGH" for issue in self.issues
+        )
+
+
 class IntelligenceClient:
     def __init__(self, *, base_url: str | None = None, token: str | None = None, timeout: float | None = None) -> None:
         self.base_url = (base_url or settings.INTELLIGENCE["BASE_URL"]).rstrip("/")
@@ -114,6 +145,83 @@ class IntelligenceClient:
             shap=data.get("shap", []),
             model_echo=data.get("model", {}),
         )
+
+    def process_document(
+        self,
+        *,
+        document_id: str,
+        content: bytes,
+        declared_media_type: str,
+        correlation_id: str,
+        document_type_hint: str = "",
+        operations: list[str] | None = None,
+    ) -> DocumentProcessResult:
+        """Send authorized document *content* for structured extraction.
+
+        The service receives the bytes Django has already resolved and
+        authorized - never a storage path or a patient id it could use to
+        fetch something itself (spec section 52). It returns a structured
+        result; the caller decides what to persist.
+        """
+        import base64
+
+        body: dict[str, Any] = {
+            "document_id": document_id,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+            "declared_media_type": declared_media_type,
+            "document_type_hint": document_type_hint,
+            "correlation_id": correlation_id,
+        }
+        if operations is not None:
+            body["requested_operations"] = operations
+
+        data = self._post(
+            "/v1/documents/process", body, correlation_id=correlation_id
+        )
+        return DocumentProcessResult(
+            document_id=data.get("document_id", document_id),
+            disposition=data.get("disposition", "UNREADABLE"),
+            source_sha256=data.get("source_sha256", ""),
+            media_type=data.get("media_type", ""),
+            text_source=data.get("text_source", "NONE"),
+            ocr_outcome=data.get("ocr_outcome"),
+            classification=data.get("classification"),
+            report_type=data.get("report_type"),
+            values=data.get("values", []),
+            completeness=data.get("completeness"),
+            issues=data.get("issues", []),
+            capabilities=data.get("capabilities", {}),
+            notes=data.get("notes", []),
+        )
+
+    def document_capabilities(self, *, correlation_id: str) -> dict[str, Any]:
+        return self._post_get(
+            "/v1/documents/capabilities", correlation_id=correlation_id
+        )
+
+    def _post_get(self, path: str, *, correlation_id: str) -> dict[str, Any]:
+        """A GET that carries the service headers the boundary requires."""
+        import httpx
+
+        headers = {
+            "X-Service-Token": self.token,
+            "X-Correlation-Id": correlation_id,
+        }
+        try:
+            response = httpx.get(
+                f"{self.base_url}{path}", headers=headers, timeout=self.timeout
+            )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure path
+            raise UpstreamUnavailable(
+                "The intelligence service could not be reached.",
+                details={"path": path},
+            ) from exc
+        if response.status_code >= 400:
+            raise UpstreamUnavailable(
+                "The intelligence service rejected the request.",
+                details={"path": path, "status": response.status_code},
+            )
+        return response.json()
 
     def ai_answer(
         self,

@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 
+from intelligence.document.router import router as document_router
 from intelligence.ml_service.router import router as ml_router
 from intelligence.nlp.router import router as nlp_router
 from intelligence.ocr.router import router as ocr_router
@@ -36,6 +37,7 @@ async def healthz() -> dict[str, str]:
 
 
 app.include_router(ml_router, prefix="/v1")
+app.include_router(document_router, prefix="/v1")
 app.include_router(report_router, prefix="/v1")
 app.include_router(nlp_router, prefix="/v1")
 app.include_router(ocr_router, prefix="/v1")

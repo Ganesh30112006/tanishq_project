@@ -179,6 +179,41 @@ to 3.0.0; only the schema differs. That is the rule working as intended: the
 `valid_domain` gate lives in the schema, so a schema that can be edited under an
 approved version is a gate that can be edited under an approved version.
 
+## Document intelligence runtime requirements
+
+Document processing runs in the FastAPI intelligence service and is reached
+only over HTTP (`POST /v1/documents/process`). Django sends the authorized
+document *content*; the service never resolves a path or a patient id itself.
+
+Which stages can actually run depends on what is installed. `GET
+/v1/documents/capabilities` reports this live, and every
+`/v1/documents/process` response carries a `capabilities` block, so
+availability is observable rather than assumed.
+
+| Capability | Dependency | If the dependency is missing |
+|---|---|---|
+| PDF text-layer extraction | `pypdf` (always installed) | a scanned PDF yields no text and routes to review; it never fails the request |
+| OCR (photos, scans) | `pytesseract` + the Tesseract **engine** (system package) | result is `OCR_UNAVAILABLE` / `UNREADABLE`, no tokens, no clinical rows — the report is held for human review, never guessed |
+| Classification | in-repo, deterministic | always available |
+| Extraction / normalisation / validation | in-repo, deterministic | always available |
+| LLM narrative | not implemented | fails closed — capability reports `available: false` |
+| RAG / knowledge retrieval | not implemented | fails closed |
+
+To enable OCR in a deployment:
+
+```
+pip install -e ".[document]"        # pytesseract + Pillow
+apt-get install tesseract-ocr       # Debian/Ubuntu
+# or: brew install tesseract         # macOS
+```
+
+Select a non-default engine with `DOCUMENT_OCR_PROVIDER=<name>`; register a
+custom provider via `intelligence.document.ocr.register_provider`.
+
+The deliberate design choice: when OCR is unavailable the pipeline degrades to
+"needs review", never to a fallback parser that produces plausible-looking
+values. A missing capability is safe; a fabricated clinical value is not.
+
 ## What CI covers
 
 `.github/workflows/ci.yml`, at the repository root — an earlier copy lived at
