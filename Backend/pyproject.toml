@@ -33,6 +33,14 @@ intelligence = [
     "xgboost>=2.0",
     "shap>=0.45",
 ]
+document = [
+    # Local OCR for photographed / scanned reports. The Tesseract ENGINE is a
+    # system package (apt: tesseract-ocr, brew: tesseract) and is NOT installed
+    # by pip. Without it, intelligence.document.ocr returns ENGINE_UNAVAILABLE
+    # and scanned reports are routed to human review rather than guessed at.
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0",
+]
 observability = [
     "opentelemetry-sdk>=1.25",
     "opentelemetry-api>=1.25",
