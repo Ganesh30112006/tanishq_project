@@ -164,18 +164,20 @@ def test_tsh_high_and_tsh_low_are_mutually_exclusive():
     assert TSH_SUPPRESSION.evaluate(low) is not None
 
 
-def test_a_thyroid_panel_produces_separate_findings_not_a_diagnosis():
+def test_a_thyroid_panel_produces_separate_level_2_findings():
     """A raised TSH with a low free T4 is a recognisable pattern, and reading
-    it is a level-3 conclusion this level may not reach."""
+    the two together is a level-3 conclusion this level may not reach. Level 2
+    reports each number against its own range and stops there."""
     evidence = _evidence(
         ("TSH", 8.4, "uIU/mL", "0.4 - 4.0"),
         ("Free T4", 0.7, "ng/dL", "0.8 - 1.8"),
     )
     findings = detect(evidence).findings
-    codes = {f.code for f in findings}
-    assert codes == {"TSH_ELEVATION_PATTERN", "LOW_FREE_T4_PATTERN"}
-    assert all(f.level is EvidenceLevel.CLINICAL_ABNORMALITY for f in findings)
-    for code in codes:
+    level_2 = {
+        f.code for f in findings if f.level is EvidenceLevel.CLINICAL_ABNORMALITY
+    }
+    assert level_2 == {"TSH_ELEVATION_PATTERN", "LOW_FREE_T4_PATTERN"}
+    for code in level_2:
         joined = " ".join(KB.get(code).must_not_say).lower()
         assert "thyroid condition" in joined or "hypothyroidism" in joined
 
