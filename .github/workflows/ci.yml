@@ -185,6 +185,11 @@ jobs:
       # unknown. It exits non-zero only if the dossier contradicts itself; open
       # questions are the expected output, not a failure.
       - run: python -m intelligence.ml_service.evidence --version 3.1.0
+      # The same question one level down, for the finding rules rather than the
+      # model: how far off is the gold-standard benchmark? With no annotated
+      # corpus this prints "none" and exits zero. It is here so the gap stays
+      # visible in every build rather than living only in a document.
+      - run: python -m intelligence.benchmark
       - run: pytest -q tests/integration/test_nhanes_model.py tests/integration/test_model_pipeline_safety.py tests/integration/test_clinical_validation.py tests/integration/test_external_validation.py tests/integration/test_evidence_dossier.py tests/integration/test_cohort_contract.py
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test

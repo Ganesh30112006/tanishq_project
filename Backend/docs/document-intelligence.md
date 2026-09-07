@@ -119,9 +119,10 @@ produces is a `SINGLE_REPORT` evidence set, so no finding drawn from it may be
 read as a persistent or chronic condition; the framework enforces that rather
 than relying on the reader.
 
-Still missing: the gold-standard benchmark (clinician-annotated reports; needs
-data), and the LLM module. Every detector is `NOT_VALIDATED` until the
-benchmark exists. The LLM, when it lands, receives the validated structured
+Still missing: the annotated corpus for the gold-standard benchmark, and the
+LLM module. The benchmark *apparatus* is built - see [benchmark.md](benchmark.md)
+- but clinicians produce the labels and they must not be manufactured, so every
+detector is `NOT_VALIDATED` until that work happens. The LLM, when it lands, receives the validated structured
 findings this pipeline produces, never a raw document.
 
 ## The OCR adapter

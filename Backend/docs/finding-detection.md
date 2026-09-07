@@ -44,7 +44,10 @@ system actually receives* is unknown, and every finding carries that sentence.
 
 That is the same discipline as the model evidence dossier: a rule from a
 textbook is a hypothesis about this system's data until somebody measures it
-here.
+here. The apparatus for measuring it is built - schema, scoring, promotion
+gate - and the corpus is not, because clinicians produce that and it must not
+be manufactured. See [benchmark.md](benchmark.md); `python -m
+intelligence.benchmark` prints how far off promotion the system currently is.
 
 ## A detector may not outrun the timeline it was given
 
