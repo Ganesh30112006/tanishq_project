@@ -182,14 +182,42 @@ Three shapes recur, and each is a decision rather than an oversight:
   `tests/findings/test_level2_expansion.py` and the test fails if a detector
   appears for one without the entry being removed.
 
-Level 3, `intelligence/disease/hematology/`: `POSSIBLE_IRON_DEFICIENCY_ANEMIA`,
-which is there mostly to prove the boundary holds. On most reports it returns
-`INSUFFICIENT` naming MCV and ferritin as missing — which is the honest answer,
-because thalassaemia trait gives the same blood count and iron given for the
-wrong reason is harmful.
+Level 3, `intelligence/disease/`, six detectors:
 
-`intelligence/disease/` is otherwise deliberately empty. The categories the
-framework must eventually express are listed in its docstring.
+| Code | Needs | Ceiling |
+|---|---|---|
+| `POSSIBLE_IRON_DEFICIENCY_ANEMIA` | anaemia + a low MCV or a low ferritin | `SUPPORTED` only when ferritin is low |
+| `POSSIBLE_CHRONIC_KIDNEY_DISEASE` | a reduced eGFR or albuminuria, **plus 90 days** | `PROVISIONAL` |
+| `POSSIBLE_PRIMARY_HYPOTHYROIDISM` | raised TSH + low free T4 | `PROVISIONAL` |
+| `POSSIBLE_SUBCLINICAL_HYPOTHYROIDISM` | raised TSH + **normal** free T4 | `PROVISIONAL` |
+| `PATTERN_SUGGESTIVE_OF_HEPATOCELLULAR_INJURY` | ALT and ALP, R ratio > 5 | `PROVISIONAL` |
+| `PATTERN_SUGGESTIVE_OF_CHOLESTASIS` | ALT and ALP, R ratio < 2 | `PROVISIONAL` |
+
+Each earns its place by what it refuses:
+
+* **Iron deficiency** returns `INSUFFICIENT` on most reports, naming MCV and
+  ferritin as missing — the honest answer, because thalassaemia trait gives the
+  same blood count and iron given for the wrong reason is harmful.
+* **Chronic kidney disease is the demonstration that the timeline gate works.**
+  It declares `HISTORICAL`, so however bad the numbers on one report are it
+  returns `INSUFFICIENT` and names the ninety-day repeat it wanted. It never
+  fires today. Acute kidney injury produces exactly those numbers and recovers,
+  and a system that could not tell the difference would tell people they had a
+  lifelong condition on the basis of a bad week.
+* **The two hypothyroid patterns need the free T4 to separate**, and the
+  subclinical one is the only place a *normal* result is required evidence —
+  the normal free T4 is what makes the pattern subclinical rather than overt.
+  Neither can ever be `SUPPORTED`: guidelines want a repeat sample, and acute
+  illness, which a report does not show, produces both.
+* **The liver shapes are a comparison, never one raised enzyme.** The R ratio
+  is `(ALT / upper limit) / (ALP / upper limit)`; above 5 is hepatocellular,
+  below 2 is cholestatic, and in between is named as mixed rather than forced
+  into a bucket. Neither names a disease, because fatty liver and chronic viral
+  hepatitis produce the same hepatocellular shape and are managed completely
+  differently.
+
+The other categories the framework must eventually express are listed in
+`intelligence/disease/__init__.py`, along with the two standing prohibitions.
 
 ## Using it
 
@@ -214,6 +242,8 @@ the tumour-marker prohibition, knowledge coverage.
 backstop that downgrades a conclusion the evidence set has no history for.
 `tests/findings/test_level2_expansion.py` — the renal, hepatic, thyroid and
 electrolyte patterns, and the deliberate-omission list.
+`tests/findings/test_level3_conditions.py` — the condition likelihoods, every
+one tested on the boundary it refuses rather than the case it fires on.
 `tests/findings/test_detectors.py` — evidence assembly, reference precedence,
 level-2 behaviour and the level-3 boundary.
 `tests/document/test_http_endpoint.py` — the findings block over the wire.
