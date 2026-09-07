@@ -121,6 +121,8 @@ class ReportClass(models.TextChoices):
     HBA1C = "HBA1C", "HbA1c"
     LIVER = "LIVER", "Liver function"
     KIDNEY = "KIDNEY", "Kidney function"
+    THYROID = "THYROID", "Thyroid function"
+    ELECTROLYTES = "ELECTROLYTES", "Serum electrolytes"
     URINALYSIS = "URINALYSIS", "Urinalysis"
     PATHOLOGY = "PATHOLOGY", "Pathology"
     RADIOLOGY = "RADIOLOGY", "Radiology"

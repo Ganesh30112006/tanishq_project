@@ -17,11 +17,19 @@ EXTRACTOR_VERSION = "1.0"
 
 _NUMBER = r"\d[\d,]*(?:\.\d+)?"
 
+#: What may sit between the label and the value. There must be *something* -
+#: whitespace, or a punctuation separator. Allowing nothing here is how
+#: ``HbA1c 6.2 %`` used to read as the analyte "HbA" with the value 1 and the
+#: unit "c": the non-greedy label stopped at the first digit it could. Many
+#: real analyte names carry a digit (HbA1c, Free T3, CO2, Vitamin B12), so the
+#: digit cannot be a boundary - the separator is.
+_SEPARATOR = r"(?:\s*[:\.…\-=]\s*|\s+)"
+
 _LINE = re.compile(
     r"^\s*"
     r"(?P<label>[A-Za-z][A-Za-z0-9 ,()./%+\-]*?)"
-    r"\s*[:\.…\-]?\s*"
-    r"(?P<value>" + _NUMBER + r")"
+    + _SEPARATOR
+    + r"(?P<value>" + _NUMBER + r")"
     r"(?P<rest>[^\n]*)$"
 )
 

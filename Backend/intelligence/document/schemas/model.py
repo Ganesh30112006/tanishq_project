@@ -34,6 +34,11 @@ class ReportSchema:
     version: int
     fields: tuple[ReportFieldSpec, ...]
     expected_sections: tuple[str, ...] = ()
+    #: Groups where at least one member must be present. Used where a report
+    #: is defined by a family of fields rather than one named field - a
+    #: glucose report carries a fasting *or* a random *or* an unqualified
+    #: value, and demanding all three would make every real one INCOMPLETE.
+    required_any: tuple[tuple[str, ...], ...] = ()
     notes: str = ""
     _by_name: dict[str, ReportFieldSpec] = field(
         default_factory=dict, compare=False, repr=False
@@ -42,6 +47,13 @@ class ReportSchema:
     def __post_init__(self) -> None:
         mapping = {spec.name.lower(): spec for spec in self.fields}
         object.__setattr__(self, "_by_name", mapping)
+        for group in self.required_any:
+            unknown = [name for name in group if name.lower() not in mapping]
+            if unknown:
+                raise ValueError(
+                    f"{self.report_type.value}: required_any names fields the "
+                    f"schema does not define: {unknown}"
+                )
 
     @property
     def required_names(self) -> tuple[str, ...]:

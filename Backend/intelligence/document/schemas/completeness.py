@@ -129,6 +129,10 @@ def assess_completeness(
 
         report.fields.append(outcome)
 
+    for group in schema.required_any:
+        if not any(grouped.get(name) for name in group):
+            report.missing_required.append(" or ".join(group))
+
     report.outcome = _classify(report)
     return report
 

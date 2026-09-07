@@ -97,3 +97,52 @@ def test_signals_are_returned_for_audit_even_on_an_abstention():
 
 def test_classification_is_deterministic():
     assert classify(CBC) == classify(CBC)
+
+
+# --- the panels added with the expanded evidence surface ------------
+THYROID = """
+THYROID FUNCTION TEST
+TSH              8.4 uIU/mL     0.4 - 4.0
+Free T4          0.7 ng/dL      0.8 - 1.8
+Free T3          2.4 pg/mL      2.3 - 4.2
+"""
+
+ELECTROLYTES = """
+SERUM ELECTROLYTES
+Serum Sodium     128 mEq/L      136 - 145
+Serum Potassium  5.8 mEq/L      3.5 - 5.1
+Serum Chloride   96 mEq/L       98 - 107
+Bicarbonate      18 mEq/L       22 - 29
+"""
+
+RENAL = """
+RENAL FUNCTION TEST
+S. Creatinine    1.6 mg/dL      0.6 - 1.2
+Blood Urea       58 mg/dL       15 - 40
+eGFR             46 mL/min/1.73m2
+"""
+
+
+def test_a_thyroid_panel_is_classified():
+    result = classify(THYROID)
+    assert result.status is ClassificationStatus.CLASSIFIED
+    assert result.report_type is ReportType.THYROID
+
+
+def test_an_electrolyte_panel_is_classified():
+    result = classify(ELECTROLYTES)
+    assert result.status is ClassificationStatus.CLASSIFIED
+    assert result.report_type is ReportType.ELECTROLYTES
+
+
+def test_a_renal_panel_is_classified():
+    result = classify(RENAL)
+    assert result.status is ClassificationStatus.CLASSIFIED
+    assert result.report_type is ReportType.KIDNEY_FUNCTION
+
+
+def test_a_renal_and_electrolyte_panel_printed_together_still_abstains():
+    """Widening the keyword table must not make the classifier bolder. A
+    document carrying two panels is exactly the case a person should see."""
+    result = classify(RENAL + ELECTROLYTES)
+    assert result.status is ClassificationStatus.REVIEW_REQUIRED

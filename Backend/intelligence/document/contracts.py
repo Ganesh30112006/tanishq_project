@@ -99,6 +99,8 @@ class ReportType(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style 
     HBA1C = "HBA1C"
     LIVER_FUNCTION = "LIVER"
     KIDNEY_FUNCTION = "KIDNEY"
+    THYROID = "THYROID"
+    ELECTROLYTES = "ELECTROLYTES"
     URINALYSIS = "URINALYSIS"
     RADIOLOGY = "RADIOLOGY"
     PATHOLOGY = "PATHOLOGY"

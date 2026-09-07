@@ -36,7 +36,7 @@ ANEMIA = ThresholdDetector(
             "produce the same number and cannot be excluded from a report alone.",
         ),
     ),
-    analyte="hemoglobin",
+    analytes=("hemoglobin",),
     direction="low",
 )
 
@@ -52,7 +52,7 @@ POLYCYTHEMIA = ThresholdDetector(
         validation_note=_VALIDATION,
         exclusion_rules=("Dehydration raises haemoglobin without any change in red-cell mass.",),
     ),
-    analyte="hemoglobin",
+    analytes=("hemoglobin",),
     direction="high",
 )
 
@@ -67,7 +67,7 @@ LEUKOCYTOSIS = ThresholdDetector(
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
     ),
-    analyte="wbc",
+    analytes=("wbc",),
     direction="high",
 )
 
@@ -82,7 +82,7 @@ LEUKOPENIA = ThresholdDetector(
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
     ),
-    analyte="wbc",
+    analytes=("wbc",),
     direction="low",
 )
 
@@ -101,7 +101,7 @@ THROMBOCYTOPENIA = ThresholdDetector(
             "is only excluded on a blood film, which a report may not include.",
         ),
     ),
-    analyte="platelets",
+    analytes=("platelets",),
     direction="low",
 )
 
@@ -116,7 +116,7 @@ THROMBOCYTOSIS = ThresholdDetector(
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
     ),
-    analyte="platelets",
+    analytes=("platelets",),
     direction="high",
 )
 
@@ -136,7 +136,7 @@ EOSINOPHILIA = ThresholdDetector(
             "and a report that gives only a percentage cannot settle that.",
         ),
     ),
-    analyte="eosinophils",
+    analytes=("eosinophils",),
     direction="high",
 )
 
@@ -151,7 +151,7 @@ MICROCYTOSIS = ThresholdDetector(
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
     ),
-    analyte="mcv",
+    analytes=("mcv",),
     direction="low",
 )
 
@@ -166,7 +166,7 @@ MACROCYTOSIS = ThresholdDetector(
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
     ),
-    analyte="mcv",
+    analytes=("mcv",),
     direction="high",
 )
 

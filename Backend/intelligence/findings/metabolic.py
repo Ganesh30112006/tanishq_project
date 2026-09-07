@@ -39,19 +39,24 @@ HYPERGLYCEMIA = ThresholdDetector(
         code="HYPERGLYCEMIA_PATTERN",
         label="High blood glucose",
         category="metabolic",
-        analyte="glucose",
-        why="glucose above the range printed on the report",
-        minimum_evidence="A glucose value with a range to compare it against.",
+        version="1.1.0",
+        analyte=("fasting_glucose", "random_glucose", "glucose"),
+        why="a glucose value above the range that applies to the sample taken",
+        minimum_evidence=(
+            "A glucose value that says which sample it is - fasting or random "
+            "- with a range to compare it against. An unqualified glucose has "
+            "no range and produces no finding."
+        ),
         confidence_policy=_POLICY,
         validation_note=_VALIDATION,
         exclusion_rules=(
-            "A fasting and a random sample are read against different ranges, "
-            "and a report that does not say which was taken cannot be told "
-            "apart. When the report prints no range, the fasting interval is "
-            "assumed, which will over-call a post-meal sample.",
+            "A fasting and a random sample are read against different numbers. "
+            "A report that labels neither resolves to an unqualified glucose, "
+            "for which there is deliberately no fallback range, so no finding "
+            "is produced rather than the wrong one.",
         ),
     ),
-    analyte="glucose",
+    analytes=("fasting_glucose", "random_glucose", "glucose"),
     direction="high",
 )
 
@@ -72,7 +77,7 @@ ELEVATED_HBA1C = ThresholdDetector(
             "none of them visible from an HbA1c result alone.",
         ),
     ),
-    analyte="hba1c",
+    analytes=("hba1c",),
     direction="high",
 )
 

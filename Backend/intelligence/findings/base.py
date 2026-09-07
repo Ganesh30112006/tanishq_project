@@ -97,14 +97,30 @@ def confidence_for(measurement: Measurement) -> tuple[Confidence, list[str]]:
 
 @dataclass(frozen=True, slots=True)
 class ThresholdDetector:
-    """One analyte, one direction, one named pattern."""
+    """One analyte, one direction, one named pattern.
+
+    ``analytes`` may name more than one canonical analyte when the same
+    pattern is measured by whichever of a small family the report happens to
+    print - a fasting glucose, a random glucose or an unqualified one. They
+    are tried in the order given and the first one present is used; they are
+    not combined, because they are different measurements with different
+    reference numbers.
+    """
 
     contract: EvidenceContract
-    analyte: str
+    analytes: tuple[str, ...]
     direction: str  # "high" | "low"
 
+    @property
+    def analyte(self) -> str:
+        return self.analytes[0]
+
     def evaluate(self, evidence: EvidenceSet) -> Finding | None:
-        measurement = evidence.measurement(self.analyte)
+        measurement = next(
+            (m for m in (evidence.measurement(a) for a in self.analytes)
+             if m is not None),
+            None,
+        )
         if measurement is None:
             # Not applicable: this report does not contain the analyte at all.
             return None
@@ -114,7 +130,7 @@ class ThresholdDetector:
                 self.contract,
                 confidence=Confidence.INSUFFICIENT,
                 evidence_used=[measurement.to_ref()],
-                evidence_missing=[f"a reference range for {self.analyte}"],
+                evidence_missing=[f"a reference range for {measurement.analyte}"],
             )
 
         triggered = measurement.is_high if self.direction == "high" else measurement.is_low
@@ -135,11 +151,12 @@ def pattern_contract(
     code: str,
     label: str,
     category: str,
-    analyte: str,
+    analyte: str | tuple[str, ...],
     why: str,
     minimum_evidence: str,
     confidence_policy: str,
     validation_note: str,
+    version: str = "1.0.0",
     references: tuple[str, ...] = (),
     out_of_domain_rules: tuple[str, ...] = (),
     exclusion_rules: tuple[str, ...] = (),
@@ -147,13 +164,17 @@ def pattern_contract(
     """A level-2 contract for a single-analyte pattern."""
     from intelligence.findings.contracts import EvidenceRequirement
 
+    analytes = (analyte,) if isinstance(analyte, str) else tuple(analyte)
     return EvidenceContract(
         code=code,
-        version="1.0.0",
+        version=version,
         level=EvidenceLevel.CLINICAL_ABNORMALITY,
         label=label,
         category=category,
-        required_evidence=(EvidenceRequirement(key=analyte, why=why),),
+        required_evidence=tuple(
+            EvidenceRequirement(key=name, why=why) for name in analytes
+        ),
+        required_evidence_mode="any" if len(analytes) > 1 else "all",
         minimum_evidence=minimum_evidence,
         valid_population=(
             "Adults aged 18 and over. Paediatric and pregnancy reference "

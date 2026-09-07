@@ -23,7 +23,9 @@ _SIGNALS: dict[ReportType, dict[str, int]] = {
         "complete blood count": 5, "full blood count": 5, "haemogram": 4,
         "hemogram": 4, "differential count": 3, "hemoglobin": 2, "haemoglobin": 2,
         "hematocrit": 2, "platelet": 2, "wbc": 2, "rbc": 2, "mcv": 2, "mch": 1,
-        "neutrophil": 1, "lymphocyte": 1,
+        "neutrophil": 1, "lymphocyte": 1, "packed cell volume": 3,
+        "total leucocyte": 3, "total leukocyte": 3, "rdw": 2, "monocyte": 1,
+        "basophil": 1, "eosinophil": 1, "polymorph": 1,
     },
     ReportType.LIPID_PROFILE: {
         "lipid profile": 5, "lipid panel": 5, "cholesterol": 2, "hdl": 2,
@@ -41,11 +43,24 @@ _SIGNALS: dict[ReportType, dict[str, int]] = {
     ReportType.LIVER_FUNCTION: {
         "liver function": 5, "lft": 4, "hepatic panel": 4, "bilirubin": 2,
         "alt": 2, "ast": 2, "sgpt": 2, "sgot": 2, "alkaline phosphatase": 2,
-        "albumin": 1, "ggt": 2,
+        "albumin": 1, "ggt": 2, "total protein": 2,
+        "aminotransferase": 2, "hepatic function": 5,
     },
     ReportType.KIDNEY_FUNCTION: {
         "kidney function": 5, "renal function": 5, "rft": 4, "kft": 4,
         "creatinine": 2, "blood urea": 2, "bun": 2, "egfr": 3, "uric acid": 1,
+        "renal panel": 4, "glomerular filtration": 3, "urea nitrogen": 2,
+    },
+    ReportType.THYROID: {
+        "thyroid profile": 5, "thyroid function": 5, "tft": 4,
+        "thyroid stimulating hormone": 5, "tsh": 3, "free t4": 3, "free t3": 3,
+        "ft4": 2, "ft3": 2, "thyroxine": 2, "triiodothyronine": 2,
+        "anti tpo": 2, "thyroid panel": 5,
+    },
+    ReportType.ELECTROLYTES: {
+        "serum electrolytes": 5, "electrolyte panel": 5, "electrolytes": 4,
+        "sodium": 2, "potassium": 2, "chloride": 2, "bicarbonate": 2,
+        "anion gap": 3, "na+": 1, "k+": 1,
     },
     ReportType.URINALYSIS: {
         "urinalysis": 5, "urine routine": 5, "urine examination": 4,
