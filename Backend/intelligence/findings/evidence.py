@@ -45,6 +45,12 @@ class Measurement:
     reference_note: str = ""
     raw_value: float | None = None
     raw_unit: str = ""
+    #: The same measurement in this analyte's canonical unit, when it could be
+    #: converted. The reference comparison above is deliberately done in the
+    #: laboratory's own units - that is what its printed range is expressed in
+    #: - but a trend across laboratories has to be in one unit, and this is it.
+    canonical_value: float | None = None
+    canonical_unit: str = ""
     provenance: Provenance | None = None
 
     @property
@@ -95,12 +101,20 @@ class EvidenceSet:
     #: Days between the earliest and latest observation in the set, when more
     #: than one report is behind it.
     observation_window_days: float | None = None
+    #: analyte -> the same analyte across time, when a history was assembled.
+    #: Empty for the single-report case, which is what the document pipeline
+    #: produces. See ``intelligence.findings.history``.
+    series: dict = field(default_factory=dict)
 
     def measurement(self, analyte: str) -> Measurement | None:
         return self.measurements.get(analyte)
 
     def supports(self, temporality: EvidenceTemporality) -> bool:
         return temporality in self.available_temporality
+
+    def series_for(self, analyte: str):
+        """The analyte across time, or ``None`` when only one report is here."""
+        return self.series.get(analyte)
 
     def finding(self, code: str) -> Finding | None:
         return self.findings.get(code)
@@ -182,6 +196,7 @@ def build_evidence(
                 evidence.unusable.append(value.analyte)
             continue
 
+        canonical = value.normalized
         low, high, text, source, kind, note, cmp_value, cmp_unit = _resolve_reference(
             value, sex
         )
@@ -202,6 +217,12 @@ def build_evidence(
             status=_status(cmp_value, low, high),
             raw_value=value.value,
             raw_unit=value.unit,
+            canonical_value=(
+                canonical.value if canonical and canonical.convertible else None
+            ),
+            canonical_unit=(
+                canonical.unit if canonical and canonical.convertible else ""
+            ),
             provenance=provenance,
         )
     return evidence

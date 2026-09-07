@@ -100,7 +100,10 @@ def test_it_stays_silent_when_neither_entry_criterion_is_present():
     assert CHRONIC_KIDNEY_DISEASE.evaluate(normal) is None
 
 
-def test_it_becomes_provisional_and_never_more_once_the_history_exists():
+def test_a_long_window_alone_is_not_a_sustained_abnormality():
+    """A patient with two years of normal results and one bad one today has a
+    long history and no chronic disease. The window is not the question; what
+    the abnormality did across it is."""
     evidence = _evidence(*RENAL, sex="male")
     detect(evidence)                       # level 2 first, as the engine does
     evidence.available_temporality = frozenset({
@@ -111,8 +114,10 @@ def test_it_becomes_provisional_and_never_more_once_the_history_exists():
     evidence.observation_window_days = 200.0
 
     finding = CHRONIC_KIDNEY_DISEASE.evaluate(evidence)
-    assert finding.confidence is Confidence.PROVISIONAL
-    assert any("Acute-on-chronic" in c for c in finding.caveats)
+    assert finding.confidence is Confidence.INSUFFICIENT
+    assert any("earlier egfr" in m for m in finding.evidence_missing)
+    assert any("not the same as a sustained abnormality" in c
+               for c in finding.caveats)
 
 
 def test_a_history_shorter_than_the_criterion_is_still_not_enough():

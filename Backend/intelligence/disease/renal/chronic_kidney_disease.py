@@ -174,10 +174,27 @@ class ChronicKidneyDiseaseDetector:
                 ],
             )
 
+        # The window being long enough is not the question. The question is
+        # whether *this* abnormality was there at both ends of it: a patient
+        # with two years of normal results and one bad one today has a long
+        # history and no chronic disease.
+        persistent, persistence_caveats, still_missing = self._persistence(
+            evidence, entry_criteria
+        )
+        if not persistent:
+            return build_finding(
+                self.contract,
+                confidence=Confidence.INSUFFICIENT,
+                evidence_used=used,
+                evidence_missing=still_missing,
+                caveats=persistence_caveats,
+            )
+
         both = len(entry_criteria) == 2
         caveats = [
             "Present on both entry criteria." if both
             else f"Present on one entry criterion: {entry_criteria[0]}.",
+            *persistence_caveats,
             "Acute-on-chronic kidney disease produces the same picture and "
             "cannot be excluded from laboratory reports alone.",
         ]
@@ -192,6 +209,69 @@ class ChronicKidneyDiseaseDetector:
             evidence_used=used,
             caveats=caveats,
         )
+
+    def _persistence(
+        self, evidence: EvidenceSet, entry_criteria: list[str]
+    ) -> tuple[bool, list[str], list[str]]:
+        """Was the abnormality there at both ends of the observed window?"""
+        from intelligence.document.contracts import ReferenceStatus
+        from intelligence.findings.history import Persistence
+
+        wanted = {
+            "REDUCED_EGFR_PATTERN": ("egfr", ReferenceStatus.BELOW),
+            "ALBUMINURIA_PATTERN": (
+                "urine_albumin_creatinine_ratio", ReferenceStatus.ABOVE,
+            ),
+        }
+        caveats: list[str] = []
+        missing: list[str] = []
+        persistent = False
+
+        for code in entry_criteria:
+            analyte, direction = wanted[code]
+            series = evidence.series_for(analyte)
+            if series is None or series.count < 2:
+                missing.append(
+                    f"an earlier {analyte} to compare today's against"
+                )
+                continue
+
+            caveats.extend(series.caveats)
+            if series.span_days < CHRONICITY_DAYS:
+                missing.append(
+                    f"{analyte} results spanning {CHRONICITY_DAYS} days; these "
+                    f"span {series.span_days}"
+                )
+                continue
+
+            if series.abnormal_in_direction(direction):
+                persistent = True
+                caveats.append(
+                    f"{analyte} was already outside its range "
+                    f"{series.span_days} days ago: {series.describe()}."
+                )
+            elif series.persistence is Persistence.NEW:
+                missing.append(
+                    f"{analyte} was inside its range at the start of this "
+                    f"window, so today's result is new rather than persistent"
+                )
+            elif series.persistence is Persistence.TRANSIENT:
+                missing.append(
+                    f"{analyte} returned to its range during this window, so "
+                    f"the abnormality was not sustained"
+                )
+
+        if not persistent and not missing:
+            missing.append(
+                "evidence that the abnormality itself persisted, rather than "
+                "that a long period was observed"
+            )
+        if not persistent:
+            caveats.append(
+                "A long observation window is not the same as a sustained "
+                "abnormality."
+            )
+        return persistent, caveats, missing
 
 
 CHRONIC_KIDNEY_DISEASE = ChronicKidneyDiseaseDetector()

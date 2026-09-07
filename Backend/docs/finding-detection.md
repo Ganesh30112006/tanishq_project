@@ -75,10 +75,65 @@ downgrades any assertion the set has no timeline for to `INSUFFICIENT`,
 putting the requirement into `evidence_missing` so the result says what was
 needed.
 
-Today the document pipeline produces `SINGLE_REPORT` sets only. Building the
-multi-report evidence assembly is a later phase; until it exists, a detector
-needing history correctly returns "not enough evidence" on every call and
-names the repeat it wanted.
+A single call to the document pipeline produces a `SINGLE_REPORT` set.
+`intelligence/findings/history.py` assembles the rest — see below.
+
+## The same analyte across time
+
+```
+eGFR  92 -> 84 -> 71 -> 63      a decline
+eGFR  92 -> 63 -> 94            one odd result between two normal ones
+```
+
+A system that reported only the latest value, or only the worst, describes
+both the same way. The second is far more often a sample taken while the
+patient was dehydrated than the beginning of anything.
+
+`build_history(snapshots)` takes several reports and returns an `EvidenceSet`
+whose **measurements come from the latest report** — so every single-report
+detector behaves exactly as it did — plus a `Series` per analyte and an honest
+declaration of the timeline it actually holds.
+
+A `Series` answers two separate questions:
+
+| | |
+|---|---|
+| `Trend` | `RISING` / `FALLING` / `STABLE` / `FLUCTUATING` / `INSUFFICIENT` |
+| `Persistence` | `PERSISTENT` / `TRANSIENT` / `NEW` / `NEVER_ABNORMAL` / `NOT_ESTABLISHED` |
+
+Three rules keep it honest:
+
+* **No move counts until it exceeds ordinary variation.** Every value wobbles
+  between samples without the patient changing, so `intelligence/knowledge/
+  variation.py` holds a per-analyte threshold — 2% for sodium, 45% for TSH —
+  and a series says which threshold it used. The figures are from the
+  literature and have *not* been measured on these laboratories' assays; they
+  are set conservatively, because calling noise a trend is worse than calling
+  a small real change stable.
+* **Two points are not a trend.** They are a comparison. A direction needs
+  three. Persistence needs only two, because it is a different question.
+* **Trend in the canonical unit, compare in the laboratory's.** Two labs
+  reporting haemoglobin in g/dL and g/L are measuring the same thing and form
+  one series; the reference *status* of each point still comes from that lab's
+  own printed range in its own units. When the printed range changed between
+  reports the series says so, because "was abnormal, now normal" may be the
+  range moving rather than the patient.
+
+What comes out is **trend evidence**. A series never says why, and never names
+a disease. Turning persistence into a condition stays a level-3 job under an
+evidence contract — which is what finally lets `POSSIBLE_CHRONIC_KIDNEY_DISEASE`
+reach `PROVISIONAL`, and only when the abnormality itself was present at both
+ends of a window longer than ninety days. A long window with a *new*
+abnormality is still refused:
+
+```
+egfr: 92.0 -> 58.0 over 360 days (4 results), falling, new
+  L3 POSSIBLE_CHRONIC_KIDNEY_DISEASE  INSUFFICIENT
+     missing: egfr was inside its range at the start of this window,
+              so today's result is new rather than persistent
+```
+
+That is the correct answer, and the falling trend is still reported beside it.
 
 ## Confidence means "how much evidence", not "how sure"
 
@@ -247,6 +302,8 @@ backstop that downgrades a conclusion the evidence set has no history for.
 electrolyte patterns, and the deliberate-omission list.
 `tests/findings/test_level3_conditions.py` — the condition likelihoods, every
 one tested on the boundary it refuses rather than the case it fires on.
+`tests/findings/test_history.py` — trend and persistence, the noise threshold,
+and the chronic kidney disease detector now that it can finally be satisfied.
 `tests/findings/test_detectors.py` — evidence assembly, reference precedence,
 level-2 behaviour and the level-3 boundary.
 `tests/document/test_http_endpoint.py` — the findings block over the wire.
