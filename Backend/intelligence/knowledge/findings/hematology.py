@@ -1,47 +1,13 @@
-"""The medical finding dictionary.
+"""Approved knowledge for the haematology patterns.
 
-Approved knowledge about each finding: what it means, what it is commonly
-associated with, what must not be said about it, and where the statement comes
-from. When a language model is eventually added it communicates *this*; it does
-not decide any of it, and it may not introduce an association that is not
-listed here.
-
-``must_not_say`` is the part that does real work. Eosinophilia is associated
-with parasitic infection, so a model asked to explain it will reach for
-"parasitic infection" - and a patient reading "you may have a parasite" from a
-routine blood count has been harmed by a system that was only trying to be
-helpful. The policy for each entry states the bound explicitly.
+See the package docstring for what each field is for and why
+``must_not_say`` is the part that does real work.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from intelligence.knowledge.findings.model import FindingKnowledge
 
-KNOWLEDGE_VERSION = "findings-knowledge-1"
-
-
-@dataclass(frozen=True, slots=True)
-class FindingKnowledge:
-    code: str
-    canonical_name: str
-    definition: str
-    #: Plain-English sentence a clinician or patient can read. Indian English,
-    #: simple words - this is user-facing copy.
-    plain_explanation: str
-    common_associations: tuple[str, ...] = ()
-    must_not_say: tuple[str, ...] = ()
-    cautionary_notes: tuple[str, ...] = ()
-    aliases: tuple[str, ...] = ()
-    references: tuple[str, ...] = ()
-    #: What a downstream explainer is permitted to do with this finding.
-    explanation_policy: str = (
-        "Describe the measurement and its relation to the reference range. Name "
-        "possible settings only as possibilities. Never state or imply a "
-        "diagnosis. Always say that a doctor must interpret the result."
-    )
-    next_steps: tuple[str, ...] = field(default_factory=tuple)
-
-
-_KNOWLEDGE: dict[str, FindingKnowledge] = {
+KNOWLEDGE: dict[str, FindingKnowledge] = {
     "ANEMIA_PATTERN": FindingKnowledge(
         code="ANEMIA_PATTERN",
         canonical_name="Low haemoglobin (anaemia pattern)",
@@ -186,77 +152,6 @@ _KNOWLEDGE: dict[str, FindingKnowledge] = {
         ),
         aliases=("high eosinophils", "eosinophil elevation"),
     ),
-    "HYPERGLYCEMIA_PATTERN": FindingKnowledge(
-        code="HYPERGLYCEMIA_PATTERN",
-        canonical_name="High blood glucose",
-        definition="Blood glucose above the reference interval on this report.",
-        plain_explanation=(
-            "Your blood glucose is higher than the normal range. Whether this "
-            "matters depends on whether the sample was taken fasting, and on "
-            "other tests. A doctor should review it."
-        ),
-        common_associations=(
-            "diabetes", "prediabetes", "a non-fasting sample",
-            "acute illness or stress", "steroid medicines",
-        ),
-        must_not_say=(
-            "Do not say the patient has diabetes. Diagnosis needs a confirmed, "
-            "correctly-timed sample and a clinician's judgement.",
-            "Do not suggest any change to medicine or diet.",
-        ),
-        cautionary_notes=(
-            "This system cannot tell a fasting sample from a random one unless "
-            "the report says so, and the two are read against different ranges.",
-        ),
-        aliases=("high blood sugar", "raised glucose"),
-    ),
-    "ELEVATED_HBA1C_PATTERN": FindingKnowledge(
-        code="ELEVATED_HBA1C_PATTERN",
-        canonical_name="Raised HbA1c",
-        definition=(
-            "HbA1c above the guideline threshold for a normal result. This is a "
-            "decision threshold, not a population reference interval."
-        ),
-        plain_explanation=(
-            "Your HbA1c is above the level usually considered normal. HbA1c "
-            "reflects average blood sugar over the past two to three months. A "
-            "doctor should review this result."
-        ),
-        common_associations=("prediabetes", "diabetes", "conditions affecting red cells"),
-        must_not_say=(
-            "Do not say the patient has diabetes or prediabetes. Those are "
-            "diagnoses a clinician makes.",
-        ),
-        cautionary_notes=(
-            "HbA1c is unreliable in anaemia, recent blood loss or transfusion, "
-            "and some haemoglobin variants.",
-        ),
-        aliases=("raised hba1c", "high a1c"),
-    ),
-    "DYSLIPIDEMIA_PATTERN": FindingKnowledge(
-        code="DYSLIPIDEMIA_PATTERN",
-        canonical_name="Lipid results outside the usual targets",
-        definition=(
-            "One or more of total cholesterol, LDL, HDL or triglycerides sits "
-            "outside the commonly used target. These are treatment targets, not "
-            "reference intervals."
-        ),
-        plain_explanation=(
-            "One or more of your lipid (fat) results is outside the usual "
-            "target. These targets are guides for treatment and depend on your "
-            "overall heart risk, so a doctor needs to interpret them for you."
-        ),
-        common_associations=("diet", "physical activity", "genetics",
-                             "thyroid and kidney conditions", "some medicines"),
-        must_not_say=(
-            "Do not call this abnormal. The numbers are targets, and the right "
-            "target differs from person to person.",
-            "Do not recommend a statin or any other treatment.",
-            "Do not produce a cardiovascular risk estimate here - that is the "
-            "governed risk model's job, not a finding's.",
-        ),
-        aliases=("abnormal lipids", "high cholesterol"),
-    ),
     "MICROCYTOSIS_PATTERN": FindingKnowledge(
         code="MICROCYTOSIS_PATTERN",
         canonical_name="Small red blood cells (low MCV)",
@@ -283,40 +178,36 @@ _KNOWLEDGE: dict[str, FindingKnowledge] = {
         must_not_say=("Do not name a cause from the cell size alone.",),
         aliases=("high mcv",),
     ),
-    "POSSIBLE_IRON_DEFICIENCY_ANEMIA": FindingKnowledge(
-        code="POSSIBLE_IRON_DEFICIENCY_ANEMIA",
-        canonical_name="Pattern that may suggest iron-deficiency anaemia",
+    "RDW_ELEVATION_PATTERN": FindingKnowledge(
+        code="RDW_ELEVATION_PATTERN",
+        canonical_name="Red cells of uneven size (high RDW)",
         definition=(
-            "A low haemoglobin together with small red cells and/or a low "
-            "ferritin. This is a pattern, not a diagnosis."
+            "Red cell distribution width, as a coefficient of variation, above "
+            "the reference interval. It measures how much the red cells vary "
+            "in size, not whether they are large or small."
         ),
         plain_explanation=(
-            "Your results show a low haemoglobin along with other findings that "
-            "can occur in iron deficiency. This is only a possibility. Other "
-            "conditions produce the same pattern, and a doctor needs to confirm "
-            "the cause before any treatment."
+            "Your red blood cells vary more than usual in size. On its own "
+            "this says nothing about how you are. It is a clue a doctor uses "
+            "alongside the haemoglobin and the cell size to work out the cause "
+            "of a low haemoglobin."
         ),
-        common_associations=("low dietary iron", "blood loss including heavy "
-                             "periods and gut bleeding", "poor absorption"),
+        common_associations=(
+            "iron deficiency, often before the haemoglobin falls",
+            "vitamin B12 or folate deficiency",
+            "a recent transfusion or recent treatment",
+            "two causes of anaemia present at once",
+        ),
         must_not_say=(
-            "Do not state that the patient has iron deficiency.",
-            "Do not recommend iron supplements - iron given for the wrong cause "
-            "is harmful, and unexplained iron deficiency in an adult needs the "
-            "source of blood loss investigated.",
+            "Do not name a cause. A raised RDW narrows nothing by itself.",
+            "Do not present this as an abnormality the patient should worry "
+            "about. It is an index, not a symptom.",
         ),
         cautionary_notes=(
-            "Ferritin rises with inflammation and can look normal in a person "
-            "who is genuinely iron deficient.",
-            "Thalassaemia trait produces a very similar blood-count picture.",
+            "RDW-CV, the percentage reported here, and RDW-SD, reported in "
+            "femtolitres, are different measurements and are not "
+            "interchangeable.",
         ),
-        aliases=("iron deficiency pattern",),
+        aliases=("high rdw", "anisocytosis"),
     ),
 }
-
-
-def get(code: str) -> FindingKnowledge | None:
-    return _KNOWLEDGE.get(code)
-
-
-def known_codes() -> list[str]:
-    return sorted(_KNOWLEDGE)

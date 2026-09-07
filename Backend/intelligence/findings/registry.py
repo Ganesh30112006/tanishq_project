@@ -27,9 +27,17 @@ def register(detector: Detector) -> Detector:
 
 def _register_defaults() -> None:
     from intelligence.disease import hematology as disease_hematology
-    from intelligence.findings import hematology, metabolic
+    from intelligence.findings import (
+        electrolytes,
+        hematology,
+        hepatic,
+        metabolic,
+        renal,
+        thyroid,
+    )
 
-    for module in (hematology, metabolic, disease_hematology):
+    for module in (hematology, metabolic, renal, hepatic, thyroid,
+                   electrolytes, disease_hematology):
         for detector in module.DETECTORS:
             register(detector)
 

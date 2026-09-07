@@ -170,8 +170,29 @@ MACROCYTOSIS = ThresholdDetector(
     direction="high",
 )
 
+RDW_ELEVATION = ThresholdDetector(
+    contract=pattern_contract(
+        code="RDW_ELEVATION_PATTERN",
+        label="Red cells of uneven size (high RDW)",
+        category="hematology",
+        analyte="rdw",
+        why="red cell distribution width above its reference interval",
+        minimum_evidence="An RDW-CV value with a reference interval.",
+        confidence_policy=_POLICY,
+        validation_note=_VALIDATION,
+        exclusion_rules=(
+            "RDW measures how much the red cells vary in size, not whether "
+            "they are large or small, and narrows nothing on its own.",
+            "RDW-CV as a percentage and RDW-SD in femtolitres are different "
+            "measurements. Only the CV is read here.",
+        ),
+    ),
+    analytes=("rdw",),
+    direction="high",
+)
+
 DETECTORS = (
     ANEMIA, POLYCYTHEMIA, LEUKOCYTOSIS, LEUKOPENIA,
     THROMBOCYTOPENIA, THROMBOCYTOSIS, EOSINOPHILIA,
-    MICROCYTOSIS, MACROCYTOSIS,
+    MICROCYTOSIS, MACROCYTOSIS, RDW_ELEVATION,
 )

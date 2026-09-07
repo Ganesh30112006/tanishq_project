@@ -20,7 +20,12 @@ from dataclasses import dataclass, field
 from intelligence.document.contracts import ReferenceStatus, ValueStatus
 from intelligence.document.provenance.record import Provenance
 from intelligence.document.validation.checks import ValidatedValue
-from intelligence.findings.contracts import EvidenceRef, EvidenceRequirement, Finding
+from intelligence.findings.contracts import (
+    EvidenceRef,
+    EvidenceRequirement,
+    EvidenceTemporality,
+    Finding,
+)
 from intelligence.knowledge import reference_ranges as RR
 
 
@@ -80,9 +85,22 @@ class EvidenceSet:
     #: Analytes that appeared on the report but did not survive validation.
     unusable: list[str] = field(default_factory=list)
     range_table_version: str = RR.RANGE_TABLE_VERSION
+    #: What span of the patient's timeline this set actually covers. One
+    #: report covers one moment, and that is the default because it is what
+    #: the document pipeline produces. Nothing here may be widened by a
+    #: detector: a detector states what it needs and this states what exists.
+    available_temporality: frozenset[EvidenceTemporality] = field(
+        default_factory=lambda: frozenset({EvidenceTemporality.SINGLE_REPORT})
+    )
+    #: Days between the earliest and latest observation in the set, when more
+    #: than one report is behind it.
+    observation_window_days: float | None = None
 
     def measurement(self, analyte: str) -> Measurement | None:
         return self.measurements.get(analyte)
+
+    def supports(self, temporality: EvidenceTemporality) -> bool:
+        return temporality in self.available_temporality
 
     def finding(self, code: str) -> Finding | None:
         return self.findings.get(code)

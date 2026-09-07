@@ -80,7 +80,7 @@ asserts the OpenAPI schema has no `path` / `patient_id` / `content_reference`.
 | Text layer | `ingestion/text_layer.py` | `pypdf`; a PDF with almost no extractable text is treated as a scan and routed to OCR. A corrupt PDF is a "no", not a crash. |
 | OCR | `ocr/` | `OCRProvider` protocol + `LocalTesseractProvider` + registry. Tokens carry `text`, `page`, `BoundingBox` (0..1), `confidence`. No `pytesseract`/engine → `ENGINE_UNAVAILABLE`, no tokens, report held for review. |
 | Classification | `classification/keyword.py` | Deterministic weighted keyword vote; all inputs visible in `signals`; winner must beat runner-up 2× or `REVIEW_REQUIRED`. |
-| Report schemas | `schemas/` | Per type: fields, required flags, aliases, accepted units, plausibility bounds. `assess_completeness()` → COMPLETE / INCOMPLETE / AMBIGUOUS / INVALID / CONFLICTING, same precedence as `apps.reports.schema_engine`. Narrative types have **no** schema. |
+| Report schemas | `schemas/` | Per type: fields, required flags, aliases, accepted units, plausibility bounds. Eight panels: CBC, glucose, HbA1c, lipids, renal, liver, thyroid, electrolytes, urinalysis. `assess_completeness()` → COMPLETE / INCOMPLETE / AMBIGUOUS / INVALID / CONFLICTING, same precedence as `apps.reports.schema_engine`; `required_any` covers a report defined by a family of fields rather than one named field. Narrative types have **no** schema. |
 | Extraction | `extraction/` | Line-oriented regex → `<label> <value> [unit] [flag] [reference]` with the character span. Skips metadata lines and headings. `parse_reference_range` turns `0 - 6`, `< 200`, `Up to 6` into numbers; marks `Negative` / unparseable as such. |
 | Normalisation | `normalization/` | `canonical_analyte()` → known name or `None` (never a guess). `normalize_value()` converts to canonical units from a versioned table whose factors are checked against `apps.common.units` by a test. |
 | Validation | `validation/` | `OBSERVED` / `NEEDS_REVIEW` / `REJECTED`. REJECTED is only for implausible values. Reference status (ABOVE/BELOW/WITHIN/UNKNOWN) is computed here; naming a clinical finding is not. A printed flag that disagrees with the computed status forces NEEDS_REVIEW. |
@@ -90,11 +90,34 @@ asserts the OpenAPI schema has no `path` / `patient_id` / `content_reference`.
 `DocumentResult` with the disposition, the validated values with provenance, a
 schema completeness roll-up, and typed `Issue`s.
 
+## Quantities that share a name but are not the same measurement
+
+The expensive mistakes in this layer are not failures to read a number. They
+are successes at reading it into the wrong slot, where it lands beside a real
+reference range and looks right. The tables refuse each of these by
+construction, and `tests/document/test_analyte_coverage.py` holds them:
+
+| Pair | Why they are separate |
+|---|---|
+| urea / BUN | urea weighs the whole molecule, BUN only its nitrogen. The same mg/dL number is a different amount of urea, by ~2.14x, so the *label* picks the factor |
+| mEq/L calcium / mEq/L sodium | calcium is divalent. A global "mEq/L means mmol/L" alias would double every calcium result |
+| differential % / absolute count | a raised lymphocyte percentage with a low white count is a *normal* lymphocyte count. No rule converts one into the other |
+| total / ionised calcium | the ionised interval is much narrower; reading one against the other calls a normal result low |
+| RDW-CV / RDW-SD | a percentage and a width in femtolitres |
+| eGFR / creatinine clearance | one is normalised to body surface area, the other is not. A bare `mL/min` unit is deliberately unrecognised |
+| fasting / random glucose | different numbers apply. An *unqualified* glucose has no fallback interval at all - it cannot be read against either, so it is read against neither |
+
+Labels in the second column of that table resolve to `None` rather than to the
+nearest field, which routes them to review.
+
 ## What comes after extraction
 
 Validated values feed the finding and disease framework - see
 [finding-detection.md](finding-detection.md). Levels 2 and 3 are built; level 4
-is the governed risk model in Django and stays frozen.
+is the governed risk model in Django and stays frozen. Everything the pipeline
+produces is a `SINGLE_REPORT` evidence set, so no finding drawn from it may be
+read as a persistent or chronic condition; the framework enforces that rather
+than relying on the reader.
 
 Still missing: the gold-standard benchmark (clinician-annotated reports; needs
 data), and the LLM module. Every detector is `NOT_VALIDATED` until the

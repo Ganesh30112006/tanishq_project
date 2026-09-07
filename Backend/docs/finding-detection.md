@@ -24,6 +24,9 @@ The levels are enforced by `EvidenceContract.__post_init__`, not by convention:
   "Hb 9.8 -> iron deficiency" impossible to write.
 * **Levels 3 and 4 always require human review.** `human_review_required=False`
   is refused.
+* **A level-2 pattern reads one report.** Whether an abnormality persists is a
+  level-3 question, so a level-2 contract may not declare any temporality
+  other than `SINGLE_REPORT`.
 * **A level-4 detector must already be `CLINICALLY_APPROVED`.** A risk model
   cannot be created by writing a Python class; it needs a governed
   `ModelVersion` in Django with a named approver and an evidence dossier. The
@@ -42,6 +45,37 @@ system actually receives* is unknown, and every finding carries that sentence.
 That is the same discipline as the model evidence dossier: a rule from a
 textbook is a hypothesis about this system's data until somebody measures it
 here.
+
+## A detector may not outrun the timeline it was given
+
+"Abnormal now" and "abnormal for three months" are different clinical
+statements, and only the second one is a chronic disease. An eGFR of 55 on one
+report is a low eGFR; chronic kidney disease needs the same abnormality to
+persist for at least ninety days.
+
+Nothing in the output distinguishes the two. A finding that says "possible
+chronic kidney disease" reads identically whether ninety days of history stood
+behind it or nobody checked. So the check does not live in a detector's good
+intentions:
+
+| | |
+|---|---|
+| `SINGLE_REPORT` | one report, one moment. Every level-2 pattern |
+| `REPEATED_MEASUREMENT` | the same analyte measured more than once |
+| `HISTORICAL` | repeated measurement plus a minimum elapsed time |
+| `CROSS_REPORT` | different analytes from different reports, correlated |
+
+A detector declares what it needs (`EvidenceContract.temporality`, plus a
+`temporality_requirement` sentence naming exactly what). The `EvidenceSet`
+declares what it actually holds (`available_temporality`). The engine
+downgrades any assertion the set has no timeline for to `INSUFFICIENT`,
+putting the requirement into `evidence_missing` so the result says what was
+needed.
+
+Today the document pipeline produces `SINGLE_REPORT` sets only. Building the
+multi-report evidence assembly is a later phase; until it exists, a detector
+needing history correctly returns "not enough evidence" on every call and
+names the repeat it wanted.
 
 ## Confidence means "how much evidence", not "how sure"
 
@@ -76,7 +110,7 @@ says that the number is a treatment target rather than an abnormality boundary.
 
 ## The knowledge dictionary decides what may be said
 
-`intelligence/knowledge/findings.py` holds, for each finding: definition, a
+`intelligence/knowledge/findings/` holds, for each finding: definition, a
 plain-English explanation in simple Indian English, common associations,
 cautionary notes, and `must_not_say`. A detector may not compose its own
 explanation — `build_finding` raises if the code has no knowledge entry.
@@ -117,10 +151,36 @@ document provenance. It also carries what was **missing**.
 
 ## What is built
 
-Level 2, `intelligence/findings/`: anaemia, polycythaemia, leukocytosis,
-leukopenia, thrombocytopenia, thrombocytosis, eosinophilia, microcytosis,
-macrocytosis, hyperglycaemia, raised HbA1c, dyslipidaemia (a panel-level
-pattern using `required_evidence_mode="any"`).
+Level 2, `intelligence/findings/`, 34 detectors across five body systems:
+
+| Module | Patterns |
+|---|---|
+| `hematology` | anaemia, polycythaemia, leukocytosis, leukopenia, thrombocytopenia, thrombocytosis, eosinophilia, microcytosis, macrocytosis, raised RDW |
+| `metabolic` | hyperglycaemia, raised HbA1c, dyslipidaemia (panel-level, `required_evidence_mode="any"`) |
+| `renal` | raised creatinine, reduced eGFR, raised urea, albuminuria |
+| `hepatic` | raised ALT, AST, ALP, GGT, bilirubin; low albumin |
+| `thyroid` | raised TSH, low TSH, low free T4, high free T4 |
+| `electrolytes` | low/high sodium, low/high potassium, low/high calcium, low bicarbonate |
+
+Three shapes recur, and each is a decision rather than an oversight:
+
+* **One enzyme, one finding.** The liver panel is six separate findings, not
+  one "deranged liver function". Which enzymes rose *together* is the whole of
+  the information a liver panel carries, and collapsing them discards it.
+  Reading the combination is a level-3 question.
+* **The artefact travels with the result.** Electrolytes are the one place a
+  number can be an emergency and also the place a wrong number is commonest,
+  so each contract names what most often fakes it - haemolysis for potassium,
+  a low albumin for calcium, a tube left standing for bicarbonate. No detector
+  estimates urgency; that is a judgement about a patient, not a comparison
+  against a range.
+* **Represented is not the same as detected.** Several analytes are read,
+  normalised and compared but have no detector on purpose - the percentage
+  differential (neutropenia needs an absolute count, which the unit rules
+  refuse to derive from a percentage), the red cell indices, and the values
+  that only mean something inside a combination. The list lives in
+  `tests/findings/test_level2_expansion.py` and the test fails if a detector
+  appears for one without the entry being removed.
 
 Level 3, `intelligence/disease/hematology/`: `POSSIBLE_IRON_DEFICIENCY_ANEMIA`,
 which is there mostly to prove the boundary holds. On most reports it returns
@@ -150,6 +210,10 @@ they are not identifiers and the service cannot resolve them to a person.
 `tests/findings/test_framework_contracts.py` — the structural guards: naming,
 the combination rule, the review rule, the level-4 gate, the validation gate,
 the tumour-marker prohibition, knowledge coverage.
+`tests/findings/test_temporality.py` — the timeline gate, including the engine
+backstop that downgrades a conclusion the evidence set has no history for.
+`tests/findings/test_level2_expansion.py` — the renal, hepatic, thyroid and
+electrolyte patterns, and the deliberate-omission list.
 `tests/findings/test_detectors.py` — evidence assembly, reference precedence,
 level-2 behaviour and the level-3 boundary.
 `tests/document/test_http_endpoint.py` — the findings block over the wire.

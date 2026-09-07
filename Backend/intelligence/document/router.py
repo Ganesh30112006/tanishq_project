@@ -51,8 +51,10 @@ def _capabilities() -> dict[str, CapabilityOut]:
             available=True,
             detail=(
                 "deterministic level-2 patterns and level-3 condition "
-                "likelihoods; every detector NOT_VALIDATED until a "
-                "gold-standard set exists"
+                "likelihoods over a SINGLE_REPORT timeline; every detector "
+                "NOT_VALIDATED until a gold-standard set exists. Nothing here "
+                "can tell a transient abnormality from a persistent one, so "
+                "no finding may be read as a chronic condition"
             ),
         ),
         "llm": CapabilityOut(available=False, detail="not implemented; fails closed"),

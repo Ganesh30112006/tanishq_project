@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from intelligence.findings import registry
+from intelligence.findings.base import build_finding
 from intelligence.findings.contracts import Confidence, EvidenceLevel, Finding
 from intelligence.findings.evidence import EvidenceSet
 
@@ -51,6 +52,7 @@ def detect(evidence: EvidenceSet, *, detectors=None) -> FindingsReport:
         finding = detector.evaluate(evidence)
         if finding is None:
             continue
+        finding = _hold_to_its_timeline(detector.contract, finding, evidence)
         report.findings.append(finding)
         # Only a finding that actually asserts something may be built upon. An
         # "insufficient evidence" result is a statement about the report, not a
@@ -60,3 +62,29 @@ def detect(evidence: EvidenceSet, *, detectors=None) -> FindingsReport:
 
     report.findings.sort(key=lambda f: (-f.level.value, f.code))
     return report
+
+
+def _hold_to_its_timeline(contract, finding: Finding, evidence: EvidenceSet) -> Finding:
+    """Refuse a conclusion the evidence set has no timeline for.
+
+    A detector is expected to check this itself and usually does. The backstop
+    is here anyway, because the failure it prevents - a single abnormal value
+    presented as a persistent one - is not visible in the output. A finding
+    that says "possible chronic kidney disease" reads identically whether the
+    detector checked ninety days of history or forgot to.
+    """
+    if finding.confidence is Confidence.INSUFFICIENT:
+        return finding
+    if evidence.supports(contract.temporality):
+        return finding
+
+    return build_finding(
+        contract,
+        confidence=Confidence.INSUFFICIENT,
+        evidence_used=finding.evidence_used,
+        evidence_missing=[*finding.evidence_missing, contract.temporality_requirement],
+        caveats=[
+            "This report covers one point in time. "
+            + contract.temporality_requirement
+        ],
+    )
