@@ -65,26 +65,33 @@ def detect(evidence: EvidenceSet, *, detectors=None) -> FindingsReport:
 
 
 def _hold_to_its_timeline(contract, finding: Finding, evidence: EvidenceSet) -> Finding:
-    """Refuse a conclusion the evidence set has no timeline for.
+    """Refuse a conclusion the evidence set was never shown the timeline for.
 
-    A detector is expected to check this itself and usually does. The backstop
-    is here anyway, because the failure it prevents - a single abnormal value
-    presented as a persistent one - is not visible in the output. A finding
-    that says "possible chronic kidney disease" reads identically whether the
-    detector checked ninety days of history or forgot to.
+    This is not a second opinion on the detector's own reasoning; it is the
+    only place the timeline is checked at all. A detector that forgets - and
+    the one that started this, chronic kidney disease, originally hand-rolled
+    the check - still cannot assert anything it was not shown, because the
+    contract is evaluated here rather than trusted there.
+
+    The failure it prevents is invisible in the output: a finding reading
+    "possible chronic kidney disease" looks identical whether ninety days of
+    persistent abnormality stood behind it or a long date range and one bad
+    day did.
     """
     if finding.confidence is Confidence.INSUFFICIENT:
         return finding
-    if evidence.supports(contract.temporality):
+
+    gaps = evidence.unmet_temporal_requirements(contract.temporal)
+    if not gaps:
         return finding
 
     return build_finding(
         contract,
         confidence=Confidence.INSUFFICIENT,
         evidence_used=finding.evidence_used,
-        evidence_missing=[*finding.evidence_missing, contract.temporality_requirement],
+        evidence_missing=[*finding.evidence_missing, *(g.detail for g in gaps)],
         caveats=[
-            "This report covers one point in time. "
-            + contract.temporality_requirement
+            f"This conclusion needs: {contract.temporal.describe()} "
+            f"{contract.temporal.rationale}",
         ],
     )

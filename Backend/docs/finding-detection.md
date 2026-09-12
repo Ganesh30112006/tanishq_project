@@ -68,12 +68,34 @@ intentions:
 | `HISTORICAL` | repeated measurement plus a minimum elapsed time |
 | `CROSS_REPORT` | different analytes from different reports, correlated |
 
-A detector declares what it needs (`EvidenceContract.temporality`, plus a
-`temporality_requirement` sentence naming exactly what). The `EvidenceSet`
-declares what it actually holds (`available_temporality`). The engine
-downgrades any assertion the set has no timeline for to `INSUFFICIENT`,
-putting the requirement into `evidence_missing` so the result says what was
-needed.
+The requirements are **not** one enum value but a set, because the one that
+matters is easy to lose among the others:
+
+> longitudinal data is **not** a persistent abnormality.
+
+A patient whose eGFR was 92 a year ago and is 58 today has a year of data and
+a *new* abnormality. `TIME_WINDOW` alone would let that through.
+`PERSISTENT_ABNORMALITY` is the requirement that does not, and it forces a
+*direction* — "abnormal" without one would let a value that swung from low to
+high count as having persisted.
+
+```python
+temporal=TemporalContract(
+    requirements={REPEATED_MEASUREMENTS, TIME_WINDOW,
+                  PERSISTENT_ABNORMALITY, ORDERED_SEQUENCE},
+    subjects=(Subject("egfr", "below", "must have lasted"),),
+    minimum_observations=2,
+    minimum_window_days=90,
+    rationale="KDIGO defines chronic as present for more than three months.",
+)
+```
+
+The `EvidenceSet` does not *declare* what it holds — it is asked, and the
+answer is derived from the series actually present, so a set cannot claim a
+timeline it does not have. **The engine evaluates the contract for every
+detector**, before the detector's own reasoning is allowed to stand. The first
+version of this check lived inside the chronic kidney disease detector; it
+worked, and it would not have survived the next detector someone wrote.
 
 A single call to the document pipeline produces a `SINGLE_REPORT` set.
 `intelligence/findings/history.py` assembles the rest — see below.
@@ -134,6 +156,28 @@ egfr: 92.0 -> 58.0 over 360 days (4 results), falling, new
 ```
 
 That is the correct answer, and the falling trend is still reported beside it.
+
+## Numbers the system reasons with, and what stands behind them
+
+The reference intervals and the variation thresholds are not measurements this
+system made. They come from textbooks, guidelines and the literature on assay
+variation — good sources, none of which is a statement about the laboratories
+whose reports CareSense actually reads.
+
+Left unmarked they quietly acquire the authority of the system that uses them:
+a trend reported because a change exceeded a literature threshold reads exactly
+like a trend CareSense measured. So `intelligence/knowledge/provenance.py`
+records, for each table, its `source_type` (LITERATURE / GUIDELINE / LABORATORY
+/ MEASURED_HERE), its `applicability` (UNKNOWN by default), its
+`validation_status`, and — required — **what would validate it**, so "not
+validated" cannot become a permanent shrug. Every trend built on a threshold
+carries that caveat into its output.
+
+The gold-standard benchmark does not fix this and must not be treated as the
+pending validation for it. The corpus answers "does this rule find what a
+clinician would find?" It contains no repeated measurements of one patient on
+one assay, so it cannot answer what that assay's variation is. That needs a
+different study, and the record says so.
 
 ## Confidence means "how much evidence", not "how sure"
 
@@ -296,8 +340,11 @@ they are not identifiers and the service cannot resolve them to a person.
 `tests/findings/test_framework_contracts.py` — the structural guards: naming,
 the combination rule, the review rule, the level-4 gate, the validation gate,
 the tumour-marker prohibition, knowledge coverage.
-`tests/findings/test_temporality.py` — the timeline gate, including the engine
-backstop that downgrades a conclusion the evidence set has no history for.
+`tests/findings/test_temporality.py` — the temporal contract and the engine
+enforcing it, including a detector that never checks its own timeline still
+being unable to assert anything it was not shown.
+`tests/findings/test_knowledge_provenance.py` — that no table in the knowledge
+layer can quietly promote itself to "measured here".
 `tests/findings/test_level2_expansion.py` — the renal, hepatic, thyroid and
 electrolyte patterns, and the deliberate-omission list.
 `tests/findings/test_level3_conditions.py` — the condition likelihoods, every

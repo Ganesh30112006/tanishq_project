@@ -21,12 +21,7 @@ from dataclasses import dataclass, field
 from intelligence.document.contracts import ReferenceStatus
 from intelligence.document.provenance.record import Provenance
 from intelligence.document.validation.checks import ValidatedValue
-from intelligence.findings.contracts import (
-    EvidenceRef,
-    EvidenceRequirement,
-    EvidenceTemporality,
-    Finding,
-)
+from intelligence.findings.contracts import EvidenceRef, EvidenceRequirement, Finding
 from intelligence.knowledge import reference_ranges as RR
 
 
@@ -92,13 +87,6 @@ class EvidenceSet:
     #: Analytes that appeared on the report but did not survive validation.
     unusable: list[str] = field(default_factory=list)
     range_table_version: str = RR.RANGE_TABLE_VERSION
-    #: What span of the patient's timeline this set actually covers. One
-    #: report covers one moment, and that is the default because it is what
-    #: the document pipeline produces. Nothing here may be widened by a
-    #: detector: a detector states what it needs and this states what exists.
-    available_temporality: frozenset[EvidenceTemporality] = field(
-        default_factory=lambda: frozenset({EvidenceTemporality.SINGLE_REPORT})
-    )
     #: Days between the earliest and latest observation in the set, when more
     #: than one report is behind it.
     observation_window_days: float | None = None
@@ -110,8 +98,16 @@ class EvidenceSet:
     def measurement(self, analyte: str) -> Measurement | None:
         return self.measurements.get(analyte)
 
-    def supports(self, temporality: EvidenceTemporality) -> bool:
-        return temporality in self.available_temporality
+    def unmet_temporal_requirements(self, contract) -> list:
+        """What this set fails to show for a detector's temporal contract.
+
+        Derived from the series actually present, never declared. A set cannot
+        claim a timeline it does not hold, because there is nowhere to write
+        the claim.
+        """
+        from intelligence.findings import temporal
+
+        return temporal.evaluate(contract, self)
 
     def series_for(self, analyte: str):
         """The analyte across time, or ``None`` when only one report is here."""

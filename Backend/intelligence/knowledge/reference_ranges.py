@@ -24,8 +24,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from intelligence.knowledge.provenance import (
+    Applicability,
+    Provenance,
+    SourceType,
+    ValidationStatus,
+)
+
 #: Bump when a bound changes; findings record which version they used.
 RANGE_TABLE_VERSION = "adult-ranges-2"
+
+#: What stands behind every interval here. The laboratory's own printed range
+#: always wins over this table, and that preference is the point: these are
+#: textbook averages, not this instrument's interval for this population.
+PROVENANCE = Provenance(
+    source_type=SourceType.LITERATURE,
+    source="common adult laboratory intervals and published guideline thresholds",
+    applicability=Applicability.UNKNOWN,
+    validation_status=ValidationStatus.NOT_VALIDATED,
+    what_would_validate_it=(
+        "Reference intervals established on the population this system serves, "
+        "on the instruments its reports come from. Until then the laboratory's "
+        "own printed range is preferred wherever a report carries one, and any "
+        "finding that fell back to this table says so."
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)

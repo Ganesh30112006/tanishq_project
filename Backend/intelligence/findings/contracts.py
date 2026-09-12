@@ -35,6 +35,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
+from intelligence.findings.temporal import (
+    SINGLE_REPORT,
+    TemporalContract,
+)
+
 
 class EvidenceLevel(int, Enum):  # noqa: UP042 - int mixin so levels can be compared
     LAB_FINDING = 1
@@ -52,35 +57,6 @@ class DetectorValidation(str, Enum):  # noqa: UP042 - str mixin is the wire cont
     #: Benchmarked *and* carried through the Django governance lifecycle with a
     #: named approver. Required for anything at level 4.
     CLINICALLY_APPROVED = "CLINICALLY_APPROVED"
-
-
-class EvidenceTemporality(str, Enum):  # noqa: UP042 - str mixin is the wire contract
-    """How much of a patient's timeline a detector needs to be entitled to its
-    conclusion.
-
-    This exists because "abnormal now" and "abnormal for three months" are
-    different clinical statements, and only the second one is a chronic
-    disease. An eGFR of 55 on one report is a low eGFR; chronic kidney disease
-    needs the same abnormality to persist for at least ninety days. Without
-    this field a detector could quietly turn a dehydrated patient's Tuesday
-    into a lifelong diagnosis, and nothing in the code would object.
-
-    A detector declares what it needs; the evidence set declares what it
-    actually holds; the engine refuses to let a detector assert anything it
-    was not given the timeline for.
-    """
-
-    #: One report, one moment. Every level-2 pattern is this by definition.
-    SINGLE_REPORT = "SINGLE_REPORT"
-    #: The same analyte measured more than once, to tell a transient
-    #: abnormality from a persistent one.
-    REPEATED_MEASUREMENT = "REPEATED_MEASUREMENT"
-    #: Repeated measurement plus a minimum elapsed time - the shape that
-    #: chronicity criteria take.
-    HISTORICAL = "HISTORICAL"
-    #: Different analytes drawn from different reports, correlated. A blood
-    #: count from one visit read alongside iron studies from another.
-    CROSS_REPORT = "CROSS_REPORT"
 
 
 class Confidence(str, Enum):  # noqa: UP042 - str mixin is the wire contract
@@ -126,12 +102,13 @@ class EvidenceContract:
     #: be, which is how a panel-level pattern (dyslipidaemia) is expressed
     #: without inventing a fake analyte to hang the requirement on.
     required_evidence_mode: str = "all"
-    #: How much of the patient's timeline this detector needs. Anything beyond
-    #: a single report must say exactly what it needs in
-    #: ``temporality_requirement``, and the engine will not let it assert
-    #: anything until the evidence set actually holds that.
-    temporality: EvidenceTemporality = EvidenceTemporality.SINGLE_REPORT
-    temporality_requirement: str = ""
+    #: What this detector needs shown about time. Anything beyond one report
+    #: names the analytes, the repetition, the window and - crucially -
+    #: whether the *abnormality itself* had to persist, because a long date
+    #: range is not a persistent abnormality. The engine evaluates this
+    #: contract for every detector, so one that forgets to check its own
+    #: timeline still cannot assert anything it was not shown.
+    temporal: TemporalContract = SINGLE_REPORT
     validation_note: str = ""
     optional_evidence: tuple[EvidenceRequirement, ...] = ()
     exclusion_rules: tuple[str, ...] = ()
@@ -165,21 +142,12 @@ class EvidenceContract:
                 )
         if (
             self.level is EvidenceLevel.CLINICAL_ABNORMALITY
-            and self.temporality is not EvidenceTemporality.SINGLE_REPORT
+            and not self.temporal.single_report_only
         ):
             raise ValueError(
                 f"{self.code}: a level-2 pattern is an observation on one "
                 f"report. Whether it persists is a level-3 question, so it "
                 f"cannot be asked for here."
-            )
-        if (
-            self.temporality is not EvidenceTemporality.SINGLE_REPORT
-            and not self.temporality_requirement.strip()
-        ):
-            raise ValueError(
-                f"{self.code}: a detector needing {self.temporality.value} must "
-                f"say exactly what timeline it needs, so the result can name "
-                f"what was missing when it is not available"
             )
         if self.level >= EvidenceLevel.CONDITION_LIKELIHOOD and not self.human_review_required:
             raise ValueError(

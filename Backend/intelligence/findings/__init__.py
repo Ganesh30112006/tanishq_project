@@ -31,6 +31,13 @@ from intelligence.findings.contracts import (
 from intelligence.findings.engine import FindingsReport, detect
 from intelligence.findings.evidence import EvidenceSet, Measurement, build_evidence
 from intelligence.findings.registry import all_detectors, get, known_codes, register
+from intelligence.findings.temporal import (
+    SINGLE_REPORT,
+    Subject,
+    TemporalContract,
+    TemporalGap,
+    TemporalRequirement,
+)
 
 __all__ = [
     "EvidenceLevel",
@@ -50,4 +57,9 @@ __all__ = [
     "register",
     "get",
     "known_codes",
+    "TemporalContract",
+    "TemporalRequirement",
+    "TemporalGap",
+    "Subject",
+    "SINGLE_REPORT",
 ]

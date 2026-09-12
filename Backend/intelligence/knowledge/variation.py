@@ -17,11 +17,58 @@ actually come from**, which vary between laboratories. They are deliberately
 set on the conservative side - too large rather than too small - because the
 failure they prevent (calling noise a trend) is worse than the one they cause
 (calling a real small change stable, which the underlying values still show).
+
+That status is not left to this docstring. :data:`PROVENANCE` records it in a
+form the code carries, every trend built on these thresholds inherits the
+caveat, and a test asserts the table cannot quietly promote itself. A trend
+reported because a change exceeded a literature threshold would otherwise read
+exactly like a trend this system had measured, and nobody downstream could
+tell the difference.
+
+The gold-standard benchmark cannot fix this. It answers "does this rule find
+what a clinician would find?", not "is this the right analytical variation for
+this instrument" - that needs repeated measurements on the same patient from
+the same assay, which the benchmark corpus does not contain. This is waiting
+for a different study, and says so.
 """
 from __future__ import annotations
 
+from intelligence.knowledge.provenance import (
+    Applicability,
+    SourceType,
+    ValidationStatus,
+)
+from intelligence.knowledge.provenance import (
+    Provenance as KnowledgeProvenance,
+)
+
 #: Bump when a threshold changes. Trend findings record which version they used.
 VARIATION_TABLE_VERSION = "reference-change-1"
+
+#: What stands behind every number in this module. Carried into every trend
+#: that uses one, so a literature figure is never mistaken for a measured one.
+PROVENANCE = KnowledgeProvenance(
+    source_type=SourceType.LITERATURE,
+    source=(
+        "published analytical and within-subject biological variation data, "
+        "conservatively rounded"
+    ),
+    applicability=Applicability.UNKNOWN,
+    validation_status=ValidationStatus.NOT_VALIDATED,
+    what_would_validate_it=(
+        "Repeated measurements on clinically stable patients from the actual "
+        "laboratories and instruments this system reads, which would give a "
+        "reference change value per assay rather than a literature average. "
+        "The clinician gold-standard benchmark cannot answer this - it "
+        "contains no repeated measurements of the same patient on the same "
+        "assay - so this is waiting for a different study, not for that one."
+    ),
+    note=(
+        "Set on the conservative side on purpose: calling noise a trend is "
+        "worse than calling a small real change stable, because the "
+        "underlying values are reported either way."
+    ),
+)
 
 #: Used for any analyte not in the table below. Deliberately large: an analyte
 #: nobody has thought about gets the benefit of the doubt.

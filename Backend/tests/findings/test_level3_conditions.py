@@ -26,11 +26,7 @@ from intelligence.document.extraction.analytes import RawExtraction
 from intelligence.document.provenance import build_provenance
 from intelligence.document.validation import validate_value
 from intelligence.findings import registry
-from intelligence.findings.contracts import (
-    Confidence,
-    EvidenceLevel,
-    EvidenceTemporality,
-)
+from intelligence.findings.contracts import Confidence, EvidenceLevel
 from intelligence.findings.engine import detect
 from intelligence.findings.evidence import build_evidence
 from intelligence.knowledge import findings as KB
@@ -82,16 +78,16 @@ def test_chronic_kidney_disease_is_never_asserted_from_one_report():
     assert finding is not None
     assert finding.confidence is Confidence.INSUFFICIENT
     assert not finding.asserts_anything
-    assert any(str(CHRONICITY_DAYS) in m for m in finding.evidence_missing)
+    assert finding.evidence_missing
 
 
 def test_it_names_the_repeat_it_wanted_rather_than_a_generic_requirement():
     finding = _find(detect(_evidence(*RENAL, sex="male")),
                     "POSSIBLE_CHRONIC_KIDNEY_DISEASE")
     missing = " ".join(finding.evidence_missing)
-    assert "earlier" in missing
-    assert any("not the same as chronic kidney disease" in c
-               for c in finding.caveats)
+    assert "2 measurements of egfr" in missing
+    assert "are available" in missing
+    assert any("three months" in c for c in finding.caveats)
 
 
 def test_it_stays_silent_when_neither_entry_criterion_is_present():
@@ -100,37 +96,27 @@ def test_it_stays_silent_when_neither_entry_criterion_is_present():
     assert CHRONIC_KIDNEY_DISEASE.evaluate(normal) is None
 
 
-def test_a_long_window_alone_is_not_a_sustained_abnormality():
-    """A patient with two years of normal results and one bad one today has a
-    long history and no chronic disease. The window is not the question; what
-    the abnormality did across it is."""
-    evidence = _evidence(*RENAL, sex="male")
-    detect(evidence)                       # level 2 first, as the engine does
-    evidence.available_temporality = frozenset({
-        EvidenceTemporality.SINGLE_REPORT,
-        EvidenceTemporality.REPEATED_MEASUREMENT,
-        EvidenceTemporality.HISTORICAL,
-    })
-    evidence.observation_window_days = 200.0
-
-    finding = CHRONIC_KIDNEY_DISEASE.evaluate(evidence)
-    assert finding.confidence is Confidence.INSUFFICIENT
-    assert any("earlier egfr" in m for m in finding.evidence_missing)
-    assert any("not the same as a sustained abnormality" in c
-               for c in finding.caveats)
+def test_the_detector_itself_no_longer_checks_the_timeline():
+    """It used to, and that was the problem: the check would have had to be
+    rewritten correctly by every future detector with a chronicity criterion
+    in its name. It is declared in the contract and enforced by the engine, so
+    the detector called directly is deliberately permissive - and going
+    through ``detect`` is what a caller does."""
+    contract = CHRONIC_KIDNEY_DISEASE.contract.temporal
+    assert not contract.single_report_only
+    assert contract.minimum_window_days == CHRONICITY_DAYS
+    assert {s.analyte for s in contract.subjects} == {
+        "egfr", "urine_albumin_creatinine_ratio"
+    }
+    assert all(s.abnormal_direction for s in contract.subjects)
 
 
-def test_a_history_shorter_than_the_criterion_is_still_not_enough():
-    evidence = _evidence(*RENAL, sex="male")
-    detect(evidence)
-    evidence.available_temporality = frozenset({
-        EvidenceTemporality.SINGLE_REPORT, EvidenceTemporality.HISTORICAL,
-    })
-    evidence.observation_window_days = 40.0
-
-    finding = CHRONIC_KIDNEY_DISEASE.evaluate(evidence)
-    assert finding.confidence is Confidence.INSUFFICIENT
-    assert any("further 50 days" in m for m in finding.evidence_missing)
+def test_the_contract_names_the_repetition_and_the_window_it_wants():
+    """So an INSUFFICIENT result can say what would have been enough."""
+    described = CHRONIC_KIDNEY_DISEASE.contract.temporal.describe()
+    assert "2 measurements" in described
+    assert f"{CHRONICITY_DAYS} days" in described
+    assert "both ends" in described
 
 
 def test_it_never_offers_a_stage():

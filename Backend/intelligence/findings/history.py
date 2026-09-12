@@ -47,7 +47,6 @@ from datetime import date
 from enum import Enum
 
 from intelligence.document.contracts import ReferenceStatus
-from intelligence.findings.contracts import EvidenceTemporality
 from intelligence.findings.evidence import EvidenceSet, Measurement, build_evidence
 from intelligence.knowledge import variation as VAR
 
@@ -113,6 +112,9 @@ class Series:
     span_days: int
     caveats: tuple[str, ...] = ()
     variation_table_version: str = VAR.VARIATION_TABLE_VERSION
+    #: What stands behind the threshold that decided this trend. Carried so a
+    #: literature figure is never mistaken for one this system measured.
+    variation_provenance: object = VAR.PROVENANCE
 
     @property
     def latest(self) -> Observation:
@@ -232,6 +234,7 @@ def _caveats(analyte: str, observations: Sequence[Observation]) -> tuple[str, ..
         f"{VAR.significant_fraction(analyte):.0%}, which is roughly the "
         f"variation expected between samples from an unchanged patient."
     )
+    notes.append(VAR.PROVENANCE.caveat())
     return tuple(notes)
 
 
@@ -358,24 +361,8 @@ def build_history(
     span = (ordered[-1].observed_on - ordered[0].observed_on).days
     evidence.series = series
     evidence.observation_window_days = float(span)
-    evidence.available_temporality = _temporality(series, len(ordered), span)
 
     return History(
         evidence=evidence, series=series, reports=len(ordered), span_days=span,
         unusable_series=unusable,
     )
-
-
-def _temporality(
-    series: dict[str, Series], reports: int, span_days: int
-) -> frozenset[EvidenceTemporality]:
-    """What this set actually holds. Never what a detector wishes it held."""
-    available = {EvidenceTemporality.SINGLE_REPORT}
-    repeated = any(s.count >= 2 for s in series.values())
-    if repeated:
-        available.add(EvidenceTemporality.REPEATED_MEASUREMENT)
-    if repeated and span_days > 0:
-        available.add(EvidenceTemporality.HISTORICAL)
-    if reports > 1:
-        available.add(EvidenceTemporality.CROSS_REPORT)
-    return frozenset(available)

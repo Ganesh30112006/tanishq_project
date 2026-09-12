@@ -26,7 +26,7 @@ from intelligence.document.contracts import ReferenceStatus, TextSource
 from intelligence.document.extraction.analytes import RawExtraction
 from intelligence.document.provenance import build_provenance
 from intelligence.document.validation import validate_value
-from intelligence.findings.contracts import Confidence, EvidenceTemporality
+from intelligence.findings.contracts import Confidence
 from intelligence.findings.engine import detect
 from intelligence.findings.history import (
     MIN_OBSERVATIONS_FOR_A_DIRECTION,
@@ -246,19 +246,33 @@ def test_a_result_with_no_range_is_counted_as_not_contributing():
     assert series.count == 2
 
 
-# --- what the assembled set declares it holds -----------------------
-def test_one_report_declares_only_a_single_report_timeline():
-    history = build_history(_snapshots("eGFR", "mL/min/1.73m2", "> 60", [52.0]))
-    evidence = history.evidence
-    assert evidence.supports(EvidenceTemporality.SINGLE_REPORT)
-    assert not evidence.supports(EvidenceTemporality.HISTORICAL)
+# --- what the assembled set can be shown to hold --------------------
+def test_the_timeline_is_derived_from_the_data_not_declared():
+    """An evidence set cannot claim a timeline it does not hold, because there
+    is nowhere to write the claim - the requirements are evaluated against the
+    series that are actually there."""
+    from intelligence.findings.temporal import (
+        Subject,
+        TemporalContract,
+        TemporalRequirement,
+    )
 
+    contract = TemporalContract(
+        requirements=frozenset({
+            TemporalRequirement.REPEATED_MEASUREMENTS,
+            TemporalRequirement.TIME_WINDOW,
+        }),
+        subjects=(Subject("egfr", "", "x"),),
+        minimum_observations=2,
+        minimum_window_days=90,
+        rationale="a fixture.",
+    )
+    one = build_history(_snapshots("eGFR", "mL/min/1.73m2", "> 60", [52.0]))
+    assert one.evidence.unmet_temporal_requirements(contract)
 
-def test_several_reports_declare_the_timeline_they_actually_carry():
-    evidence = _egfr([92.0, 84.0, 71.0]).evidence
-    for temporality in EvidenceTemporality:
-        assert evidence.supports(temporality), temporality
-    assert evidence.observation_window_days == 240.0
+    several = _egfr([92.0, 84.0, 71.0]).evidence
+    assert several.unmet_temporal_requirements(contract) == []
+    assert several.observation_window_days == 240.0
 
 
 def test_the_latest_report_supplies_the_measurements_detectors_read():
@@ -298,7 +312,9 @@ def test_a_new_abnormality_across_a_long_window_is_not_chronic():
     separates chronic kidney disease from an acute injury."""
     finding = _ckd([92.0, 88.0, 46.0])
     assert finding.confidence is Confidence.INSUFFICIENT
-    assert any("new rather than persistent" in m
+    assert any("not shown to be sustained" in m
+               for m in finding.evidence_missing)
+    assert any("long observation window is not the same" in m
                for m in finding.evidence_missing)
 
 
@@ -315,7 +331,8 @@ def test_an_abnormality_that_recovered_is_not_chronic_either():
 def test_a_sustained_abnormality_over_too_short_a_window_is_not_chronic():
     finding = _ckd([52.0, 49.0, 46.0], every_days=20)
     assert finding.confidence is Confidence.INSUFFICIENT
-    assert any("further" in m and "days" in m for m in finding.evidence_missing)
+    assert any("spanning 90 days are needed; these span 40" in m
+               for m in finding.evidence_missing)
 
 
 @pytest.mark.parametrize("values", [

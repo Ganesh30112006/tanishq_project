@@ -15,11 +15,16 @@ useful. The people it was wrong about would be told they had a lifelong
 condition on the basis of a bad week, and nothing in the output would have
 distinguished them from the people it was right about.
 
-So this contract declares ``EvidenceTemporality.HISTORICAL`` and names what it
-needs. Until the evidence set actually carries ninety days, the engine will
-not let it assert anything, and the result says exactly which repeat is
-missing. Today that is every call. That is the correct answer, not a
-limitation to be worked around.
+So the contract declares what it needs about time - repeated measurements, a
+ninety-day window, ordered dates, and the abnormality itself present at both
+ends - and the engine evaluates that before letting the detector assert
+anything. The detector below does not check the timeline at all. It used to,
+and that was the problem: the check would have had to be rewritten, correctly,
+by every future detector with a chronicity criterion in its name.
+
+The distinction the contract holds is the one that is easiest to lose:
+*longitudinal data is not a persistent abnormality*. A patient whose eGFR was
+92 a year ago and is 58 today has a year of data and a new abnormality.
 """
 from __future__ import annotations
 
@@ -33,13 +38,23 @@ from intelligence.findings.contracts import (
     EvidenceLevel,
     EvidenceRef,
     EvidenceRequirement,
-    EvidenceTemporality,
     Finding,
 )
 from intelligence.findings.evidence import EvidenceSet
+from intelligence.findings.temporal import (
+    Subject,
+    TemporalContract,
+    TemporalRequirement,
+)
 
 #: KDIGO's chronicity criterion, in days.
 CHRONICITY_DAYS = 90
+
+#: Which analyte carries each entry criterion, for the caveats below.
+_ANALYTE_FOR = {
+    "REDUCED_EGFR_PATTERN": "egfr",
+    "ALBUMINURIA_PATTERN": "urine_albumin_creatinine_ratio",
+}
 
 CONTRACT = EvidenceContract(
     code="POSSIBLE_CHRONIC_KIDNEY_DISEASE",
@@ -92,12 +107,28 @@ CONTRACT = EvidenceContract(
         "this system actually receives has never been measured, and no "
         "gold-standard annotated set exists yet."
     ),
-    temporality=EvidenceTemporality.HISTORICAL,
-    temporality_requirement=(
-        f"The same abnormality must be shown to have been present at least "
-        f"{CHRONICITY_DAYS} days earlier. A single report cannot distinguish "
-        f"chronic kidney disease from a temporary fall in kidney function, "
-        f"and the two are managed completely differently."
+    temporal=TemporalContract(
+        requirements=frozenset({
+            TemporalRequirement.REPEATED_MEASUREMENTS,
+            TemporalRequirement.TIME_WINDOW,
+            TemporalRequirement.PERSISTENT_ABNORMALITY,
+            TemporalRequirement.ORDERED_SEQUENCE,
+        }),
+        subjects=(
+            Subject("egfr", "below",
+                    "a reduced filtration rate must be shown to have lasted"),
+            Subject("urine_albumin_creatinine_ratio", "above",
+                    "albuminuria must be shown to have lasted"),
+        ),
+        minimum_observations=2,
+        minimum_window_days=CHRONICITY_DAYS,
+        subject_mode="any",
+        rationale=(
+            "KDIGO defines chronic kidney disease as an abnormality present "
+            "for more than three months. A single report cannot distinguish "
+            "it from a temporary fall in kidney function, and the two are "
+            "managed completely differently."
+        ),
     ),
     exclusion_rules=(
         "Acute kidney injury produces the same numbers and recovers. "
@@ -143,61 +174,21 @@ class ChronicKidneyDiseaseDetector:
         if creatinine is not None:
             used.append(creatinine.to_ref())
 
-        if not evidence.supports(self.contract.temporality):
-            # The engine enforces this too. Answering it here as well means the
-            # result names the specific repeat that is missing rather than a
-            # generic requirement.
-            return build_finding(
-                self.contract,
-                confidence=Confidence.INSUFFICIENT,
-                evidence_used=used,
-                evidence_missing=[
-                    f"the same abnormality on a report at least "
-                    f"{CHRONICITY_DAYS} days earlier",
-                ],
-                caveats=[
-                    "This is one report. It shows reduced kidney function "
-                    "today, which is not the same as chronic kidney disease "
-                    "and is managed differently.",
-                ],
-            )
-
-        window = evidence.observation_window_days
-        if window is not None and window < CHRONICITY_DAYS:
-            return build_finding(
-                self.contract,
-                confidence=Confidence.INSUFFICIENT,
-                evidence_used=used,
-                evidence_missing=[
-                    f"a further {CHRONICITY_DAYS - window:.0f} days of "
-                    f"observation",
-                ],
-            )
-
-        # The window being long enough is not the question. The question is
-        # whether *this* abnormality was there at both ends of it: a patient
-        # with two years of normal results and one bad one today has a long
-        # history and no chronic disease.
-        persistent, persistence_caveats, still_missing = self._persistence(
-            evidence, entry_criteria
-        )
-        if not persistent:
-            return build_finding(
-                self.contract,
-                confidence=Confidence.INSUFFICIENT,
-                evidence_used=used,
-                evidence_missing=still_missing,
-                caveats=persistence_caveats,
-            )
-
         both = len(entry_criteria) == 2
         caveats = [
             "Present on both entry criteria." if both
             else f"Present on one entry criterion: {entry_criteria[0]}.",
-            *persistence_caveats,
             "Acute-on-chronic kidney disease produces the same picture and "
             "cannot be excluded from laboratory reports alone.",
         ]
+        for code in entry_criteria:
+            series = evidence.series_for(_ANALYTE_FOR[code])
+            if series is not None and series.count >= 2:
+                caveats.append(
+                    f"{series.analyte} was already outside its range "
+                    f"{series.span_days} days ago: {series.describe()}."
+                )
+                caveats.extend(series.caveats)
         if not both:
             caveats.append(
                 "Staging needs both an eGFR and an albumin-to-creatinine "
@@ -210,68 +201,6 @@ class ChronicKidneyDiseaseDetector:
             caveats=caveats,
         )
 
-    def _persistence(
-        self, evidence: EvidenceSet, entry_criteria: list[str]
-    ) -> tuple[bool, list[str], list[str]]:
-        """Was the abnormality there at both ends of the observed window?"""
-        from intelligence.document.contracts import ReferenceStatus
-        from intelligence.findings.history import Persistence
-
-        wanted = {
-            "REDUCED_EGFR_PATTERN": ("egfr", ReferenceStatus.BELOW),
-            "ALBUMINURIA_PATTERN": (
-                "urine_albumin_creatinine_ratio", ReferenceStatus.ABOVE,
-            ),
-        }
-        caveats: list[str] = []
-        missing: list[str] = []
-        persistent = False
-
-        for code in entry_criteria:
-            analyte, direction = wanted[code]
-            series = evidence.series_for(analyte)
-            if series is None or series.count < 2:
-                missing.append(
-                    f"an earlier {analyte} to compare today's against"
-                )
-                continue
-
-            caveats.extend(series.caveats)
-            if series.span_days < CHRONICITY_DAYS:
-                missing.append(
-                    f"{analyte} results spanning {CHRONICITY_DAYS} days; these "
-                    f"span {series.span_days}"
-                )
-                continue
-
-            if series.abnormal_in_direction(direction):
-                persistent = True
-                caveats.append(
-                    f"{analyte} was already outside its range "
-                    f"{series.span_days} days ago: {series.describe()}."
-                )
-            elif series.persistence is Persistence.NEW:
-                missing.append(
-                    f"{analyte} was inside its range at the start of this "
-                    f"window, so today's result is new rather than persistent"
-                )
-            elif series.persistence is Persistence.TRANSIENT:
-                missing.append(
-                    f"{analyte} returned to its range during this window, so "
-                    f"the abnormality was not sustained"
-                )
-
-        if not persistent and not missing:
-            missing.append(
-                "evidence that the abnormality itself persisted, rather than "
-                "that a long period was observed"
-            )
-        if not persistent:
-            caveats.append(
-                "A long observation window is not the same as a sustained "
-                "abnormality."
-            )
-        return persistent, caveats, missing
 
 
 CHRONIC_KIDNEY_DISEASE = ChronicKidneyDiseaseDetector()
