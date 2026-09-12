@@ -193,7 +193,7 @@ conservative**:
 | | |
 |---|---|
 | `off` | **the default.** Not called. Behaviour is unchanged until someone deliberately turns it on, and an unrecognised value falls back here so a typo cannot enable a clinical path |
-| `shadow` | called; what it said goes into the audit trail; the outcome is untouched. Run this first — it produces the comparison that would justify going further |
+| `shadow` | called; what it said goes into the audit trail, and every disagreement with the existing reader is kept in `reports_reader_disagreement` with the line that caused it. The outcome is untouched. Run this first — it produces the comparison that would justify going further |
 | `advisory` | called; may hold a report that would otherwise finalize |
 
 **Nothing it returns is ever persisted as a clinical value**, in any mode. It

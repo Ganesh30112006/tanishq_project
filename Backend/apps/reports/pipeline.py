@@ -33,7 +33,7 @@ from apps.common.services import BaseService, ServiceResult
 from apps.common.units import convert
 from apps.medical_records.models import Provenance
 from apps.reconciliation.services import ReconciliationService
-from apps.reports import second_reader
+from apps.reports import reader_comparison, second_reader
 from apps.reports.extraction import extract_text
 from apps.reports.models import Report, ReportSection, ReportTest
 from apps.reports.ocr import read_report_bytes
@@ -116,6 +116,7 @@ class ReportPipeline(BaseService):
         # be held, and a report it would hold can never be finalized. Nothing
         # the service returns is persisted as a clinical value.
         opinion = self._second_opinion(report)
+        self._record_comparison(report, opinion, tests, finalizable)
         if finalizable and second_reader.mode() == second_reader.ADVISORY and (
             opinion.holds_report
         ):
@@ -412,6 +413,38 @@ class ReportPipeline(BaseService):
                 unavailable_reason=f"could not read the stored file: {exc}"[:200],
             )
         return second_reader.consult(report, content)
+
+    def _record_comparison(
+        self,
+        report: Report,
+        opinion: second_reader.SecondOpinion,
+        tests: list[ReportTest],
+        finalizable: bool,
+    ) -> None:
+        """Keep the disagreement, not the agreement.
+
+        Written for every report the service was consulted about, in shadow
+        and in advisory mode alike, and recorded against the outcome the
+        existing pipeline reached *before* any second opinion - so an advisory
+        hold does not erase the fact that the two readers differed.
+
+        This is a research record. It is never read by clinical code, and a
+        failure to write it cannot affect the report.
+        """
+        if not opinion.consulted:
+            return
+        try:
+            comparison = reader_comparison.compare(
+                existing_outcome=(
+                    ReportProcessingState.FINALIZED if finalizable
+                    else ReportProcessingState.REVIEW_REQUIRED
+                ),
+                tests=tests,
+                opinion=opinion,
+            )
+            reader_comparison.record(report, comparison, mode=second_reader.mode())
+        except Exception:  # noqa: BLE001 - see the docstring
+            return
 
     def _review(
         self,

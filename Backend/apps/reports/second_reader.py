@@ -71,6 +71,11 @@ class SecondOpinion:
     concerns: list[str] = field(default_factory=list)
     #: Why no opinion was formed, when that is the case.
     unavailable_reason: str = ""
+    #: The values the service read, exactly as it sent them. Held for the
+    #: shadow comparison and deliberately kept out of the audit metadata: the
+    #: audit trail records that a second reading happened and what it
+    #: concluded, not a second copy of the results.
+    values: list[dict] = field(default_factory=list)
     #: Everything worth putting in the audit record.
     detail: dict = field(default_factory=dict)
 
@@ -163,6 +168,7 @@ def _read(result) -> SecondOpinion:
             f"{status.lower()} on second reading: {', '.join(sorted(set(analytes)))}"
         )
 
+    opinion.values = list(result.values)
     opinion.detail = {
         "values_read": len(result.values),
         "values_persistable": sum(

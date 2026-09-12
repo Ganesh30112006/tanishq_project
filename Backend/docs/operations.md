@@ -193,9 +193,48 @@ so a typo cannot enable a clinical path.
 
 **Run `shadow` first.** It costs one service call per report and produces the
 only thing that could justify `advisory`: a record of where the two readers
-disagreed, on real reports, before anything acts on it. Query the audit trail
-for `second_reader.concerns` on reports that finalized — those are the cases
-`advisory` would have held.
+disagreed, on real reports, before anything acts on it.
+
+That record is written for every report the service is consulted about, in
+`shadow` and `advisory` alike, and is kept against the outcome the existing
+pipeline reached *before* any second opinion - so an advisory hold does not
+erase the fact that the two readers differed.
+
+```
+python manage.py shadow_disagreements                    # the summary
+python manage.py shadow_disagreements --unclassified     # what needs a person
+python manage.py shadow_disagreements --kind VALUE_DIFFERS
+python manage.py shadow_disagreements --classify <id> --as PARSER_ERROR     --by "dr-mehta" --note "the second reader took the next row's unit"
+```
+
+The summary counts kinds of disagreement, not agreement. Two readers can agree
+and both be wrong, so an agreement percentage says how similar they are, not
+whether either is right; it is printed at the bottom, labelled as such. What is
+worth watching:
+
+| Count | What it means |
+|---|---|
+| unsafe disagreements | both readers produced a number they stand behind, and the numbers differ. One is wrong and nothing in the outputs says which |
+| safe abstentions | the second reader read the line and would not stand behind it. Safe by construction: an abstention can only hold a report |
+| newly detected evidence | results only the second reader found. Candidates for a real gain *and* candidates for fabrication - the document decides |
+| missed evidence | results only the existing pipeline found |
+| conflict detection | the same analyte printed twice with results that disagree after conversion |
+| routing differs | one reader would have held the report and the other would not |
+
+**Fabrications cannot be counted here**, and the command says so rather than
+producing a number. A fabrication is a value the report does not support, and
+neither reader knows what the report says. That is what the extraction
+benchmark measures; this table only shows where to look.
+
+**Nothing is classified automatically.** Which reader was wrong needs the
+document, so the machine fills in only the three classes that follow from the
+responses themselves - `SAFE_ABSTENTION`, `CONFLICT_DETECTION`, `OCR_FAILURE` -
+and leaves the rest `UNKNOWN`. A ruling requires a named reviewer and a written
+reason: the counts are already known, and the reason is the only part that says
+what to change.
+
+The comparison is a research record. No clinical code reads it, a test enforces
+that, and a failure to write it cannot affect the report.
 
 Nothing the service returns is persisted as a clinical value in any mode, and a
 service failure is always "no opinion" rather than a blocked report. The mode
