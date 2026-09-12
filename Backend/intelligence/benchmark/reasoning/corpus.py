@@ -12,6 +12,7 @@ The file format is one JSON document per corpus::
       "corpus_id": "...",
       "description": "...",
       "schema_version": "benchmark-annotation-1",
+      "spec_version": "caresense-annotation-spec-1",
       "items": [
         {
           "report_id": "...", "report_type": "CBC", "source_sha256": "...",
@@ -39,6 +40,7 @@ from intelligence.benchmark.reasoning.schema import (
     FindingAnnotation,
     ReportAnnotation,
 )
+from intelligence.benchmark.spec import ANNOTATION_SPEC_VERSION
 
 
 class CorpusError(ValueError):
@@ -98,6 +100,7 @@ def _annotation(raw: dict, *, where: str) -> ReportAnnotation:
             supporting_evidence=tuple(raw.get("supporting_evidence", ())),
             missing_evidence=tuple(raw.get("missing_evidence", ())),
             schema_version=raw.get("schema_version", ANNOTATION_SCHEMA_VERSION),
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
             note=raw.get("note", ""),
         )
     except CorpusError:
@@ -118,6 +121,7 @@ def _adjudication(raw: dict | None, *, where: str) -> Adjudication | None:
                 _condition(c, where=where) for c in raw.get("conditions", ())
             ),
             disagreement_reason=raw.get("disagreement_reason", ""),
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
         )
     except CorpusError:
         raise
@@ -164,6 +168,7 @@ def load(path: str | Path) -> Corpus:
             description=raw.get("description", ""),
             items=[_item(item) for item in raw.get("items", [])],
             schema_version=version,
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
         )
     except CorpusError:
         raise

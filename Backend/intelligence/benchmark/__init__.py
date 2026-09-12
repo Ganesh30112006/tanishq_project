@@ -28,6 +28,7 @@ meaningful, so the extraction corpus does not need clinician time.
 
     extraction/   schema, loader, scoring for the reading layer
     reasoning/    schema, loader, scoring for the clinical layer
+    spec          the frozen definitions every label in both corpora means
     adjudication  several annotators -> the one label a score needs (shared)
     statistics    proportions with intervals that behave at the extremes
     promotion     the two gates, written before there was data to run
@@ -57,23 +58,37 @@ from intelligence.benchmark.promotion import (
     evaluate_extraction,
     readiness,
 )
+from intelligence.benchmark.spec import (
+    ANNOTATION_SPEC_VERSION,
+    DEFINITIONS,
+    Definition,
+    check_frozen,
+    definition,
+    fingerprint,
+)
 from intelligence.benchmark.statistics import CONFIDENCE_LEVEL, wilson_interval
 
 __all__ = [
+    "ANNOTATION_SPEC_VERSION",
     "CONFIDENCE_LEVEL",
+    "DEFINITIONS",
     "MAX_FABRICATIONS",
     "MIN_CORPUS_REPORTS",
     "MIN_EXTRACTION_DOCUMENTS",
     "MIN_NEGATIVE_EVENTS",
     "MIN_POSITIVE_EVENTS",
     "Decision",
+    "Definition",
     "LabelSource",
     "PromotionDecision",
     "Resolution",
+    "check_frozen",
+    "definition",
     "evaluate",
     "evaluate_all",
     "evaluate_extraction",
     "extraction",
+    "fingerprint",
     "readiness",
     "reasoning",
     "resolve",

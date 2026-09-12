@@ -108,10 +108,38 @@ corpus. It is where the cases the rules get wrong describe themselves: a
 haemolysed sample, a patient who had been fasting, a laboratory whose ALP
 range is set for adolescents.
 
+## Before anything is labelled: the specification is frozen
+
+`docs/annotation-spec.md` defines every label in both corpora - what counts as
+OBSERVED, what counts as a FABRICATION, what separates AMBIGUOUS from
+NEEDS_REVIEW, what supporting and missing evidence mean, and how a
+disagreement is adjudicated. Every annotator reads it before their first
+report.
+
+It is frozen deliberately, and the freeze is enforced rather than promised:
+
+- the definitions live in `intelligence/benchmark/spec.py`, and the handbook is
+  **generated** from them (`python -m intelligence.benchmark --write-handbook`),
+  so the document annotators read cannot drift from the meanings the scorer
+  applies;
+- a fingerprint over the definitions is recorded in the code, and a test fails
+  if they change without it;
+- every annotation carries the `spec_version` it was made under, and
+  annotations made under different versions are refused rather than pooled.
+
+The failure this prevents is invisible in the data. If what AMBIGUOUS means
+shifts halfway through collection, the corpus does not look wrong - it looks
+like annotators who disagree more than expected, or like a parser that performs
+worse on the reports labelled later. Changing a definition is allowed; doing it
+quietly is not.
+
 ## How either corpus is built
 
 The procedure is the same for both; only who annotates differs.
 
+0. **Read the annotation specification.** All of it, once, before the first
+   report. A case it does not cover goes in the note field and is raised - it
+   is not settled by the annotator alone.
 1. **Sample reports the way they actually arrive.** Photographs and scans as
    well as clean PDFs, across the laboratories the system really sees. A corpus
    of tidy machine-generated PDFs measures a system nobody is using.

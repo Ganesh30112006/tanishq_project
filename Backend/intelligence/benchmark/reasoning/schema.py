@@ -32,6 +32,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 
+from intelligence.benchmark.spec import (
+    ANNOTATION_SPEC_VERSION,
+    require_spec_version,
+)
+
 #: Bump when the questions change. A corpus records which version it was
 #: annotated under, and sets annotated under different versions are not pooled.
 ANNOTATION_SCHEMA_VERSION = "benchmark-annotation-1"
@@ -125,7 +130,13 @@ class ReportAnnotation:
     supporting_evidence: tuple[str, ...] = ()
     #: What the annotator wanted and the report did not have.
     missing_evidence: tuple[str, ...] = ()
+    #: The shape of this record. Bumped when the questions change.
     schema_version: str = ANNOTATION_SCHEMA_VERSION
+    #: The *meanings* the clinician was working to - see
+    #: :mod:`intelligence.benchmark.spec`. Separate from the schema version
+    #: because the questions can stay identical while what counts as
+    #: CANNOT_DETERMINE moves underneath them.
+    spec_version: str = ANNOTATION_SPEC_VERSION
     note: str = ""
 
     def __post_init__(self) -> None:
@@ -137,6 +148,7 @@ class ReportAnnotation:
                 f"code speaks {ANNOTATION_SCHEMA_VERSION}. Sets annotated under "
                 f"different question sets are not pooled."
             )
+        require_spec_version(self.spec_version, where=self.report_id)
         self._check("finding", self.applicable_finding_codes,
                     [f.code for f in self.findings])
         self._check("condition", self.applicable_condition_codes,
@@ -174,6 +186,7 @@ class Adjudication:
     adjudicated_on: date
     findings: tuple[FindingAnnotation, ...] = ()
     conditions: tuple[ConditionAnnotation, ...] = ()
+    spec_version: str = ANNOTATION_SPEC_VERSION
     #: Why they disagreed. This is the most valuable free text in the corpus:
     #: it is where the cases the rules get wrong describe themselves.
     disagreement_reason: str = ""
@@ -181,6 +194,9 @@ class Adjudication:
     def __post_init__(self) -> None:
         if not self.adjudicator_id:
             raise ValueError("an adjudication needs a named adjudicator")
+        require_spec_version(
+            self.spec_version, where=f"adjudication by {self.adjudicator_id}"
+        )
         if not self.findings and not self.conditions:
             raise ValueError("an adjudication that rules on nothing is not one")
         if not self.disagreement_reason.strip():
@@ -253,8 +269,10 @@ class Corpus:
     items: list[BenchmarkItem] = field(default_factory=list)
     description: str = ""
     schema_version: str = ANNOTATION_SCHEMA_VERSION
+    spec_version: str = ANNOTATION_SPEC_VERSION
 
     def __post_init__(self) -> None:
+        require_spec_version(self.spec_version, where=self.corpus_id)
         seen = [item.report_id for item in self.items]
         if len(set(seen)) != len(seen):
             raise ValueError(f"{self.corpus_id}: a report id appears twice")

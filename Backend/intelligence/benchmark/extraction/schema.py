@@ -28,6 +28,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from intelligence.benchmark.spec import (
+    ANNOTATION_SPEC_VERSION,
+    require_spec_version,
+)
+
 #: Bump when the fields change. A corpus records which version it used, and
 #: sets annotated under different versions are not pooled.
 EXTRACTION_SCHEMA_VERSION = "benchmark-extraction-1"
@@ -109,7 +114,13 @@ class DocumentAnnotation:
     #: False when the document cannot be read at all - too dark, too skewed,
     #: a photograph of the wrong page. The parser is expected to say so too.
     readable: bool = True
+    #: The shape of this record. Bumped when fields are added or removed.
     schema_version: str = EXTRACTION_SCHEMA_VERSION
+    #: The *meanings* the annotator was working to - see
+    #: :mod:`intelligence.benchmark.spec`. Separate from the schema version
+    #: because the fields can stay identical while what OBSERVED means moves
+    #: underneath them, and that is the change that silently corrupts a corpus.
+    spec_version: str = ANNOTATION_SPEC_VERSION
     note: str = ""
 
     def __post_init__(self) -> None:
@@ -120,6 +131,7 @@ class DocumentAnnotation:
                 f"{self.document_id}: annotated under {self.schema_version}, "
                 f"this code speaks {EXTRACTION_SCHEMA_VERSION}"
             )
+        require_spec_version(self.spec_version, where=self.document_id)
         keys = [f.key for f in self.fields]
         if len(set(keys)) != len(keys):
             raise ValueError(
@@ -155,10 +167,14 @@ class ExtractionAdjudication:
     document_type: str = ""
     fields: tuple[FieldAnnotation, ...] = ()
     disagreement_reason: str = ""
+    spec_version: str = ANNOTATION_SPEC_VERSION
 
     def __post_init__(self) -> None:
         if not self.adjudicator_id:
             raise ValueError("an adjudication needs a named adjudicator")
+        require_spec_version(
+            self.spec_version, where=f"adjudication by {self.adjudicator_id}"
+        )
         if not self.fields and not self.document_type:
             raise ValueError("an adjudication that rules on nothing is not one")
         if not self.disagreement_reason.strip():
@@ -215,8 +231,10 @@ class ExtractionCorpus:
     items: list[ExtractionItem] = field(default_factory=list)
     description: str = ""
     schema_version: str = EXTRACTION_SCHEMA_VERSION
+    spec_version: str = ANNOTATION_SPEC_VERSION
 
     def __post_init__(self) -> None:
+        require_spec_version(self.spec_version, where=self.corpus_id)
         seen = [item.document_id for item in self.items]
         if len(set(seen)) != len(seen):
             raise ValueError(f"{self.corpus_id}: a document id appears twice")

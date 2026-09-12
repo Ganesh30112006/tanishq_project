@@ -1,6 +1,7 @@
 """Report how far off each benchmark is, layer by layer.
 
     python -m intelligence.benchmark
+    python -m intelligence.benchmark --write-handbook
     python -m intelligence.benchmark --extraction-corpus extraction.json
     python -m intelligence.benchmark --reasoning-corpus reports.json \
         --outputs system.json --json scores.json
@@ -133,7 +134,22 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON mapping document id -> [system value, ...] from a prior run.",
     )
     parser.add_argument("--json", type=Path, default=None, dest="json_out")
+    parser.add_argument(
+        "--write-handbook", action="store_true",
+        help="regenerate docs/annotation-spec.md from the frozen definitions "
+             "and exit. The handbook is generated rather than maintained, so "
+             "it cannot drift from the meanings the scorer enforces.",
+    )
     args = parser.parse_args(argv)
+
+    if args.write_handbook:
+        from intelligence.benchmark import spec
+
+        target = spec.write_handbook()
+        print(f"wrote {target}")
+        print(f"version     {spec.ANNOTATION_SPEC_VERSION}")
+        print(f"fingerprint {spec.fingerprint()}")
+        return 0
 
     extraction_result = None
     reasoning_result = None

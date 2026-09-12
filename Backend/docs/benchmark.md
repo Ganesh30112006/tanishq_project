@@ -124,6 +124,33 @@ code. Never a scoring category — a defect report. Either the annotation is
 incomplete or the detector is firing where it has no business, and both need a
 person. Any at all block promotion.
 
+## The definitions are frozen before collection starts
+
+Two annotators can answer the same questions and produce incompatible data,
+because they did not mean the same thing by AMBIGUOUS. That failure never looks
+like a data error - it looks like annotator disagreement, or like a detector
+that does worse on the half of the corpus labelled later.
+
+So the meanings are fixed first, in `intelligence/benchmark/spec.py`, and
+`docs/annotation-spec.md` - the handbook every annotator reads - is generated
+from them. Three mechanisms keep them fixed:
+
+| Mechanism | What it stops |
+|---|---|
+| `FROZEN_FINGERPRINT`, checked by a test | a definition changing without anyone deciding to change it |
+| the handbook is generated, never edited | the document annotators read drifting from the rules the scorer applies |
+| `spec_version` on every annotation, refused when it differs | labels that mean different things being pooled into one score |
+
+A change is not forbidden, it is loud: the fingerprint fails, and if the
+wording could alter a label already given, `ANNOTATION_SPEC_VERSION` is bumped
+and the affected items are re-annotated. Reports labelled under the old version
+are not scored with the new ones.
+
+The specification also covers every answer either benchmark can record - not
+only the terms above but `PRESENT`, `ABSENT`, `SUPPORTED`, `NOT_SUPPORTED`,
+`SUFFICIENT`, `INSUFFICIENT` and `CANNOT_DETERMINE`. A test cross-checks the
+enums against it, so a new answer option cannot reach an annotator undefined.
+
 ## Resolving several readers into one label
 
 | | |
@@ -198,6 +225,7 @@ dossier, where approval requires a human to acknowledge each open question.
 
 ```
 python -m intelligence.benchmark
+python -m intelligence.benchmark --write-handbook
 python -m intelligence.benchmark --extraction-corpus extraction.json \
     --extraction-outputs parsed.json
 python -m intelligence.benchmark --reasoning-corpus reports.json \

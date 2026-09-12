@@ -21,6 +21,7 @@ from intelligence.benchmark.extraction.schema import (
     FieldAnnotation,
 )
 from intelligence.benchmark.extraction.scoring import SystemValue
+from intelligence.benchmark.spec import ANNOTATION_SPEC_VERSION
 
 
 class CorpusError(ValueError):
@@ -62,6 +63,7 @@ def _annotation(raw: dict, *, where: str) -> DocumentAnnotation:
             fields=tuple(_field(f, where=where) for f in raw.get("fields", ())),
             readable=bool(raw.get("readable", True)),
             schema_version=raw.get("schema_version", EXTRACTION_SCHEMA_VERSION),
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
             note=raw.get("note", ""),
         )
     except CorpusError:
@@ -80,6 +82,7 @@ def _adjudication(raw: dict | None, *, where: str) -> ExtractionAdjudication | N
             document_type=raw.get("document_type", ""),
             fields=tuple(_field(f, where=where) for f in raw.get("fields", ())),
             disagreement_reason=raw.get("disagreement_reason", ""),
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
         )
     except CorpusError:
         raise
@@ -125,6 +128,7 @@ def load(path: str | Path) -> ExtractionCorpus:
             description=raw.get("description", ""),
             items=[_item(item) for item in raw.get("items", [])],
             schema_version=version,
+            spec_version=raw.get("spec_version", ANNOTATION_SPEC_VERSION),
         )
     except CorpusError:
         raise
