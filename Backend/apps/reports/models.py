@@ -222,6 +222,17 @@ class ReaderComparison(UUIDTimeStampedModel):
     #: readers will differ.
     text_source = models.CharField(max_length=32, blank=True)
 
+    #: Why the second reader would not name the report type, as one of its
+    #: machine-readable codes: no_recognised_keywords, below_minimum_score,
+    #: classification_margin_not_met, too_little_text. Empty when it did.
+    classification_reason = models.CharField(max_length=40, blank=True)
+    #: Results it could see on a document it would not classify, and so did
+    #: not extract. A count, never the values. This is the price of abstaining,
+    #: and it has to be measured rather than assumed - a policy that sends
+    #: every multi-panel report to a person is only safe if such reports are
+    #: rare, and nobody knows yet whether they are.
+    values_forgone = models.PositiveIntegerField(default=0)
+
     existing_value_count = models.PositiveIntegerField(default=0)
     second_value_count = models.PositiveIntegerField(default=0)
     #: True when the readers produced the same values and the same routing.
@@ -235,6 +246,7 @@ class ReaderComparison(UUIDTimeStampedModel):
             models.Index(fields=["mode", "agreed"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["report_class", "text_source"]),
+            models.Index(fields=["classification_reason"]),
         ]
 
     def __str__(self) -> str:

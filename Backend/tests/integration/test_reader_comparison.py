@@ -598,3 +598,87 @@ class TestTheUnsafeRate:
             _opinion([_their_value("glucose", 5.4, "mmol/L")]),
         ))
         assert "not yet stable" in self._run()
+
+
+# --- what abstaining costs -------------------------------------------
+class TestTheCostOfAbstaining:
+    """Extraction is schema-driven, so a document the reader will not name
+    yields nothing. Safe, and not free: the price is recorded per report so it
+    can be measured against the risk of guessing, rather than assumed either
+    way."""
+
+    def _opinion_that_abstained(self, forgone):
+        opinion = SecondOpinion(
+            consulted=True, available=True, disposition="NEEDS_REVIEW",
+            report_type="",
+        )
+        opinion.detail = {
+            "classification_reason": "classification_margin_not_met",
+            "values_forgone": forgone,
+            "text_source": "EMBEDDED_TEXT_LAYER",
+        }
+        return opinion
+
+    def test_the_reason_and_the_count_are_both_recorded(
+        self, make_patient, make_user
+    ):
+        report = _upload(make_patient(), make_user())
+        comparison = reader_comparison.compare(
+            existing_outcome=ReportProcessingState.FINALIZED,
+            tests=[],
+            opinion=self._opinion_that_abstained(8),
+        )
+        row = reader_comparison.record(
+            Report.objects.get(pk=report.pk), comparison,
+            mode=second_reader.SHADOW,
+        )
+        row.refresh_from_db()
+        assert row.classification_reason == "classification_margin_not_met"
+        assert row.values_forgone == 8
+
+    def test_a_classified_report_records_no_abstention_reason(self):
+        comparison = reader_comparison.compare(
+            existing_outcome=ReportProcessingState.FINALIZED,
+            tests=[],
+            opinion=_opinion([_their_value("glucose", 5.4, "mmol/L")]),
+        )
+        assert comparison.classification_reason == ""
+        assert comparison.values_forgone == 0
+
+    def test_the_summary_reports_the_cost(self, make_patient, make_user):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        report = _upload(make_patient(), make_user())
+        comparison = reader_comparison.compare(
+            existing_outcome=ReportProcessingState.FINALIZED,
+            tests=[],
+            opinion=self._opinion_that_abstained(8),
+        )
+        reader_comparison.record(
+            Report.objects.get(pk=report.pk), comparison,
+            mode=second_reader.SHADOW,
+        )
+        out = StringIO()
+        call_command("shadow_disagreements", stdout=out)
+        output = out.getvalue()
+        assert "classification_margin_not_met" in output
+        assert "values forgone            8" in output
+
+    def test_an_older_service_that_sends_neither_field_is_not_an_error(self):
+        """The two processes deploy separately. A response predating a field
+        is a version difference, not a fault."""
+
+        class OldResult:
+            disposition = "EXTRACTED"
+            issues: list = []
+            values: list = []
+            report_type = "GLUCOSE"
+            completeness = {"outcome": "COMPLETE"}
+            text_source = "EMBEDDED_TEXT_LAYER"
+
+        opinion = second_reader._read(OldResult())
+        assert opinion.available
+        assert opinion.detail["classification_reason"] == ""
+        assert opinion.detail["values_forgone"] == 0

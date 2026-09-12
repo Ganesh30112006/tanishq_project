@@ -233,6 +233,12 @@ and leaves the rest `UNKNOWN`. A ruling requires a named reviewer and a written
 reason: the counts are already known, and the reason is the only part that says
 what to change.
 
+The summary also reports how often the second reader would not name a document
+and what that cost: extraction is schema-driven, so an abstention yields no
+values at all. Routing consumes the machine-readable reason codes
+(`no_recognised_keywords`, `below_minimum_score`, `classification_margin_not_met`,
+`too_little_text`), never the prose beside them.
+
 `--coverage` shows which kinds of document the pilot has actually seen, and
 marks the ones it has not. A pilot made entirely of clean PDFs from one
 laboratory looks complete and is not.

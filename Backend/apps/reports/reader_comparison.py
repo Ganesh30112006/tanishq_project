@@ -88,6 +88,8 @@ class Comparison:
     existing_outcome: str
     report_class: str = ""
     text_source: str = ""
+    classification_reason: str = ""
+    values_forgone: int = 0
     second_disposition: str = ""
     second_available: bool = False
     unavailable_reason: str = ""
@@ -111,6 +113,10 @@ def compare(*, existing_outcome: str, tests, opinion, report_class: str = "") ->
         existing_outcome=existing_outcome,
         report_class=report_class,
         text_source=str(opinion.detail.get("text_source") or ""),
+        classification_reason=str(
+            opinion.detail.get("classification_reason") or ""
+        ),
+        values_forgone=int(opinion.detail.get("values_forgone") or 0),
         second_disposition=opinion.disposition,
         second_available=opinion.available,
         unavailable_reason=opinion.unavailable_reason,
@@ -300,6 +306,8 @@ def record(report, comparison: Comparison, *, mode: str) -> ReaderComparison | N
             existing_outcome=comparison.existing_outcome,
             report_class=comparison.report_class[:20],
             text_source=comparison.text_source[:32],
+            classification_reason=comparison.classification_reason[:40],
+            values_forgone=comparison.values_forgone,
             second_disposition=comparison.second_disposition,
             second_available=comparison.second_available,
             unavailable_reason=comparison.unavailable_reason[:200],

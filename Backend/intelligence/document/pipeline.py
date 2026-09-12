@@ -88,6 +88,17 @@ class DocumentResult:
     report_type: ReportType | None = None
     values: list[ExtractedValueRecord] = field(default_factory=list)
     completeness: CompletenessReport | None = None
+    #: How many results this document appears to hold that were **not**
+    #: extracted, because classification abstained and extraction is
+    #: schema-driven. A count, never the values: nothing that skipped
+    #: classification may cross the boundary as a clinical fact.
+    #:
+    #: It is an upper bound on what was forgone, not a promise. Without a
+    #: schema there are no plausibility bounds and no completeness check, so
+    #: some of these would not have survived either. Recorded so that the cost
+    #: of abstaining can be measured against the risk of guessing, rather than
+    #: assumed either way.
+    values_forgone: int = 0
     issues: list[Issue] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -139,6 +150,31 @@ def _section_for(offset: int, marks: list[tuple[int, str]]) -> str:
     return name
 
 
+def _count_forgone(text: str, ocr_confidence: float | None) -> int:
+    """Count the results an unclassified document appears to hold.
+
+    Extraction here is schema-driven: without a report type there is no schema,
+    so the document goes to a person and yields nothing. That is the safe
+    choice, and it has a price - a multi-panel report the classifier cannot
+    name may carry a dozen results that would have validated perfectly.
+
+    This counts them and throws them away. The number crosses the boundary;
+    the values do not. Knowing how often abstaining costs real evidence is
+    what would justify a second-stage strategy later, and guessing at that
+    prevalence is how unnecessary complexity gets built.
+    """
+    try:
+        return sum(
+            1
+            for raw in extract_raw_values(text)
+            if validate_value(
+                raw, schema=None, ocr_confidence=ocr_confidence
+            ).persists_clinical_value
+        )
+    except Exception:  # noqa: BLE001 - a measurement may never break a document
+        return 0
+
+
 def process_document(
     data: bytes,
     *,
@@ -180,6 +216,9 @@ def process_document(
             Issue("CLASSIFICATION_REVIEW_REQUIRED", "MEDIUM", classification.detail)
         )
         result.notes.append(classification.detail)
+        result.values_forgone = _count_forgone(
+            text, ocr.mean_confidence if ocr else None
+        )
         return result
 
     report_type = classification.report_type

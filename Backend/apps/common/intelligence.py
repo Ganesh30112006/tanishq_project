@@ -65,6 +65,9 @@ class DocumentProcessResult:
     issues: list[dict[str, Any]]
     capabilities: dict[str, Any]
     notes: list[str]
+    #: Results the service says it could see but did not extract, because it
+    #: could not name the report type. A count only.
+    values_forgone: int = 0
 
     @property
     def needs_human_review(self) -> bool:
@@ -192,6 +195,7 @@ class IntelligenceClient:
             issues=data.get("issues", []),
             capabilities=data.get("capabilities", {}),
             notes=data.get("notes", []),
+            values_forgone=int(data.get("values_forgone") or 0),
         )
 
     def document_capabilities(self, *, correlation_id: str) -> dict[str, Any]:

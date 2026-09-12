@@ -135,6 +135,41 @@ examples, not the percentage.
 The goal is not for the two readers to agree. It is that when they disagree,
 the clinical record is never made less safe.
 
+## What abstaining costs
+
+Extraction is schema-driven: a document the classifier will not name yields
+nothing at all, and goes to a person. That is the safe choice and it is not
+free. A multi-panel report that scores exactly twice its runner-up abstains,
+and the results on it - which may validate perfectly - are never produced.
+
+```
+Classification
+reports read              120
+classified                 98
+abstained                  22
+  classification_margin_not_met   14
+  no_recognised_keywords           6
+  too_little_text                  2
+
+values extracted          640
+values forgone             96
+```
+
+`values forgone` counts the results visible on documents the reader would not
+classify. It is an upper bound: without a schema there are no plausibility
+bounds and no completeness check, so some would not have survived anyway. The
+count crosses the boundary; the values never do.
+
+Measure this separately from classifier accuracy. *How often is it wrong* and
+*how much evidence does abstaining forgo* are different questions, with
+different answers and different fixes.
+
+If the forgone share turns out to be large, a second stage becomes worth
+considering - confident classification takes the normal path, ambiguous
+classification gets conservative multi-schema extraction, and only values that
+independently satisfy validation are kept. If ambiguous classification is rare,
+that machinery would be complexity for nothing. The batch decides.
+
 ## Two numbers that will be misread
 
 **A safe abstention is not evidence that the parser is correct.** It

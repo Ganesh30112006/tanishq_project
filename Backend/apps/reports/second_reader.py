@@ -170,6 +170,13 @@ def _read(result) -> SecondOpinion:
 
     opinion.values = list(result.values)
     opinion.detail = {
+        # Read defensively. These two processes are deployed separately, so
+        # a response that predates a field is a version difference, not a
+        # fault - and a second reader that raises on one is not advisory.
+        "classification_reason": (
+            getattr(result, "classification", None) or {}
+        ).get("reason", ""),
+        "values_forgone": getattr(result, "values_forgone", 0) or 0,
         "values_read": len(result.values),
         "values_persistable": sum(
             1 for v in result.values if v.get("persists_clinical_value")

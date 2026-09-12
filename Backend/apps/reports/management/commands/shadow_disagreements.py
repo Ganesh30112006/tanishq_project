@@ -132,6 +132,58 @@ class Command(BaseCommand):
                 "them has not been tested on the reports that matter."
             )
 
+    def _classification(self, comparisons) -> None:
+        """How often the second reader would not name the document, and what
+        that cost.
+
+        Extraction is schema-driven, so a document it will not classify yields
+        nothing at all. That is the safe choice; this is its price. Reported
+        separately from classifier accuracy, because "how often is it wrong"
+        and "how much evidence does abstaining forgo" are different questions
+        with different answers and different fixes.
+        """
+        answered = comparisons.filter(second_available=True)
+        total = answered.count()
+        if not total:
+            return
+
+        abstained = answered.exclude(classification_reason="")
+        classified = total - abstained.count()
+
+        self.stdout.write("")
+        self.stdout.write("Classification")
+        self.stdout.write("=" * 72)
+        self.stdout.write(f"reports read              {total}")
+        self.stdout.write(f"classified                {classified}")
+        self.stdout.write(f"abstained                 {abstained.count()}")
+        for reason, count in sorted(
+            abstained.values_list("classification_reason").annotate(n=Count("id"))
+        ):
+            self.stdout.write(f"  {reason:<24s} {count}")
+
+        extracted = sum(answered.values_list("second_value_count", flat=True))
+        forgone = sum(abstained.values_list("values_forgone", flat=True))
+        self.stdout.write("")
+        self.stdout.write(f"values extracted          {extracted}")
+        self.stdout.write(f"values forgone            {forgone}")
+        self.stdout.write(
+            "    Results visible on documents the reader would not name, and "
+            "so did not"
+        )
+        self.stdout.write(
+            "    extract. An upper bound: without a schema there are no "
+            "plausibility"
+        )
+        self.stdout.write(
+            "    bounds and no completeness check, so some would not have "
+            "survived."
+        )
+        if forgone:
+            share = forgone / (forgone + extracted) if (forgone + extracted) else 0
+            self.stdout.write(
+                f"    {share:.1%} of the results seen were forgone this way."
+            )
+
     def _profile(self, comparisons) -> None:
         """One line per report, and the rate that matters at this stage.
 
@@ -257,6 +309,7 @@ class Command(BaseCommand):
             second_persistable=True,
         ).count()
 
+        self._classification(comparisons)
         self._profile(comparisons)
 
         self.stdout.write("")

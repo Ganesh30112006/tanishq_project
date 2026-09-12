@@ -247,6 +247,9 @@ class DocumentProcessResponse(BaseModel):
     text_source: str
     ocr_outcome: str | None = None
     classification: ClassificationOut | None = None
+    #: Results this document appears to hold that were not extracted because
+    #: classification abstained. A count, never the values.
+    values_forgone: int = 0
     report_type: str | None = None
     values: list[ValueOut] = Field(default_factory=list)
     completeness: CompletenessOut | None = None
@@ -288,6 +291,7 @@ class DocumentProcessResponse(BaseModel):
             text_source=result.text_source.value,
             ocr_outcome=result.ocr.outcome.value if result.ocr else None,
             classification=classification,
+            values_forgone=result.values_forgone,
             report_type=result.report_type.value if result.report_type else None,
             values=[ValueOut.of(r.value, r.provenance) for r in result.values],
             completeness=completeness,
