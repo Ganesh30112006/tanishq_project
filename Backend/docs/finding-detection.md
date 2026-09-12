@@ -25,8 +25,8 @@ The levels are enforced by `EvidenceContract.__post_init__`, not by convention:
 * **Levels 3 and 4 always require human review.** `human_review_required=False`
   is refused.
 * **A level-2 pattern reads one report.** Whether an abnormality persists is a
-  level-3 question, so a level-2 contract may not declare any temporality
-  other than `SINGLE_REPORT`.
+  level-3 question, so a level-2 contract may not declare a temporal contract
+  beyond `SINGLE_REPORT`.
 * **A level-4 detector must already be `CLINICALLY_APPROVED`.** A risk model
   cannot be created by writing a Python class; it needs a governed
   `ModelVersion` in Django with a named approver and an evidence dossier. The
@@ -61,15 +61,16 @@ chronic kidney disease" reads identically whether ninety days of history stood
 behind it or nobody checked. So the check does not live in a detector's good
 intentions:
 
-| | |
+| `TemporalRequirement` | |
 |---|---|
-| `SINGLE_REPORT` | one report, one moment. Every level-2 pattern |
-| `REPEATED_MEASUREMENT` | the same analyte measured more than once |
-| `HISTORICAL` | repeated measurement plus a minimum elapsed time |
-| `CROSS_REPORT` | different analytes from different reports, correlated |
+| `SINGLE_REPORT` | one report, one moment. All a level-2 pattern may ask |
+| `REPEATED_MEASUREMENTS` | the same analyte measured more than once |
+| `TIME_WINDOW` | those measurements spanning a minimum elapsed time |
+| `PERSISTENT_ABNORMALITY` | the abnormality itself present at both ends, in one direction |
+| `ORDERED_SEQUENCE` | distinct, reliable dates, so "before" means something |
 
-The requirements are **not** one enum value but a set, because the one that
-matters is easy to lose among the others:
+They are a **set** rather than one value, because the one that matters is easy
+to lose among the others:
 
 > longitudinal data is **not** a persistent abnormality.
 
@@ -113,8 +114,8 @@ patient was dehydrated than the beginning of anything.
 
 `build_history(snapshots)` takes several reports and returns an `EvidenceSet`
 whose **measurements come from the latest report** — so every single-report
-detector behaves exactly as it did — plus a `Series` per analyte and an honest
-declaration of the timeline it actually holds.
+detector behaves exactly as it did — plus a `Series` per analyte, which is what
+the temporal contracts above are evaluated against.
 
 A `Series` answers two separate questions:
 
@@ -128,10 +129,10 @@ Three rules keep it honest:
 * **No move counts until it exceeds ordinary variation.** Every value wobbles
   between samples without the patient changing, so `intelligence/knowledge/
   variation.py` holds a per-analyte threshold — 2% for sodium, 45% for TSH —
-  and a series says which threshold it used. The figures are from the
-  literature and have *not* been measured on these laboratories' assays; they
-  are set conservatively, because calling noise a trend is worse than calling
-  a small real change stable.
+  and a series says which threshold it used and carries its provenance (see
+  above). The figures are from the literature and have *not* been measured on
+  these laboratories' assays; they are set conservatively, because calling
+  noise a trend is worse than calling a small real change stable.
 * **Two points are not a trend.** They are a comparison. A direction needs
   three. Persistence needs only two, because it is a different question.
 * **Trend in the canonical unit, compare in the laboratory's.** Two labs
