@@ -249,3 +249,6 @@ class ClassificationResult:
     status: ClassificationStatus
     signals: dict[str, int] = field(default_factory=dict)
     detail: str = ""
+    #: One short machine-readable token saying why the status is what it is,
+    #: so a caller can route without parsing prose. Empty when CLASSIFIED.
+    reason: str = ""

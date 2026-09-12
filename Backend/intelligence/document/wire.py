@@ -220,6 +220,8 @@ class ClassificationOut(BaseModel):
     status: str
     signals: dict[str, int]
     detail: str = ""
+    #: Machine-readable counterpart to ``detail``.
+    reason: str = ""
 
 
 class CompletenessOut(BaseModel):
@@ -267,7 +269,7 @@ class DocumentProcessResponse(BaseModel):
             classification = ClassificationOut(
                 type=c.report_type.value if c.report_type else None,
                 confidence=c.confidence, status=c.status.value,
-                signals=c.signals, detail=c.detail,
+                signals=c.signals, detail=c.detail, reason=c.reason,
             )
         completeness = None
         if result.completeness is not None:

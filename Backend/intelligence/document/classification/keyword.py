@@ -93,11 +93,17 @@ _SIGNALS: dict[ReportType, dict[str, int]] = {
 
 #: A type needs at least this total weight to be considered at all.
 _MIN_SCORE = 4
-#: And it must beat the runner-up by at least this ratio to be CLASSIFIED
+#: And it must *exceed* the runner-up by this ratio to be CLASSIFIED
 #: outright; otherwise the document goes to review. A first-pass classifier
 #: whose job includes abstaining wants the winner to be clearly dominant, not
 #: merely ahead - two signals of comparable strength is exactly the "could be
 #: either" case a person should see.
+#:
+#: Strictly greater, not "at least". A real discharge summary carrying a full
+#: lipid panel and a partial CBC scores exactly twice the runner-up, and at
+#: that point the winner is not unambiguous: the document genuinely contains
+#: substantial evidence for two schemas. Treating the boundary as a pass
+#: would file it as a lipid report and hand it lipid extraction rules.
 _MARGIN = 2.0
 
 _WORD = re.compile(r"[a-z0-9]+")
@@ -174,6 +180,7 @@ def classify(text: str) -> ClassificationResult:
             report_type=None, confidence=0.0,
             status=ClassificationStatus.REVIEW_REQUIRED,
             detail="too little text to classify",
+            reason="too_little_text",
         )
 
     scores = _score(text)
@@ -183,6 +190,7 @@ def classify(text: str) -> ClassificationResult:
             report_type=None, confidence=0.0,
             status=ClassificationStatus.REVIEW_REQUIRED,
             signals={}, detail="no recognised report-type keywords",
+            reason="no_recognised_keywords",
         )
 
     ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
@@ -190,7 +198,7 @@ def classify(text: str) -> ClassificationResult:
     runner_up = ranked[1][1] if len(ranked) > 1 else 0
     signals = {rt.value: sc for rt, sc in ranked}
 
-    if best_score < _MIN_SCORE or best_score < _MARGIN * max(runner_up, 1):
+    if best_score < _MIN_SCORE or best_score <= _MARGIN * max(runner_up, 1):
         return ClassificationResult(
             report_type=None,
             confidence=round(best_score / (best_score + runner_up + _MIN_SCORE), 3),
@@ -199,6 +207,10 @@ def classify(text: str) -> ClassificationResult:
             detail=(
                 f"top candidate {best_type.value} (score {best_score}) does not "
                 f"clear the margin over the next ({runner_up})"
+            ),
+            reason=(
+                "below_minimum_score" if best_score < _MIN_SCORE
+                else "classification_margin_not_met"
             ),
         )
 
