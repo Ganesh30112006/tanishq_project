@@ -67,8 +67,15 @@ _EXTRA_ALIASES: dict[str, str] = {
     "plasma glucose": "glucose", "blood glucose": "glucose",
     "serum glucose": "glucose",
     "glycated hemoglobin": "hba1c", "glycated haemoglobin": "hba1c",
-    "glycosylated hemoglobin": "hba1c", "hba1c (glycated hemoglobin)": "hba1c",
-    "a1c": "hba1c",
+    "glycosylated hemoglobin": "hba1c", "glycosylated haemoglobin": "hba1c",
+    "hba1c (glycated hemoglobin)": "hba1c", "a1c": "hba1c",
+    # OCR routinely inserts a space inside this name, and laboratories print
+    # it with the abbreviation in brackets either way round.
+    "hb a1c": "hba1c", "hba 1c": "hba1c", "hb a 1c": "hba1c",
+    "glycated hb": "hba1c", "glycated hb (hba1c)": "hba1c",
+    "glycosylated hb": "hba1c", "hba1c glycated hb": "hba1c",
+    "glycated hemoglobin (hba1c)": "hba1c",
+    "glycated haemoglobin (hba1c)": "hba1c",
 
     # --- renal ------------------------------------------------------
     "serum creatinine": "creatinine", "s creatinine": "creatinine",

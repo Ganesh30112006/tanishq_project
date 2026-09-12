@@ -73,15 +73,55 @@ class ReferenceStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-s
 
 
 class ValueStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
+    """Why a value is, or is not, a clinical fact this system will stand behind.
+
+    Distinguishing these is what makes the no-fabrication guarantee
+    *observable*. If every failure were one kind of "needs review", a report
+    where the parser could not tell what was measured would look exactly like
+    one where it read the value perfectly and the printed flag disagreed - and
+    those need completely different things from a person.
+
+    The vocabulary is kept aligned with ``apps.common.enums.ClinicalDataState``
+    where the two overlap, so a value crossing the HTTP boundary into Django
+    does not have to be translated through a table of special cases.
+
+    Exactly one of these means "a clinical value may be persisted from this":
+    ``OBSERVED``. Everything else is a reason not to, and says which reason.
+    """
+
     #: Passed every deterministic check; safe to treat as an observed value.
     OBSERVED = "OBSERVED"
-    #: Extracted, but something a human must resolve before it is trusted -
-    #: an unrecognised unit, a non-numeric value, a printed flag that disagrees
-    #: with the computed reference status, an unparseable range.
-    NEEDS_REVIEW = "NEEDS_REVIEW"
+    #: The parser could not confidently establish *what was measured* - the
+    #: analyte, the value or the unit. An unrecognised test name, a missing or
+    #: unreadable unit, a result given as a bound ("< 0.01") rather than a
+    #: number, two numbers where one was expected. No clinical value is
+    #: persisted, and the reason is not that the value looks odd; it is that
+    #: there is no value to look at.
+    AMBIGUOUS = "AMBIGUOUS"
+    #: The same analyte was reported more than once on this document with
+    #: different values. Both are carried and neither is chosen.
+    CONFLICTING = "CONFLICTING"
     #: Outside the plausibility bounds for the analyte: a read error, not a
     #: sick patient. Never persisted as a clinical value.
-    REJECTED = "REJECTED"
+    INVALID = "INVALID"
+    #: The source text for this value could not be read with enough confidence
+    #: to vouch for the characters in it.
+    UNREADABLE = "UNREADABLE"
+    #: Analyte, value and unit were all established and are plausible, but
+    #: something about the *interpretation* is unresolved - a printed H/L flag
+    #: that disagrees with the computed reference status, a reference range
+    #: that could not be parsed. Unlike AMBIGUOUS, there is a fact here; a
+    #: person is being asked to confirm what it means.
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    #: Only ever the answer to "what does this document say about analyte X?".
+    #: Never the status of an extracted value - a value that was not found was
+    #: not extracted. See ``DocumentResult.outcome_for``.
+    NOT_FOUND = "NOT_FOUND"
+
+    @property
+    def persists_clinical_value(self) -> bool:
+        """The whole no-fabrication guarantee, in one place."""
+        return self is ValueStatus.OBSERVED
 
 
 class ReportType(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation

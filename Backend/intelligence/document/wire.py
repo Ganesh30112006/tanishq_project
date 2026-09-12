@@ -131,7 +131,15 @@ class ValueOut(BaseModel):
     reference_status: str
     printed_flag: str
     status: str
-    issues: list[str]
+    #: One short machine-readable token saying why the status is what it is,
+    #: so Django can route without parsing prose. Empty when OBSERVED.
+    reason: str = ""
+    #: Exactly one status persists a clinical value. Sent explicitly rather
+    #: than left for the caller to re-derive from the status string, because
+    #: getting that derivation wrong on one branch is how a value nobody
+    #: trusted becomes a clinical record.
+    persists_clinical_value: bool = False
+    issues: list[str] = []
     provenance: ProvenanceOut
 
     @classmethod
@@ -153,6 +161,8 @@ class ValueOut(BaseModel):
             ),
             reference_status=value.reference_status.value,
             printed_flag=value.printed_flag, status=value.status.value,
+            reason=value.reason,
+            persists_clinical_value=value.status.persists_clinical_value,
             issues=list(value.issues), provenance=ProvenanceOut.of(prov),
         )
 

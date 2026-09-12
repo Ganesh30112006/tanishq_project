@@ -65,9 +65,9 @@ def test_an_out_of_range_value_is_rejected_not_reported(text_pdf):
         declared_type="application/pdf",
     )
     hb = next(r for r in result.values if r.value.analyte == "hemoglobin")
-    assert hb.value.status is ValueStatus.REJECTED
+    assert hb.value.status is ValueStatus.INVALID
     assert result.disposition is Disposition.NEEDS_REVIEW
-    assert any(i.code == "VALUES_REJECTED" and i.severity == "HIGH" for i in result.issues)
+    assert any(i.code == "VALUES_INVALID" and i.severity == "HIGH" for i in result.issues)
 
 
 def test_a_text_pdf_of_an_unclear_type_needs_review(text_pdf):

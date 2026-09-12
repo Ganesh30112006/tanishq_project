@@ -113,13 +113,16 @@ def test_an_absolute_eosinophil_count_is_never_read_against_the_percentage_range
     """The exclusion rule, made structural.
 
     A percentage and an absolute count are different measurements. There is
-    deliberately no conversion rule for an absolute eosinophil count, so it
-    fails validation at the document stage and never becomes evidence - rather
-    than being compared against a 1-6 *percent* interval and called
-    eosinophilia at 9.2 x10^9/L.
+    deliberately no conversion rule for an absolute eosinophil count, so the
+    parser cannot establish what scale the number is on - AMBIGUOUS, not
+    NEEDS_REVIEW, because there is no fact here for a person to confirm - and
+    it never becomes evidence, rather than being compared against a 1-6
+    *percent* interval and called eosinophilia at 9.2 x10^9/L.
     """
     record = _record("Eosinophils", 9.2, "10^9/L")
-    assert record.value.status is ValueStatus.NEEDS_REVIEW
+    assert record.value.status is ValueStatus.AMBIGUOUS
+    assert record.value.reason == "unit_not_convertible_for_analyte"
+    assert not record.value.persists_clinical_value
 
     evidence = build_evidence([record])
     assert evidence.measurement("eosinophils") is None

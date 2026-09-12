@@ -95,6 +95,27 @@ class DocumentResult:
     def observed_values(self) -> list[ExtractedValueRecord]:
         return [r for r in self.values if r.value.status is ValueStatus.OBSERVED]
 
+    def outcome_for(self, analyte: str) -> ValueStatus:
+        """What does this document say about ``analyte``?
+
+        The one place ``NOT_FOUND`` is produced. A caller asking "what is the
+        haemoglobin on this report?" needs to be able to tell "it is not on
+        this report" from "it is on this report and we could not read it",
+        and both from "the whole document was unreadable".
+        """
+        if self.disposition is Disposition.UNREADABLE:
+            return ValueStatus.UNREADABLE
+        matching = [r for r in self.values if r.value.analyte == analyte]
+        if not matching:
+            return ValueStatus.NOT_FOUND
+        # Worst answer wins, on the same precedence the schema engine uses.
+        order = [
+            ValueStatus.CONFLICTING, ValueStatus.UNREADABLE, ValueStatus.INVALID,
+            ValueStatus.AMBIGUOUS, ValueStatus.NEEDS_REVIEW, ValueStatus.OBSERVED,
+        ]
+        statuses = {r.value.status for r in matching}
+        return next(status for status in order if status in statuses)
+
 
 def _section_index(text: str) -> list[tuple[int, str]]:
     """(char offset, heading) for each heading line, in order."""
@@ -170,7 +191,10 @@ def process_document(
     raws = extract_raw_values(text, page_breaks=page_breaks)
 
     for raw in raws:
-        validated = validate_value(raw, schema=schema)
+        validated = validate_value(
+            raw, schema=schema,
+            ocr_confidence=ocr.mean_confidence if ocr else None,
+        )
         provenance = build_provenance(
             raw, source_sha256=sha256, text_source=source,
             section=_section_for(raw.char_span[0], marks),
@@ -178,6 +202,8 @@ def process_document(
             ocr_confidence=ocr.mean_confidence if ocr else None,
         )
         result.values.append(ExtractedValueRecord(validated, provenance))
+
+    _mark_conflicts(result)
 
     if schema is not None:
         result.completeness = assess_completeness(
@@ -193,7 +219,7 @@ def process_document(
                           else r.value.unit),
                 )
                 for r in result.values
-                if r.value.status is not ValueStatus.REJECTED
+                if r.value.status is not ValueStatus.INVALID
             ],
         )
 
@@ -233,21 +259,60 @@ def _ocr_issue_code(raw_code: str) -> str:
     }.get(raw_code, "UNREADABLE")
 
 
+def _mark_conflicts(result: DocumentResult) -> None:
+    """The same analyte, twice, with different numbers.
+
+    Neither is chosen. Picking the first, the last or the worse would each be
+    a defensible-sounding rule that silently discards half of a contradiction
+    the report is telling us about itself.
+    """
+    by_analyte: dict[str, list[ExtractedValueRecord]] = {}
+    for record in result.values:
+        if record.value.analyte and record.value.value is not None:
+            by_analyte.setdefault(record.value.analyte, []).append(record)
+
+    for analyte, records in by_analyte.items():
+        # Compare in canonical units where possible, so "13.4 g/dL" and
+        # "134 g/L" on one report are not reported as a contradiction.
+        seen = {
+            round(
+                r.value.normalized.value
+                if r.value.normalized and r.value.normalized.convertible
+                else r.value.value,
+                6,
+            )
+            for r in records
+        }
+        if len(seen) <= 1:
+            continue
+        for record in records:
+            record.value.status = ValueStatus.CONFLICTING
+            record.value.reason = "same_analyte_reported_with_different_values"
+            record.value.issues.append(
+                f"{analyte} is reported more than once on this document with "
+                f"different values ({sorted(seen)}); neither is chosen"
+            )
+
+
 def _summarise(result: DocumentResult) -> None:
-    rejected = [r for r in result.values if r.value.status is ValueStatus.REJECTED]
-    review = [r for r in result.values if r.value.status is ValueStatus.NEEDS_REVIEW]
+    def _with(status: ValueStatus) -> list[ExtractedValueRecord]:
+        return [r for r in result.values if r.value.status is status]
+
     observed = result.observed_values
 
-    if rejected:
-        result.issues.append(Issue(
-            "VALUES_REJECTED", "HIGH",
-            ", ".join(sorted({r.value.printed_label for r in rejected})),
-        ))
-    if review:
-        result.issues.append(Issue(
-            "VALUES_NEED_REVIEW", "MEDIUM",
-            ", ".join(sorted({r.value.printed_label for r in review})),
-        ))
+    for status, code, severity in (
+        (ValueStatus.CONFLICTING, "VALUES_CONFLICTING", "HIGH"),
+        (ValueStatus.INVALID, "VALUES_INVALID", "HIGH"),
+        (ValueStatus.UNREADABLE, "VALUES_UNREADABLE", "HIGH"),
+        (ValueStatus.AMBIGUOUS, "VALUES_AMBIGUOUS", "MEDIUM"),
+        (ValueStatus.NEEDS_REVIEW, "VALUES_NEED_REVIEW", "MEDIUM"),
+    ):
+        records = _with(status)
+        if records:
+            result.issues.append(Issue(
+                code, severity,
+                ", ".join(sorted({r.value.printed_label for r in records})),
+            ))
     if not result.values:
         result.issues.append(Issue("NO_VALUES_EXTRACTED", "MEDIUM", ""))
 

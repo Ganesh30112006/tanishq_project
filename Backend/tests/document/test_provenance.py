@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from intelligence.document.contracts import TextSource
-from intelligence.document.extraction.analytes import RawExtraction
+from intelligence.document.extraction.analytes import (
+    EXTRACTOR_VERSION,
+    RawExtraction,
+)
 from intelligence.document.provenance import build_provenance
 
 
@@ -28,7 +31,7 @@ def test_text_layer_provenance_names_no_ocr_provider():
     assert prov.section == "COMPLETE BLOOD COUNT"
     assert prov.char_span == (415, 447)
     assert prov.source_text == "Hemoglobin 13.4 g/dL 13.0 - 17.0"
-    assert prov.extractor_version == "1.0"
+    assert prov.extractor_version == EXTRACTOR_VERSION
 
 
 def test_ocr_provenance_carries_the_provider_and_confidence():

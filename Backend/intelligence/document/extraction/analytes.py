@@ -13,9 +13,21 @@ import re
 from dataclasses import dataclass, field
 
 EXTRACTOR = "regex-line"
-EXTRACTOR_VERSION = "1.0"
+EXTRACTOR_VERSION = "1.1"
 
 _NUMBER = r"\d[\d,]*(?:\.\d+)?"
+
+#: A result the laboratory reported as beyond its measuring range: "< 0.01",
+#: "> 100". These are clinically meaningful - a TSH of <0.01 is a suppressed
+#: TSH - but they are not numbers, and treating "<0.01" as 0.01 would invent a
+#: precision the assay explicitly declined to give. They are extracted with no
+#: numeric value and marked, so the report does not silently lose them.
+_CENSORED = re.compile(
+    r"^\s*(?P<label>[A-Za-z][A-Za-z0-9 ,()./%+\-]*?)"
+    r"(?:\s*[:\.…=]\s*|\s+)"
+    r"(?P<bound>[<>≤≥]\s*" + _NUMBER + r")"
+    r"(?P<rest>.*)$"
+)
 
 #: What may sit between the label and the value. There must be *something* -
 #: whitespace, or a punctuation separator. Allowing nothing here is how
@@ -53,11 +65,21 @@ _STOP_LABELS = (
 )
 
 #: A unit token: a cell-count form like ``10^9/L`` / ``x10^3/uL`` / ``10*9/L``,
-#: or an ordinary unit starting with a letter or ``%``. Never a bare number.
+#: a per-volume form like ``/uL``, or an ordinary unit starting with a letter
+#: or ``%``. Never a bare number.
 _UNIT_RE = re.compile(
-    r"^(?:x?10[\^*]?\d+/[a-zµμ]+|[%A-Za-zµμ][A-Za-z0-9/^%*·.\-]*)$",
+    r"^(?:x?10[\^*]?\d+/[a-zµμ]+|/[a-zµμ]+|[%A-Za-zµμ][A-Za-z0-9/^%*·.\-]*)$",
     re.IGNORECASE,
 )
+
+#: A second number sitting where a unit should be. Two shapes produce this and
+#: both are dangerous: OCR splitting one number in two ("13.4" -> "1 3.4"), and
+#: a line carrying two results ("1.2 / 1.4"). In each case the first number was
+#: taken as the value and the rest discarded, which is how a haemoglobin of
+#: 13.4 became a haemoglobin of 1. The line is extracted with no value at all
+#: and flagged, because a second number means we do not know which is the
+#: result.
+_SECOND_NUMBER = re.compile(r"^[\s/,;|]*" + _NUMBER + r"(?:\s|$|[^\w%/^*])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,25 +165,56 @@ def extract_raw_values(
         if not stripped or _looks_like_heading(stripped):
             continue
 
+        censored = _CENSORED.match(stripped)
         match = _LINE.match(stripped)
-        if not match:
+        if not match and not censored:
             continue
 
-        label = match["label"].strip(" .:-…")
+        source = censored or match
+        label = source["label"].strip(" .:-…")
         if not label or len(label) < 2:
             continue
         low = label.lower()
         if any(low == stop or low.startswith(stop + " ") for stop in _STOP_LABELS):
             continue
 
-        value = _parse_number(match["value"])
-        unit, flag, reference = _split_rest(match["rest"])
-
         issues: list[str] = []
         confidence = 0.85
-        if value is None:
-            issues.append("value is not numeric")
-            confidence -= 0.35
+
+        if censored is not None:
+            # "< 0.01" is a real result and not a number. Reading it as 0.01
+            # would invent a precision the assay explicitly declined to give,
+            # and dropping the line would lose a clinically important result -
+            # a TSH of <0.01 is a suppressed TSH. So it is carried with no
+            # numeric value, and the text is preserved verbatim.
+            value_text = re.sub(r"\s+", "", censored["bound"])
+            value = None
+            unit, flag, reference = _split_rest(censored["rest"])
+            issues.append(
+                f"result reported as {value_text}, which is a bound rather "
+                f"than a measured value"
+            )
+            confidence -= 0.2
+        else:
+            value_text = match["value"]
+            value = _parse_number(value_text)
+            unit, flag, reference = _split_rest(match["rest"])
+
+            if not unit and _SECOND_NUMBER.match(match["rest"]):
+                # Another number where the unit should be. Either OCR split one
+                # number in two, or the line carries two results. Both mean we
+                # do not know which number is the result, so none is offered.
+                issues.append(
+                    "a second number follows the value with no unit between "
+                    "them, so which number is the result cannot be established"
+                )
+                value = None
+                confidence -= 0.5
+
+            if value is None and not issues:
+                issues.append("value is not numeric")
+                confidence -= 0.35
+
         if not unit:
             issues.append("no unit on the line")
             confidence -= 0.15
@@ -172,7 +225,7 @@ def extract_raw_values(
         out.append(
             RawExtraction(
                 label=label,
-                value_text=match["value"],
+                value_text=value_text,
                 value=value,
                 unit=unit,
                 reference_text=reference,

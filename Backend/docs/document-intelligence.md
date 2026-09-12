@@ -83,12 +83,45 @@ asserts the OpenAPI schema has no `path` / `patient_id` / `content_reference`.
 | Report schemas | `schemas/` | Per type: fields, required flags, aliases, accepted units, plausibility bounds. Eight panels: CBC, glucose, HbA1c, lipids, renal, liver, thyroid, electrolytes, urinalysis. `assess_completeness()` → COMPLETE / INCOMPLETE / AMBIGUOUS / INVALID / CONFLICTING, same precedence as `apps.reports.schema_engine`; `required_any` covers a report defined by a family of fields rather than one named field. Narrative types have **no** schema. |
 | Extraction | `extraction/` | Line-oriented regex → `<label> <value> [unit] [flag] [reference]` with the character span. Skips metadata lines and headings. `parse_reference_range` turns `0 - 6`, `< 200`, `Up to 6` into numbers; marks `Negative` / unparseable as such. |
 | Normalisation | `normalization/` | `canonical_analyte()` → known name or `None` (never a guess). `normalize_value()` converts to canonical units from a versioned table whose factors are checked against `apps.common.units` by a test. |
-| Validation | `validation/` | `OBSERVED` / `NEEDS_REVIEW` / `REJECTED`. REJECTED is only for implausible values. Reference status (ABOVE/BELOW/WITHIN/UNKNOWN) is computed here; naming a clinical finding is not. A printed flag that disagrees with the computed status forces NEEDS_REVIEW. |
+| Validation | `validation/` | A `ValueStatus` - see the table below. Reference status (ABOVE/BELOW/WITHIN/UNKNOWN) is computed here; naming a clinical finding is not. |
 | Provenance | `provenance/` | Per value: source SHA-256, page, section, char span, exact source line, text source (embedded layer or named OCR provider), per-stage confidences. |
 
 `pipeline.process_document()` runs the whole chain and returns a
 `DocumentResult` with the disposition, the validated values with provenance, a
 schema completeness roll-up, and typed `Issue`s.
+
+## Which kind of "no" a value gets
+
+`ValueStatus` values are different *kinds* of answer, not severity levels.
+Exactly one of them persists a clinical value, and the others each say why they
+do not — which is what makes the no-fabrication guarantee **observable** rather
+than merely intended. The vocabulary is kept aligned with
+`apps.common.enums.ClinicalDataState` where the two overlap.
+
+| Status | Means | Persists? |
+|---|---|---|
+| `OBSERVED` | analyte, value and unit all established; plausible; interpretation settled | **yes** |
+| `AMBIGUOUS` | the parser could not establish *what was measured* — unrecognised test name, no unit, a unit with no rule, a result given as `< 0.01`, two numbers where one was expected | no |
+| `CONFLICTING` | the same analyte appears twice on the document with different values. Neither is chosen | no |
+| `INVALID` | outside the analyte's plausibility bounds. A read error, not a sick patient | no |
+| `UNREADABLE` | OCR returned this text below the confidence floor, so the characters cannot be vouched for | no |
+| `NEEDS_REVIEW` | there *is* a fact and it is plausible, but its interpretation is unresolved — a printed H/L flag disagreeing with the computed status, an unparseable range | no |
+| `NOT_FOUND` | only ever the answer to `result.outcome_for(analyte)`. A value that was not found was not extracted | n/a |
+
+Precedence, worst first, matches `apps.reports.schema_engine`:
+`CONFLICTING > UNREADABLE > INVALID > AMBIGUOUS > NEEDS_REVIEW > OBSERVED`.
+
+The distinction that earns its keep is **`AMBIGUOUS` against `NEEDS_REVIEW`**.
+The first says there is no fact here; the second says there is one and a person
+should confirm what it means. Collapsing them would make a line nobody could
+read look exactly like one that was read perfectly, and they need completely
+different things from a human.
+
+Each refused value also carries a short machine-readable `reason`
+(`more_than_one_number_on_the_line`, `result_is_a_bound_not_a_number`,
+`unit_not_convertible_for_analyte`, `ocr_below_confidence_floor`, …) so Django
+can route without parsing prose, and `persists_clinical_value` is sent
+explicitly on the wire rather than left for the caller to re-derive.
 
 ## Quantities that share a name but are not the same measurement
 
@@ -165,3 +198,17 @@ the Django client, including the scoped-payload assertion.
 `tests/regression/test_ocr_never_fabricates.py` pins the safe behaviour of the
 existing `apps.reports` pipeline so it is preserved once the two are wired
 together.
+
+**`tests/document/adversarial/`** is the near-miss corpus, and it is
+deliberately *not* the clinical gold-standard benchmark. Nothing in it is
+clinician-annotated and nothing in it says whether a value is clinically
+meaningful. It answers one question — can the parser be made to manufacture a
+structured clinical fact out of text that does not support one? — over the
+shapes real reports and real OCR produce: the same test spelled six ways, two
+quantities sharing a printed name, a number OCR split in half, a result the
+assay declined to measure, one analyte printed twice with two different
+numbers. Being unable to read a report is safe; reading it wrongly with
+confidence is not, and is invisible downstream.
+
+It found the `HbA1c 6.2 %` bug by exercising the implementation rather than by
+reading the rules, after that bug had been live for three commits.

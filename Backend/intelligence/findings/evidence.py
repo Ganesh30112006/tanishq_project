@@ -2,10 +2,11 @@
 
 Two rules are enforced here rather than left to each detector:
 
-**Only values that passed validation become evidence.** A value the extraction
-stage marked ``NEEDS_REVIEW`` or ``REJECTED`` is not evidence of anything. If
-detectors were free to read the raw list, one of them would eventually build a
-finding on a number nobody trusted.
+**Only values that passed validation become evidence.** Exactly one
+``ValueStatus`` - ``OBSERVED`` - persists a clinical value; a value the
+document stage marked ambiguous, conflicting, invalid, unreadable or in need
+of review is not evidence of anything. If detectors were free to read the raw
+list, one of them would eventually build a finding on a number nobody trusted.
 
 **The laboratory's printed reference range wins.** It was set for that assay on
 that instrument; the fallback table is a textbook average. When the fallback is
@@ -17,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from intelligence.document.contracts import ReferenceStatus, ValueStatus
+from intelligence.document.contracts import ReferenceStatus
 from intelligence.document.provenance.record import Provenance
 from intelligence.document.validation.checks import ValidatedValue
 from intelligence.findings.contracts import (
@@ -191,7 +192,7 @@ def build_evidence(
         value: ValidatedValue = record.value
         provenance = getattr(record, "provenance", None)
 
-        if value.status is not ValueStatus.OBSERVED or not value.analyte:
+        if not value.status.persists_clinical_value or not value.analyte:
             if value.analyte:
                 evidence.unusable.append(value.analyte)
             continue
