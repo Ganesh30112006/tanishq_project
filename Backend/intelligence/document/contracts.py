@@ -72,6 +72,35 @@ class ReferenceStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-s
     UNKNOWN = "UNKNOWN"
 
 
+class UnitRelation(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
+    """How the unit a result is printed in relates to the unit of its range.
+
+    A result and a reference range can only be compared when their units are
+    the same quantity. Reading "5.4 mg/dL" against "< 200 mmol/L" produces a
+    confident, wrong answer, and the report gives every clue needed to avoid
+    it - so the relationship is established explicitly and named, rather than
+    assumed by comparing the numbers.
+    """
+
+    #: Both sides carry the same printed unit, or the range printed none of
+    #: its own - which by the column convention means the result's unit.
+    SAME_UNIT = "SAME_UNIT"
+    #: Different units, and this analyte has a verified conversion between
+    #: them. The comparison is made in the canonical unit; neither the printed
+    #: result nor the printed range is rewritten.
+    CONVERTIBLE = "CONVERTIBLE"
+    #: Both units are recognised and there is no conversion between them for
+    #: this analyte. The range cannot be applied to this result.
+    INCOMPATIBLE = "INCOMPATIBLE"
+    #: At least one of the two units is not one this system knows, so whether
+    #: they agree cannot be established either way.
+    UNKNOWN = "UNKNOWN"
+
+    @property
+    def comparable(self) -> bool:
+        return self in (UnitRelation.SAME_UNIT, UnitRelation.CONVERTIBLE)
+
+
 class ValueStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
     """Why a value is, or is not, a clinical fact this system will stand behind.
 

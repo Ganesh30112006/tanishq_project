@@ -263,3 +263,47 @@ def test_the_plural_a_report_actually_prints_still_counts(line, report_type):
 def test_an_abbreviation_is_not_pluralised_into_a_false_positive():
     """'Avoid buns' is dietary advice, not a renal panel."""
     assert classify("Advice: avoid buns and fried food entirely.").signals == {}
+
+
+# --- the margin boundary -------------------------------------------
+def test_the_margin_boundary_is_exactly_as_the_contract_states():
+    """A characterisation test for the exact 2.0 case.
+
+    The rule is "the winner must beat the runner-up by at least _MARGIN", so
+    a winner scoring exactly twice the runner-up is classified and one point
+    below it abstains. This test exists because that boundary decides real
+    documents: a discharge summary carrying a full lipid panel and a partial
+    CBC lands on it exactly, and it is the difference between filing that
+    document as a lipid report and sending it to a person.
+
+    If the policy changes to "strictly more than", this test is what will
+    fail, and it should be edited deliberately rather than discovered.
+    """
+    from intelligence.document.classification.keyword import _MARGIN, _MIN_SCORE
+
+    def outcome(best: int, runner_up: int) -> bool:
+        """True when a document with these scores would be classified."""
+        return not (best < _MIN_SCORE or best < _MARGIN * max(runner_up, 1))
+
+    assert outcome(12, 6) is True       # exactly 2.0 - classified today
+    assert outcome(13, 6) is True       # clearly ahead
+    assert outcome(11, 6) is False      # short of the margin
+    assert outcome(3, 0) is False       # below the floor, whatever the margin
+
+
+def test_a_document_carrying_two_panels_sits_on_that_boundary():
+    """The real discharge summary, reduced. Recorded so that whichever way the
+    policy goes, the case is visible."""
+    text = (
+        "5. Laboratory Investigations\n"
+        "Hemoglobin 13.8 g/dL 13.5 - 17.5 g/dL\n"
+        "WBC Count 8,200 /\u00b5L 4,000 - 11,000 /\u00b5L\n"
+        "Platelet Count 2.3 lakh/\u00b5L 1.5 - 4.5 lakh/\u00b5L\n"
+        "Total Cholesterol 228 mg/dL < 200 mg/dL\n"
+        "LDL Cholesterol 148 mg/dL < 130 mg/dL\n"
+        "HDL Cholesterol 38 mg/dL \u2265 40 mg/dL\n"
+        "Triglycerides 210 mg/dL < 150 mg/dL\n"
+    )
+    result = classify(text)
+    assert result.signals["LIPID"] == 2 * result.signals["CBC"]
+    assert result.report_type is ReportType.LIPID_PROFILE

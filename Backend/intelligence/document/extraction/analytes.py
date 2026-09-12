@@ -68,7 +68,7 @@ _STOP_LABELS = (
 #: a per-volume form like ``/uL``, or an ordinary unit starting with a letter
 #: or ``%``. Never a bare number.
 _UNIT_RE = re.compile(
-    r"^(?:x?10[\^*]?\d+/[a-zµμ]+|/[a-zµμ]+|[%A-Za-zµμ][A-Za-z0-9/^%*·.\-]*)$",
+    r"^(?:x?10[\^*]?\d+/[a-zµμ]+|/[a-zµμ]+|[%A-Za-zµμ][A-Za-z0-9/^%*·.µμ\-]*)$",
     re.IGNORECASE,
 )
 

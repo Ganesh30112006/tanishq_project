@@ -216,3 +216,63 @@ class TestTheSecondNumberGuardStillHolds:
     def test_two_results_on_one_line_still_yield_no_value(self):
         raw = _first("Bilirubin 1.2 / 1.4")
         assert raw.value is None
+
+
+# --- a range may print its own unit ---------------------------------
+class TestAReferenceRangeThatCarriesItsUnit:
+    """Indian reports print the unit in the range column. The parser was
+    anchored and read none of them, so nine correctly extracted results on a
+    real report could not be interpreted."""
+
+    def test_an_interval_with_a_trailing_unit(self):
+        ref = parse_reference_range("13.5 - 17.5 g/dL")
+        assert (ref.low, ref.high, ref.kind) == (13.5, 17.5, "interval")
+        assert ref.unit == "g/dL"
+
+    def test_an_interval_with_the_unit_on_both_ends(self):
+        ref = parse_reference_range("13.5 g/dL - 17.5 g/dL")
+        assert (ref.low, ref.high) == (13.5, 17.5)
+        assert ref.unit == "g/dL"
+
+    def test_an_interval_whose_ends_disagree_is_unparsed(self):
+        """Not resolved by picking one of them."""
+        assert parse_reference_range("13.5 g/dL - 17.5 g/L").kind == "unparsed"
+
+    def test_an_upper_bound_with_a_unit(self):
+        ref = parse_reference_range("< 200 mg/dL")
+        assert (ref.high, ref.kind, ref.unit) == (200.0, "upper_bound", "mg/dL")
+
+    def test_a_lower_bound_with_a_unit(self):
+        ref = parse_reference_range("\u2265 40 mg/dL")
+        assert (ref.low, ref.kind, ref.unit) == (40.0, "lower_bound", "mg/dL")
+
+    def test_a_cell_count_unit_on_the_range(self):
+        ref = parse_reference_range("150 - 450 10^9/L")
+        assert (ref.low, ref.high, ref.unit) == (150.0, 450.0, "10^9/L")
+
+    def test_a_per_volume_unit_on_the_range(self):
+        ref = parse_reference_range("4000 - 11000 /\u00b5L")
+        assert (ref.low, ref.high, ref.unit) == (4000.0, 11000.0, "/\u00b5L")
+
+    def test_a_range_with_no_unit_still_parses_and_reports_none(self):
+        ref = parse_reference_range("13.5 - 17.5")
+        assert (ref.low, ref.high) == (13.5, 17.5)
+        assert ref.unit == ""
+
+    def test_a_unit_pattern_can_never_swallow_the_other_end_of_a_range(self):
+        for text in ("10 - 20", "0.4 - 4.0", "150 - 450"):
+            ref = parse_reference_range(text)
+            assert ref.kind == "interval", text
+            assert ref.unit == "", text
+
+
+def test_a_range_printed_with_thousands_separators():
+    """"4,000 - 11,000 /uL" is how a white-cell range is printed, and it was
+    the last thing stopping a correctly extracted WBC from being usable."""
+    ref = parse_reference_range("4,000 - 11,000 /\u00b5L")
+    assert (ref.low, ref.high, ref.unit) == (4000.0, 11000.0, "/\u00b5L")
+
+
+def test_a_decimal_comma_is_not_read_as_a_thousands_separator():
+    """"1,5 - 4,5" would be 15 and 45. Left unparsed instead."""
+    assert parse_reference_range("1,5 - 4,5").kind == "unparsed"

@@ -86,6 +86,9 @@ class ReferenceRangeOut(BaseModel):
     low: float | None = None
     high: float | None = None
     kind: str
+    #: The unit the range itself was printed in, as the laboratory wrote it.
+    #: Empty when the range column carried none of its own.
+    unit: str = ""
 
 
 class NormalizedOut(BaseModel):
@@ -129,6 +132,11 @@ class ValueOut(BaseModel):
     normalized: NormalizedOut | None
     reference_range: ReferenceRangeOut
     reference_status: str
+    #: Whether the result and its printed range could be compared at all, and
+    #: on what basis: SAME_UNIT / CONVERTIBLE / INCOMPATIBLE / UNKNOWN. Sent
+    #: rather than re-derived, because a caller that gets this wrong compares
+    #: two different quantities and cannot tell.
+    unit_relation: str
     printed_flag: str
     status: str
     #: One short machine-readable token saying why the status is what it is,
@@ -158,8 +166,10 @@ class ValueOut(BaseModel):
             reference_range=ReferenceRangeOut(
                 text=value.reference.text, low=value.reference.low,
                 high=value.reference.high, kind=value.reference.kind,
+                unit=value.reference.unit,
             ),
             reference_status=value.reference_status.value,
+            unit_relation=value.unit_relation.value,
             printed_flag=value.printed_flag, status=value.status.value,
             reason=value.reason,
             persists_clinical_value=value.status.persists_clinical_value,
