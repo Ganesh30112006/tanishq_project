@@ -441,6 +441,7 @@ class ReportPipeline(BaseService):
                 ),
                 tests=tests,
                 opinion=opinion,
+                report_class=report.report_class or "",
             )
             reader_comparison.record(report, comparison, mode=second_reader.mode())
         except Exception:  # noqa: BLE001 - see the docstring

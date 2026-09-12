@@ -212,6 +212,16 @@ class ReaderComparison(UUIDTimeStampedModel):
     second_available = models.BooleanField(default=False)
     unavailable_reason = models.CharField(max_length=200, blank=True)
 
+    #: What kind of document this was. Recorded because the pilot's purpose
+    #: is to find failure modes across the reports that actually arrive, and
+    #: "have we seen a scan yet?" is otherwise unanswerable from this table -
+    #: a record made entirely of clean PDFs looks complete and is not.
+    report_class = models.CharField(max_length=20, blank=True)
+    #: How the text was obtained, as the service reported it: an embedded PDF
+    #: text layer, or OCR. The single strongest predictor of where the two
+    #: readers will differ.
+    text_source = models.CharField(max_length=32, blank=True)
+
     existing_value_count = models.PositiveIntegerField(default=0)
     second_value_count = models.PositiveIntegerField(default=0)
     #: True when the readers produced the same values and the same routing.
@@ -224,6 +234,7 @@ class ReaderComparison(UUIDTimeStampedModel):
         indexes = [
             models.Index(fields=["mode", "agreed"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["report_class", "text_source"]),
         ]
 
     def __str__(self) -> str:
@@ -294,6 +305,11 @@ class ReaderDisagreement(UUIDTimeStampedModel):
     #: Who decided. "observed" where the class follows from the responses
     #: alone; otherwise the reviewer. Empty while unclassified.
     classified_by = models.CharField(max_length=120, blank=True)
+    #: The version of the class definitions in force when the ruling was made.
+    #: A ruling is an answer to a question, and if the question is later
+    #: reworded the old answers are not silently re-interpreted as answers to
+    #: the new one. Empty while unclassified.
+    taxonomy_version = models.CharField(max_length=40, blank=True)
     classified_at = models.DateTimeField(null=True, blank=True)
     classification_note = models.TextField(blank=True)
 

@@ -2,6 +2,7 @@
 
     python manage.py shadow_disagreements
     python manage.py shadow_disagreements --unclassified --limit 40
+    python manage.py shadow_disagreements --coverage
     python manage.py shadow_disagreements --kind VALUE_DIFFERS
     python manage.py shadow_disagreements --classify <id> --as PARSER_ERROR \\
         --by "dr-mehta" --note "the second reader took the previous row's unit"
@@ -20,6 +21,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
+from apps.common.enums import ReportClass
 from apps.reports import reader_comparison
 from apps.reports.models import ReaderComparison, ReaderDisagreement
 
@@ -32,6 +34,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--limit", type=int, default=20)
+        parser.add_argument(
+            "--coverage", action="store_true",
+            help="show which kinds of document the pilot has and has not seen",
+        )
         parser.add_argument("--kind", default="", help="filter by disagreement kind")
         parser.add_argument("--analyte", default="")
         parser.add_argument(
@@ -46,6 +52,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         if options["classify"]:
             self._classify(options)
+            return
+        if options["coverage"]:
+            self._coverage()
             return
         self._summary()
         self._listing(options)
@@ -71,6 +80,57 @@ class Command(BaseCommand):
                 f"{row.classified_by}"
             )
         )
+
+    def _coverage(self) -> None:
+        """What the pilot has actually seen.
+
+        A pilot is chosen for diversity, not volume: its job is to find failure
+        modes nobody anticipated, and a set made entirely of clean PDFs from
+        one laboratory finds the failure modes of clean PDFs from one
+        laboratory. This prints the gaps while they can still be filled.
+        """
+        comparisons = ReaderComparison.objects.all()
+        if not comparisons.exists():
+            self.stdout.write("No reports have been read twice yet.")
+            return
+
+        self.stdout.write("")
+        self.stdout.write("What the pilot has seen")
+        self.stdout.write("=" * 72)
+
+        self.stdout.write("")
+        self.stdout.write(f"{'report type':<22s} {'reports':>8s} {'disagreeing':>12s}")
+        self.stdout.write("-" * 46)
+        for report_class in [*ReportClass.values, ""]:
+            rows = comparisons.filter(report_class=report_class)
+            total = rows.count()
+            if not total and report_class == "":
+                continue
+            differing = rows.filter(agreed=False, second_available=True).count()
+            label = report_class or "(unclassified)"
+            marker = "" if total else "   <- not seen yet"
+            self.stdout.write(f"{label:<22s} {total:>8d} {differing:>12d}{marker}")
+
+        self.stdout.write("")
+        self.stdout.write(f"{'how the text came':<22s} {'reports':>8s} {'disagreeing':>12s}")
+        self.stdout.write("-" * 46)
+        sources = dict(
+            comparisons.values_list("text_source").annotate(n=Count("id")).order_by()
+        )
+        for source, count in sorted(sources.items()):
+            differing = comparisons.filter(
+                text_source=source, agreed=False, second_available=True
+            ).count()
+            self.stdout.write(
+                f"{source or '(none reported)':<22s} {count:>8d} {differing:>12d}"
+            )
+        if not any(s for s in sources if "OCR" in s.upper()):
+            self.stdout.write("")
+            self.stdout.write(
+                "No OCR capture has been compared yet. Scans and photographs "
+                "are where the two readers differ most, so a pilot without "
+                "them has not been tested on the reports that matter."
+            )
 
     def _summary(self) -> None:
         comparisons = ReaderComparison.objects.all()

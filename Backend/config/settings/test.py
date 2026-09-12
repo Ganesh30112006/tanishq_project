@@ -43,3 +43,9 @@ REST_FRAMEWORK = {  # noqa: F405
     **REST_FRAMEWORK,  # noqa: F405
     "DEFAULT_THROTTLE_RATES": {"auth": None, "ai": None, "risk": None},
 }
+
+# The second reader is OFF for the suite regardless of what the developer has
+# in their .env. A test run that silently inherited `shadow` or `advisory`
+# would be exercising a different system from the one the assertions describe,
+# and the tests that need a mode set it themselves.
+DOCUMENT_INTELLIGENCE = {"MODE": "off"}

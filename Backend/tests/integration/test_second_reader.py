@@ -102,7 +102,22 @@ def _run(report):
 
 
 # --- off: the default, and nothing changes ---------------------------
-def test_the_default_mode_is_off(settings):
+def test_the_shipped_default_is_off(settings):
+    """Absent configuration is not a reason to consult a second reader.
+
+    Asserted against an unset value rather than against whatever the developer
+    has in their .env, because the property being defended is the code's, not
+    the environment's.
+    """
+    settings.DOCUMENT_INTELLIGENCE = {}
+    assert second_reader.mode() == second_reader.OFF
+
+    del settings.DOCUMENT_INTELLIGENCE
+    assert second_reader.mode() == second_reader.OFF
+
+
+def test_an_empty_mode_is_off(settings):
+    settings.DOCUMENT_INTELLIGENCE = {"MODE": ""}
     assert second_reader.mode() == second_reader.OFF
 
 

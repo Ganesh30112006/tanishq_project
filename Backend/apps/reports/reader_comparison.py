@@ -45,6 +45,14 @@ from apps.reports.models import ReaderComparison, ReaderDisagreement
 Kind = ReaderDisagreement.Kind
 Classification = ReaderDisagreement.Classification
 
+#: The version of the classification vocabulary below. Stamped onto every
+#: ruling, so that if a class is later redefined the old rulings are not
+#: silently re-read as answers to the new question. Deliberately its own
+#: version rather than the benchmark's ``ANNOTATION_SPEC_VERSION``: these are
+#: different words for a different job, and ``apps.reports`` may not import
+#: from ``intelligence`` at all.
+TAXONOMY_VERSION = "shadow-disagreement-taxonomy-1"
+
 #: How close two numbers must be to count as the same reading. Loose enough to
 #: absorb the last printed digit, tight enough that a misread stands out.
 VALUE_TOLERANCE = Decimal("0.0001")
@@ -78,6 +86,8 @@ class Comparison:
     """The whole comparison for one report."""
 
     existing_outcome: str
+    report_class: str = ""
+    text_source: str = ""
     second_disposition: str = ""
     second_available: bool = False
     unavailable_reason: str = ""
@@ -90,7 +100,7 @@ class Comparison:
         return self.second_available and not self.differences
 
 
-def compare(*, existing_outcome: str, tests, opinion) -> Comparison:
+def compare(*, existing_outcome: str, tests, opinion, report_class: str = "") -> Comparison:
     """Line up what the pipeline read against what the service read.
 
     ``tests`` are the ``ReportTest`` rows the pipeline produced; ``opinion`` is
@@ -99,6 +109,8 @@ def compare(*, existing_outcome: str, tests, opinion) -> Comparison:
     """
     comparison = Comparison(
         existing_outcome=existing_outcome,
+        report_class=report_class,
+        text_source=str(opinion.detail.get("text_source") or ""),
         second_disposition=opinion.disposition,
         second_available=opinion.available,
         unavailable_reason=opinion.unavailable_reason,
@@ -286,6 +298,8 @@ def record(report, comparison: Comparison, *, mode: str) -> ReaderComparison | N
             report=report,
             mode=mode,
             existing_outcome=comparison.existing_outcome,
+            report_class=comparison.report_class[:20],
+            text_source=comparison.text_source[:32],
             second_disposition=comparison.second_disposition,
             second_available=comparison.second_available,
             unavailable_reason=comparison.unavailable_reason[:200],
@@ -350,8 +364,9 @@ def classify(
     disagreement.classified_by = by.strip()[:120]
     disagreement.classification_note = note.strip()
     disagreement.classified_at = timezone.now()
+    disagreement.taxonomy_version = TAXONOMY_VERSION
     disagreement.save(update_fields=[
         "classification", "classified_by", "classification_note",
-        "classified_at", "updated_at",
+        "classified_at", "taxonomy_version", "updated_at",
     ])
     return disagreement

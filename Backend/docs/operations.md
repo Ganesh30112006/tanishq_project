@@ -233,8 +233,16 @@ and leaves the rest `UNKNOWN`. A ruling requires a named reviewer and a written
 reason: the counts are already known, and the reason is the only part that says
 what to change.
 
+`--coverage` shows which kinds of document the pilot has actually seen, and
+marks the ones it has not. A pilot made entirely of clean PDFs from one
+laboratory looks complete and is not.
+
 The comparison is a research record. No clinical code reads it, a test enforces
 that, and a failure to write it cannot affect the report.
+
+**Running the first batch:** see [`shadow-pilot.md`](shadow-pilot.md). The first
+batch is failure discovery and corpus construction, not measurement - scoring a
+batch that has already been used to drive fixes measures the fixes.
 
 Nothing the service returns is persisted as a clinical value in any mode, and a
 service failure is always "no opinion" rather than a blocked report. The mode

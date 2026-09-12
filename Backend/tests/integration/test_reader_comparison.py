@@ -331,6 +331,18 @@ class TestClassifyingByHand:
         assert disagreement.classified_at is not None
         assert "next row" in disagreement.classification_note
 
+    def test_a_ruling_records_the_definitions_in_force(self, disagreement):
+        """A ruling is an answer to a question. If the question is later
+        reworded, the old answers must not be re-read as answers to the new
+        one."""
+        assert disagreement.taxonomy_version == ""
+        reader_comparison.classify(
+            disagreement, as_class=Classification.SAFE_IMPROVEMENT,
+            by="dr-mehta", note="the printed value was 15.4",
+        )
+        disagreement.refresh_from_db()
+        assert disagreement.taxonomy_version == reader_comparison.TAXONOMY_VERSION
+
     def test_a_ruling_without_a_reviewer_is_refused(self, disagreement):
         with pytest.raises(ValueError, match="named reviewer"):
             reader_comparison.classify(
@@ -413,6 +425,25 @@ class TestTheRecordIsResearchOnly:
         comparison = ReaderComparison.objects.get()
         assert comparison.existing_outcome == ReportProcessingState.FINALIZED
         assert comparison.mode == second_reader.ADVISORY
+
+    def test_the_record_says_what_kind_of_document_it_was(
+        self, settings, monkeypatch, make_patient, make_user
+    ):
+        """A pilot made entirely of clean PDFs looks complete and is not, so
+        the stratum has to be visible in the record itself."""
+        settings.DOCUMENT_INTELLIGENCE = {"MODE": "shadow"}
+        monkeypatch.setattr(
+            second_reader, "_default_client",
+            lambda: _FakeClient(_FakeResult(
+                values=[_their_value("glucose", 15.4, "mmol/L")]
+            )),
+        )
+        report = _upload(make_patient(), make_user())
+        ReportPipeline().run(Report.objects.get(pk=report.pk))
+
+        comparison = ReaderComparison.objects.get()
+        assert comparison.report_class == ReportClass.GLUCOSE
+        assert comparison.text_source == "EMBEDDED_TEXT_LAYER"
 
     def test_a_report_is_not_harmed_when_the_record_cannot_be_written(
         self, settings, monkeypatch, make_patient, make_user
