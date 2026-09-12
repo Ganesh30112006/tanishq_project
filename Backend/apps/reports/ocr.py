@@ -16,6 +16,30 @@ _PDF_TYPES = {"application/pdf"}
 _IMAGE_TYPES = {"image/png", "image/jpeg", "image/tiff"}
 
 
+def read_report_bytes(report) -> bytes:
+    """The stored file's bytes, for a caller Django has already authorized.
+
+    Kept here beside the other file access so there is one place that opens a
+    report's storage. Callers hand the bytes onward; nothing outside Django is
+    ever given a storage path or a patient id it could use to fetch a file for
+    itself.
+    """
+    field = report.source_file
+    if not field:
+        return b""
+    try:
+        field.open("rb")
+        return field.read()
+    except Exception as exc:  # noqa: BLE001 - a bad file must not crash a caller
+        logger.warning("report_bytes_unreadable", extra={"error": str(exc)})
+        return b""
+    finally:
+        try:
+            field.close()
+        except Exception:  # noqa: S110 - closing a handle must not mask the result
+            pass
+
+
 def extract_text_from_report(report) -> str:
     content_type = (report.file_content_type or "").lower()
     name = (report.original_filename or "").lower()

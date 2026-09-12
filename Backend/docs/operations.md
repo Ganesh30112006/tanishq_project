@@ -179,6 +179,28 @@ to 3.0.0; only the schema differs. That is the rule working as intended: the
 `valid_domain` gate lives in the schema, so a schema that can be edited under an
 approved version is a gate that can be edited under an approved version.
 
+## Document intelligence: turning it on
+
+`DOCUMENT_INTELLIGENCE_MODE` decides how much the service is allowed to affect
+a report. It ships as **`off`**, and an unrecognised value falls back to `off`
+so a typo cannot enable a clinical path.
+
+| Mode | Effect |
+|---|---|
+| `off` | not called. Behaviour is exactly as it was before the integration |
+| `shadow` | called; what it said is recorded in the audit trail under `second_reader`; the outcome is untouched |
+| `advisory` | called; may hold for review a report the pipeline would have finalized. It can never do the reverse |
+
+**Run `shadow` first.** It costs one service call per report and produces the
+only thing that could justify `advisory`: a record of where the two readers
+disagreed, on real reports, before anything acts on it. Query the audit trail
+for `second_reader.concerns` on reports that finalized — those are the cases
+`advisory` would have held.
+
+Nothing the service returns is persisted as a clinical value in any mode, and a
+service failure is always "no opinion" rather than a blocked report. The mode
+therefore changes how conservative the pipeline is and nothing else.
+
 ## Document intelligence runtime requirements
 
 Document processing runs in the FastAPI intelligence service and is reached

@@ -33,8 +33,10 @@ from apps.common.services import BaseService, ServiceResult
 from apps.common.units import convert
 from apps.medical_records.models import Provenance
 from apps.reconciliation.services import ReconciliationService
+from apps.reports import second_reader
 from apps.reports.extraction import extract_text
 from apps.reports.models import Report, ReportSection, ReportTest
+from apps.reports.ocr import read_report_bytes
 from apps.reports.schema_engine import SchemaEngine, active_schema
 
 _HEADING_RE = re.compile(r"^[A-Z][A-Z0-9 /&()\-]{3,}$")
@@ -107,6 +109,24 @@ class ReportPipeline(BaseService):
             and not conflicts
             and all(t.validation_status == ValidationStatus.PASSED for t in tests)
         )
+
+        # A second reader that may only make the outcome more conservative.
+        # Consulted after the decision is already made, and able to change it
+        # in exactly one direction: a report this pipeline would finalize can
+        # be held, and a report it would hold can never be finalized. Nothing
+        # the service returns is persisted as a clinical value.
+        opinion = self._second_opinion(report)
+        if finalizable and second_reader.mode() == second_reader.ADVISORY and (
+            opinion.holds_report
+        ):
+            return self._review(
+                report,
+                "A second reading of this document raised concerns: "
+                + "; ".join(opinion.concerns),
+                report_class=report_class,
+                second_opinion=opinion,
+            )
+
         if finalizable:
             report.processing_state = ReportProcessingState.FINALIZED
             report.validation_status = ValidationStatus.PASSED
@@ -114,12 +134,17 @@ class ReportPipeline(BaseService):
             report.save()
             audit_service.record(
                 audit.REPORT_PROCESSED, resource=report,
-                metadata={"outcome": "FINALIZED", "report_class": report_class},
+                metadata={
+                    "outcome": "FINALIZED", "report_class": report_class,
+                    "second_reader": opinion.as_audit_metadata(),
+                },
             )
             return ServiceResult.success(PipelineResult(report, report.processing_state))
 
         reason = self._review_reason(comparison, conflicts, tests)
-        return self._review(report, reason, report_class=report_class)
+        return self._review(
+            report, reason, report_class=report_class, second_opinion=opinion
+        )
 
     # ------------------------------------------------------------------
     def _load_text(self, report: Report) -> str:
@@ -369,14 +394,45 @@ class ReportPipeline(BaseService):
             return "One or more extracted values could not be validated."
         return "Human review required before finalization."
 
-    def _review(self, report: Report, reason: str, *, report_class: str | None = None) -> ServiceResult:
+    def _second_opinion(self, report: Report) -> second_reader.SecondOpinion:
+        """Ask the document service what it made of the same file.
+
+        Never raises and never blocks: a second reader that can make a report
+        unprocessable is not a second reader, it is a new dependency. Every
+        failure - service down, timeout, missing credential - is "no opinion",
+        and the pipeline continues exactly as it would have.
+        """
+        if second_reader.mode() == second_reader.OFF:
+            return second_reader.SecondOpinion()
+        try:
+            content = read_report_bytes(report)
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            return second_reader.SecondOpinion(
+                consulted=True, available=False,
+                unavailable_reason=f"could not read the stored file: {exc}"[:200],
+            )
+        return second_reader.consult(report, content)
+
+    def _review(
+        self,
+        report: Report,
+        reason: str,
+        *,
+        report_class: str | None = None,
+        second_opinion: second_reader.SecondOpinion | None = None,
+    ) -> ServiceResult:
         report.processing_state = ReportProcessingState.REVIEW_REQUIRED
         report.validation_status = ValidationStatus.REVIEW_REQUIRED
         report.review_reason = reason[:255]
         report.save()
+        metadata = {
+            "outcome": "REVIEW_REQUIRED",
+            "report_class": report_class or report.report_class,
+        }
+        if second_opinion is not None:
+            metadata["second_reader"] = second_opinion.as_audit_metadata()
         audit_service.record(
-            audit.REPORT_PROCESSED, resource=report,
-            metadata={"outcome": "REVIEW_REQUIRED", "report_class": report_class or report.report_class},
+            audit.REPORT_PROCESSED, resource=report, metadata=metadata,
         )
         return ServiceResult.blocked(
             "REVIEW_REQUIRED", reason, value=PipelineResult(report, report.processing_state, reason)

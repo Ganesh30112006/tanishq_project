@@ -294,6 +294,22 @@ INTELLIGENCE = {
     "TIMEOUT_SECONDS": float(env("INTELLIGENCE_SERVICE_TIMEOUT_SECONDS", "30") or "30"),
 }
 
+# How much the document-intelligence service is allowed to affect a report.
+#
+#   off       not called. The default, so behaviour is unchanged until someone
+#             deliberately turns it on.
+#   shadow    called, and what it said is recorded in the audit trail. The
+#             outcome is untouched. Run this first: it produces the comparison
+#             that would justify going further.
+#   advisory  called, and may hold for review a report the existing pipeline
+#             would have finalized. It may never do the reverse.
+#
+# Nothing the service returns is ever persisted as a clinical value in any
+# mode. See apps/reports/second_reader.py.
+DOCUMENT_INTELLIGENCE = {
+    "MODE": env("DOCUMENT_INTELLIGENCE_MODE", "off") or "off",
+}
+
 # --------------------------------------------------------------------------
 # File uploads (untrusted; see section 39)
 # --------------------------------------------------------------------------

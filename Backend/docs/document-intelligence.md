@@ -174,6 +174,43 @@ Enabling local OCR needs the Python package **and** the system engine - see
 the capability matrix. Without the engine every path still works; scanned
 reports route to review.
 
+## How Django uses it: a second reader
+
+The existing `apps.reports` pipeline works. Clinicians act on what it produces
+today, and the benchmark corpora that would justify replacing its extraction do
+not exist — so "the new parser is better" is a belief, not a finding. The
+integration is built so that the belief does not have to be true for the change
+to be safe.
+
+The service is a **second reader whose opinion may only make the outcome more
+conservative**:
+
+> a report the existing pipeline would FINALIZE may be held for review
+> a report the existing pipeline would hold may **never** be finalized
+
+`settings.DOCUMENT_INTELLIGENCE["MODE"]`:
+
+| | |
+|---|---|
+| `off` | **the default.** Not called. Behaviour is unchanged until someone deliberately turns it on, and an unrecognised value falls back here so a typo cannot enable a clinical path |
+| `shadow` | called; what it said goes into the audit trail; the outcome is untouched. Run this first — it produces the comparison that would justify going further |
+| `advisory` | called; may hold a report that would otherwise finalize |
+
+**Nothing it returns is ever persisted as a clinical value**, in any mode. It
+creates no `ReportTest`, touches no `Provenance`, and changes no number. It can
+say "a person should look at this", with a reason, and nothing else.
+
+**Availability is never a clinical dependency.** Every failure — service down,
+timeout, malformed response, missing credential — produces "no opinion", is
+recorded so the silence is visible, and the pipeline continues exactly as it
+would have. A report must not become unprocessable because an optional service
+is unreachable.
+
+`tests/integration/test_second_reader.py` checks the invariant across every
+combination of mode and service answer, including answers the code has never
+seen: an unrecognised disposition raises no concern, because the holding set is
+named rather than inferred.
+
 ## Boundaries
 
 * **The cardiovascular pathway must never import this package.**
@@ -185,6 +222,10 @@ reports route to review.
 * **Django ↔ intelligence is HTTP only.** `apps.reports` must not import
   `intelligence.document`; it calls the endpoint. Django owns auth,
   authorization, patient scope, workflow, the authoritative records and audit.
+  An AST import check in `tests/integration/test_second_reader.py` walks every
+  file under `apps/reports` and fails on any `intelligence.*` import — putting
+  the parser in the web process would quietly delete the boundary rather than
+  break anything visible.
 * **OCR output is not clinical truth.** It carries confidence and provenance;
   a later stage decides whether to trust it.
 
