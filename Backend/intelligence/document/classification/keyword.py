@@ -103,6 +103,62 @@ _MARGIN = 2.0
 _WORD = re.compile(r"[a-z0-9]+")
 
 
+def _matcher(term: str) -> re.Pattern[str]:
+    """Match ``term`` as a whole token, never as a fragment of a longer word.
+
+    Counting substrings reads ``alt`` out of *health*, ``ast`` out of
+    *atorvastatin*, *least* and *fasting*, and ``bun`` out of *bundle*. A real
+    cardiology report scored six points of liver evidence that way, from three
+    ordinary English words.
+
+    The guard is a lookaround on alphanumerics rather than ``\\b``, because
+    several terms contain punctuation (``non-hdl``) where a word boundary sits
+    in the middle of the term. Internal spaces become ``\\s+`` so a term split
+    across a line break or a column gap still matches.
+    """
+    body = r"\s+".join(re.escape(part) for part in term.split())
+    return re.compile(rf"(?<![a-z0-9]){body}(?![a-z0-9])")
+
+
+_MATCHERS: dict[ReportType, tuple[tuple[re.Pattern[str], int], ...]] = {
+    report_type: tuple((_matcher(term), weight) for term, weight in terms.items())
+    for report_type, terms in _SIGNALS.items()
+}
+
+#: A line with more words than this is a sentence rather than a label.
+_PROSE_WORDS = 12
+
+
+def _score(text: str) -> dict[ReportType, int]:
+    """Weigh each hit by where it sits.
+
+    A term on a short line is naming what the document holds: a heading, a
+    column header, a ``label: value`` row. The same term inside a sentence is
+    usually talking *about* something - an explanatory paragraph, a method
+    note, a recommendation to monitor a test that this report does not
+    contain. That is weaker evidence about the document's type, so it counts
+    for half, and at most once per line however often the paragraph repeats
+    it. A weight-1 term in prose therefore counts for nothing at all, which is
+    the right answer for a single analyte named in passing.
+    """
+    scores: dict[ReportType, int] = {}
+    for line in text.splitlines():
+        lowered = line.lower()
+        if not lowered.strip():
+            continue
+        prose = len(_WORD.findall(lowered)) > _PROSE_WORDS
+        for report_type, matchers in _MATCHERS.items():
+            for pattern, weight in matchers:
+                hits = len(pattern.findall(lowered))
+                if not hits:
+                    continue
+                if prose:
+                    hits, weight = 1, weight // 2
+                if weight:
+                    scores[report_type] = scores.get(report_type, 0) + weight * hits
+    return scores
+
+
 def classify(text: str) -> ClassificationResult:
     lowered = (text or "").lower()
     if len(_WORD.findall(lowered)) < 5:
@@ -112,11 +168,7 @@ def classify(text: str) -> ClassificationResult:
             detail="too little text to classify",
         )
 
-    scores: dict[ReportType, int] = {}
-    for report_type, terms in _SIGNALS.items():
-        score = sum(weight * lowered.count(term) for term, weight in terms.items())
-        if score:
-            scores[report_type] = score
+    scores = _score(text)
 
     if not scores:
         return ClassificationResult(

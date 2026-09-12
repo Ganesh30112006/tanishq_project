@@ -146,3 +146,94 @@ def test_a_renal_and_electrolyte_panel_printed_together_still_abstains():
     document carrying two panels is exactly the case a person should see."""
     result = classify(RENAL + ELECTROLYTES)
     assert result.status is ClassificationStatus.REVIEW_REQUIRED
+
+
+# --- whole words, not fragments ------------------------------------
+#
+# Found on a real document: a cardiology device report scored six points of
+# liver evidence and was classified LIVER_FUNCTION, because substring counting
+# read "alt" out of *health*, "ast" out of *atorvastatin* and *least*, and
+# "bun" out of *bundle*. Nothing was extracted from it - the analyte table
+# refused every number - but the document would have been filed under the
+# wrong panel, handed the wrong schema, and counted in the wrong stratum of
+# the shadow pilot.
+
+import pytest  # noqa: E402 - the fixtures above read better before the imports
+
+
+@pytest.mark.parametrize(
+    ("word", "must_not_score"),
+    [
+        ("health", "LIVER"),          # alt
+        ("healthy", "LIVER"),         # alt
+        ("Atorvastatin", "LIVER"),    # ast
+        ("least", "LIVER"),           # ast
+        ("fasting", "LIVER"),         # ast - and this one is on lab reports
+        ("gastric", "LIVER"),         # ast
+        ("bundle", "KIDNEY"),         # bun
+        ("bunch", "KIDNEY"),          # bun
+    ],
+)
+def test_a_keyword_buried_in_an_ordinary_word_scores_nothing(word, must_not_score):
+    text = f"Some page of text that happens to contain {word} among other words"
+    assert classify(text).signals.get(must_not_score, 0) == 0
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ALT 34 U/L",
+        "alt: 34 U/L",
+        "ALT: 34",
+        "ALT/AST ratio 1.2",
+        "AST, 29 U/L",
+        "(ALT) 34 U/L",
+        "SGPT (ALT) 34 U/L",
+        "alt    34",
+    ],
+)
+def test_the_keyword_itself_still_counts_however_it_is_punctuated(line):
+    """Whole-token matching must not become no matching. Every one of these
+    prints a real liver analyte."""
+    assert classify(f"LIVER FUNCTION TEST\n{line}\n").signals.get("LIVER", 0) > 0
+
+
+def test_a_multi_word_term_split_across_a_column_gap_still_counts():
+    assert classify("LIVER    FUNCTION\nBilirubin 0.8\n").signals.get("LIVER", 0) >= 5
+
+
+def test_a_document_with_no_real_keyword_abstains_rather_than_picking_the_nearest():
+    """The HeartTrends failure, reduced to the four words that caused it."""
+    text = (
+        "Health Factors\n"
+        "Atorvastatin; Tritace\n"
+        "at least as reliable as exercise testing\n"
+        "presence of left bundle branch block\n"
+    )
+    result = classify(text)
+    assert result.signals == {}
+    assert result.report_type is None
+    assert result.status is ClassificationStatus.REVIEW_REQUIRED
+    assert "no recognised report-type keywords" in result.detail
+
+
+def test_a_term_in_explanatory_prose_weighs_less_than_the_same_term_as_a_label():
+    """A sentence mentioning a test is talking about it; a column header is
+    naming what the document contains."""
+    label = classify("LIPID PROFILE\nTotal Cholesterol 228 mg/dL\n")
+    prose = classify(
+        "The patient was counselled at length about cholesterol and about how "
+        "cholesterol is affected by diet over the following months.\n"
+    )
+    assert prose.signals.get("LIPID", 0) < label.signals["LIPID"]
+    assert prose.report_type is None
+
+
+def test_a_single_weak_analyte_named_in_a_sentence_does_not_score():
+    """Weight-1 terms carry no weight in prose at all. 'Monitor his
+    creatinine' is a recommendation, not a renal panel."""
+    result = classify(
+        "Please monitor his uric acid and repeat the study in six months if "
+        "the patient remains symptomatic after starting treatment.\n"
+    )
+    assert result.signals.get("KIDNEY", 0) == 0
