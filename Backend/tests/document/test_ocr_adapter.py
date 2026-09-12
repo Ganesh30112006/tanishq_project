@@ -1,11 +1,20 @@
 """The OCR adapter: swappable engine, and a missing engine is a clean result.
 
-Most CI machines have no Tesseract binary, so the important paths here are the
-ones that run when OCR is *not* available. Those must return a named
-``ENGINE_UNAVAILABLE`` outcome with no tokens - never an empty string that a
-caller might mistake for "the page was blank", and never an exception.
+The important paths here are the ones that run when OCR is *not* available.
+Those must return a named ``ENGINE_UNAVAILABLE`` outcome with no tokens - never
+an empty string that a caller might mistake for "the page was blank", and never
+an exception.
+
+**These tests do not depend on the engine being absent.** They make it absent,
+by hiding ``pytesseract`` or by breaking the version probe. A test of the
+unavailable path that only runs when the dependency happens to be missing stops
+running the moment somebody installs it - which is precisely when nobody is
+watching that path - and CI then defends a different guarantee from the
+developer's machine.
 """
 from __future__ import annotations
+
+import sys
 
 import pytest
 
@@ -31,17 +40,49 @@ def test_local_provider_conforms_to_the_protocol():
     assert isinstance(LocalTesseractProvider(), OCRProvider)
 
 
-def test_local_provider_without_the_engine_returns_engine_unavailable():
-    provider = LocalTesseractProvider()
-    if provider.is_available():
-        pytest.skip("Tesseract is installed in this environment")
-
-    result = provider.run(_request())
+def _assert_unavailable(result) -> None:
     assert result.outcome is OcrOutcome.ENGINE_UNAVAILABLE
     assert result.tokens == []
     assert result.text == ""
     assert not result.produced_text
     assert "not installed" in result.detail
+
+
+def test_without_the_python_binding_the_result_is_engine_unavailable(monkeypatch):
+    """``pytesseract`` itself missing. Hidden rather than waited for, so this
+    runs on a machine that has it."""
+    monkeypatch.setitem(sys.modules, "pytesseract", None)
+    provider = LocalTesseractProvider()
+
+    assert provider.is_available() is False
+    _assert_unavailable(provider.run(_request()))
+
+
+def test_without_the_tesseract_binary_the_result_is_engine_unavailable(monkeypatch):
+    """The binding installed and the engine absent - the likelier half of the
+    failure, since ``pip install pytesseract`` does not install Tesseract."""
+    pytesseract = pytest.importorskip("pytesseract")
+
+    def _no_binary():
+        raise OSError("tesseract is not installed or it's not in your PATH")
+
+    monkeypatch.setattr(pytesseract, "get_tesseract_version", _no_binary)
+    provider = LocalTesseractProvider()
+
+    assert provider.is_available() is False
+    _assert_unavailable(provider.run(_request()))
+
+
+def test_a_broken_engine_is_unavailable_rather_than_an_exception(monkeypatch):
+    """Whatever the probe raises. A provider that throws on availability would
+    make an optional capability a hard dependency."""
+    pytesseract = pytest.importorskip("pytesseract")
+
+    def _explode():
+        raise RuntimeError("the engine segfaulted")
+
+    monkeypatch.setattr(pytesseract, "get_tesseract_version", _explode)
+    assert LocalTesseractProvider().is_available() is False
 
 
 def test_is_available_never_raises():

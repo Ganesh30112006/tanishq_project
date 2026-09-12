@@ -5,8 +5,6 @@ image with no OCR engine lands there carrying zero extracted content.
 """
 from __future__ import annotations
 
-import pytest
-
 from intelligence.document.contracts import TextSource, ValueStatus
 from intelligence.document.ocr import LocalTesseractProvider
 from intelligence.document.pipeline import Disposition, process_document
@@ -82,11 +80,33 @@ def test_a_text_pdf_of_an_unclear_type_needs_review(text_pdf):
     assert any(i.code == "CLASSIFICATION_REVIEW_REQUIRED" for i in result.issues)
 
 
-def test_an_image_with_no_ocr_engine_is_unreadable_with_nothing_extracted():
-    if LocalTesseractProvider().is_available():
-        pytest.skip("Tesseract installed; the no-engine path cannot be exercised here")
+class _NoEngine:
+    """An OCR provider that is installed and cannot run.
 
-    result = process_document(_PNG, declared_type="image/png")
+    Injected rather than waited for. The guarantee being tested - a page this
+    system cannot read goes to a person instead of becoming values - must hold
+    on every machine, and a test that skips when Tesseract is present stops
+    defending it exactly when somebody installs Tesseract.
+    """
+
+    name = "no-engine"
+
+    def is_available(self) -> bool:
+        return False
+
+    def run(self, request):
+        from intelligence.document.contracts import OcrOutcome, OcrResult
+
+        return OcrResult(
+            outcome=OcrOutcome.ENGINE_UNAVAILABLE, provider=self.name,
+            detail="pytesseract or the Tesseract engine is not installed",
+        )
+
+
+def test_an_image_with_no_ocr_engine_is_unreadable_with_nothing_extracted():
+    result = process_document(
+        _PNG, declared_type="image/png", ocr_provider=_NoEngine()
+    )
 
     assert result.disposition is Disposition.UNREADABLE
     assert result.text == ""
@@ -96,14 +116,24 @@ def test_an_image_with_no_ocr_engine_is_unreadable_with_nothing_extracted():
 
 
 def test_a_scanned_pdf_with_no_text_layer_falls_through_to_ocr(blank_pdf):
-    if LocalTesseractProvider().is_available():
-        pytest.skip("Tesseract installed; would actually OCR the blank page")
-
-    result = process_document(blank_pdf, declared_type="application/pdf")
+    result = process_document(
+        blank_pdf, declared_type="application/pdf", ocr_provider=_NoEngine()
+    )
     assert result.disposition is Disposition.UNREADABLE
     assert result.text_layer is not None
     assert result.text_layer.source is TextSource.NONE
     assert result.ocr is not None  # OCR was attempted
+
+
+def test_the_real_local_provider_is_wired_in_when_none_is_injected():
+    """The stub above proves the handling; this proves it is reached.
+
+    Without it, every no-engine assertion could pass while the pipeline
+    silently defaulted to something else.
+    """
+    result = process_document(_PNG, declared_type="image/png")
+    assert result.ocr is not None
+    assert result.ocr.provider == LocalTesseractProvider().name
 
 
 def test_an_injected_ocr_provider_feeds_the_full_pipeline():
