@@ -81,6 +81,14 @@ _UNIT_RE = re.compile(
 #: result.
 _SECOND_NUMBER = re.compile(r"^[\s/,;|]*" + _NUMBER + r"(?:\s|$|[^\w%/^*])")
 
+#: ...unless what follows is plainly a reference interval. "13.0 - 17.0" is a
+#: range, not a competing result: the dash says so, and no OCR split produces
+#: one. Without this the guard refuses a line whose result is perfectly clear
+#: and whose reference range is printed beside it in a column of its own.
+_TRAILING_INTERVAL = re.compile(
+    r"^[\s(\[]*" + _NUMBER + r"\s*[-‐-―−]\s*" + _NUMBER + r"\s*[)\]]*\s*$"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RawExtraction:
@@ -167,6 +175,24 @@ def extract_raw_values(
 
         censored = _CENSORED.match(stripped)
         match = _LINE.match(stripped)
+
+        if censored is not None and match is not None:
+            # Both shapes fit the line, and which one it really is depends on
+            # where the bound sits relative to the result.
+            #
+            #   TSH  < 0.01 uIU/mL          the bound IS the result
+            #   Cholesterol 228 mg/dL < 200 the bound is the reference range
+            #
+            # The result column is established first and the reference range
+            # is read separately from what follows it. Before this, the
+            # censored rule won unconditionally, so an ordinary result printed
+            # against a one-sided target - which is how most lipid panels
+            # print theirs - lost its value entirely: the label swallowed
+            # "Cholesterol 228 mg/dL" and the parser reported the target as a
+            # censored result.
+            if match.start("value") < censored.start("bound"):
+                censored = None
+
         if not match and not censored:
             continue
 
@@ -200,7 +226,11 @@ def extract_raw_values(
             value = _parse_number(value_text)
             unit, flag, reference = _split_rest(match["rest"])
 
-            if not unit and _SECOND_NUMBER.match(match["rest"]):
+            if (
+                not unit
+                and _SECOND_NUMBER.match(match["rest"])
+                and not _TRAILING_INTERVAL.match(match["rest"])
+            ):
                 # Another number where the unit should be. Either OCR split one
                 # number in two, or the line carries two results. Both mean we
                 # do not know which number is the result, so none is offered.

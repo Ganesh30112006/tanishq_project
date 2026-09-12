@@ -121,3 +121,98 @@ def test_page_breaks_map_a_span_to_its_page():
     pages = {r.label: r.page for r in rows}
     assert pages["Hemoglobin"] == 1
     assert pages["WBC"] == 2
+
+
+# --- the result column first, the reference range after it ----------
+#
+# Found on a real report: every lipid result was lost. The line
+#
+#     Total Cholesterol 228 mg/dL < 200 mg/dL
+#
+# was read as a censored result, because the censored rule - added to stop
+# "TSH <0.01" becoming 0.01 - won unconditionally and its label pattern
+# accepts digits. So the label swallowed "Total Cholesterol 228 mg/dL" and the
+# clinical target was reported as the result. The fix for one real failure
+# mode had created another.
+#
+# The invariant now: which shape the line is depends on where the bound sits.
+# Before the value it IS the result; after it, it is the reference range.
+
+
+def _first(line):
+    values = extract_raw_values(line)
+    return values[0] if values else None
+
+
+class TestABoundThatIsTheResult:
+    """Must stay censored: no number, and the text kept verbatim."""
+
+    def test_a_bare_censored_result(self):
+        raw = _first("TSH <0.01")
+        assert raw.value is None
+        assert raw.value_text == "<0.01"
+
+    def test_a_censored_result_with_a_separator_and_spaces(self):
+        raw = _first("TSH: < 0.01")
+        assert raw.value is None
+        assert raw.value_text == "<0.01"
+
+    def test_a_censored_result_that_also_prints_a_reference_range(self):
+        """The comparator survives into the structured value, and the range
+        beside it is read as a range."""
+        raw = _first("TSH < 0.01 uIU/mL 0.4 - 4.0")
+        assert raw.value is None
+        assert raw.value_text == "<0.01"
+        assert raw.unit == "uIU/mL"
+        assert raw.reference_text == "0.4 - 4.0"
+
+    def test_an_upper_censored_result(self):
+        raw = _first("Vitamin B12 > 2000 pg/mL 200 - 900")
+        assert raw.value is None
+        assert raw.value_text == ">2000"
+
+    def test_a_bound_with_no_analyte_yields_nothing_rather_than_a_number(self):
+        assert extract_raw_values("<0.01") == []
+
+
+class TestABoundThatIsTheReferenceRange:
+    """The result keeps its value; the bound is the range."""
+
+    def test_a_one_sided_target_after_the_result(self):
+        raw = _first("Total Cholesterol 228 mg/dL < 200 mg/dL")
+        assert raw.value == 228.0
+        assert raw.unit == "mg/dL"
+        assert raw.reference_text == "< 200 mg/dL"
+
+    def test_an_at_least_target_after_the_result(self):
+        raw = _first("HDL Cholesterol 38 mg/dL \u2265 40 mg/dL")
+        assert raw.value == 38.0
+        assert raw.reference_text == "\u2265 40 mg/dL"
+
+    def test_a_one_sided_target_with_no_unit_in_the_range(self):
+        raw = _first("Total Cholesterol 228 mg/dL < 200")
+        assert raw.value == 228.0
+        assert parse_reference_range(raw.reference_text).high == 200.0
+
+    def test_result_and_bound_with_no_unit_at_all(self):
+        raw = _first("Cholesterol 5.4 <200")
+        assert raw.value == 5.4
+        assert raw.reference_text == "<200"
+
+    def test_result_and_an_interval_with_no_unit_at_all(self):
+        """A dash-range is a range, not a competing second number."""
+        raw = _first("Cholesterol 5.4 3-10")
+        assert raw.value == 5.4
+        assert parse_reference_range(raw.reference_text).low == 3.0
+
+
+class TestTheSecondNumberGuardStillHolds:
+    """Relaxing it for intervals must not reopen what it was built for."""
+
+    def test_an_ocr_split_number_still_yields_no_value(self):
+        raw = _first("Hemoglobin 1 3.4 g/dL")
+        assert raw.value is None
+
+    def test_two_results_on_one_line_still_yield_no_value(self):
+        raw = _first("Bilirubin 1.2 / 1.4")
+        assert raw.value is None

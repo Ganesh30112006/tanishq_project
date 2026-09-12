@@ -237,3 +237,29 @@ def test_a_single_weak_analyte_named_in_a_sentence_does_not_score():
         "the patient remains symptomatic after starting treatment.\n"
     )
     assert result.signals.get("KIDNEY", 0) == 0
+
+
+@pytest.mark.parametrize(
+    ("line", "report_type"),
+    [
+        ("Triglycerides 210 mg/dL", "LIPID"),
+        ("Platelets 240 x10^9/L", "CBC"),
+        ("Neutrophils 58 %", "CBC"),
+        ("Lymphocytes 33 %", "CBC"),
+        ("Eosinophils 2 %", "CBC"),
+    ],
+)
+def test_the_plural_a_report_actually_prints_still_counts(line, report_type):
+    """The signal table is written in the singular and reports print the
+    plural. Substring counting covered that by accident; whole-token matching
+    has to do it on purpose. Caught by a real report whose lipid panel stopped
+    being recognised."""
+    # Padded past the "too little text to classify" floor with words that
+    # signal nothing.
+    padding = "Specimen drawn in the morning at the collection centre"
+    assert classify(f"{line}\n{padding}\n").signals.get(report_type, 0) > 0
+
+
+def test_an_abbreviation_is_not_pluralised_into_a_false_positive():
+    """'Avoid buns' is dietary advice, not a renal panel."""
+    assert classify("Advice: avoid buns and fried food entirely.").signals == {}

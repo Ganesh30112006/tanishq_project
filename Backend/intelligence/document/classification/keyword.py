@@ -116,7 +116,15 @@ def _matcher(term: str) -> re.Pattern[str]:
     in the middle of the term. Internal spaces become ``\\s+`` so a term split
     across a line break or a column gap still matches.
     """
-    body = r"\s+".join(re.escape(part) for part in term.split())
+    parts = term.split()
+    body = r"\s+".join(re.escape(part) for part in parts)
+    if len(parts[-1]) > 3 and parts[-1].isalpha():
+        # The table is written in the singular and reports print the plural:
+        # "Triglycerides", "Platelets", "Neutrophils". Substring counting used
+        # to cover that by accident, so the plural has to be explicit now.
+        # Only for words - an abbreviation is never pluralised on a report,
+        # and "buns" should not be evidence of a renal panel.
+        body += "s?"
     return re.compile(rf"(?<![a-z0-9]){body}(?![a-z0-9])")
 
 
