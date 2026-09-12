@@ -24,23 +24,82 @@ applies standard criteria correctly and its accuracy on real reports is
 unknown. Every finding carries that sentence, and the framework refuses to let
 a detector claim otherwise.
 
-## The apparatus
+## Two benchmarks, not one
+
+"Does the system get this right?" is two questions, and answering them together
+answers neither:
+
+```
+text or image        ->  structured evidence      the extraction benchmark
+structured evidence  ->  finding or condition     the reasoning benchmark
+```
+
+A detector can reason flawlessly on a misread haemoglobin. Extraction can be
+perfect and feed a rule that draws an unsafe conclusion. Scored together those
+two failures are indistinguishable, and the number they produce tells nobody
+which layer to fix — so they are separate corpora, separate scores and
+separate gates.
+
+The reasoning benchmark is scored against the **annotators'** structured
+evidence, not the parser's. A detector is not penalised for a value the parser
+misread, and is not credited when good extraction masks an unsafe rule.
+
+The split is also cheaper. Transcribing a printed report accurately is a
+different skill from judging whether a result is clinically meaningful, so the
+extraction corpus does not need clinician time — which matters, because it is
+the larger of the two.
 
 ```
 intelligence/benchmark/
-  schema.py     what a clinician is asked, and the shape of the answer
-  corpus.py     reading an annotated set off disk, strictly
-  labels.py     several clinicians' answers -> the one label a score needs
-  scoring.py    precision, recall, F1, abstention, with real intervals
-  promotion.py  when a detector may stop calling itself NOT_VALIDATED
+  extraction/     schema, loader, scoring for the reading layer
+  reasoning/      schema, loader, scoring for the clinical layer
+  adjudication.py several annotators -> the one label a score needs (shared)
+  statistics.py   proportions with intervals that behave at the extremes
+  promotion.py    both gates, written before there was data to run
 ```
 
 `benchmark/README.md` is the guide clinicians and whoever organises the
-annotation work from. It holds no data, and a manufactured corpus must never be
-put there — `tests/benchmark/test_no_manufactured_corpus.py` fails if anything
-in the tree starts to look like one.
+annotation work from. It holds no data, and **neither** corpus may ever be
+manufactured — `tests/benchmark/test_no_manufactured_corpus.py` fails if
+anything in the tree starts to look like one.
 
-## Four things counted, kept apart
+The adversarial suite at `tests/document/adversarial/` is a different thing
+again, and not a substitute for either. It asks whether the parser can be made
+to fabricate a fact out of text that does not support one — an invariant,
+checkable with no annotation at all. It says nothing about whether the system
+reads reports *well*.
+
+## The extraction benchmark
+
+An annotator transcribes each result line exactly as printed: analyte, value,
+unit, reference range, printed flag, section, and the document type. Four
+things are counted.
+
+**Detection** — which lines the parser found: precision, recall, F1.
+
+**Transcription** — of the lines it found, how many of the value, unit,
+reference range, flag and section it got right, scored **per attribute**. A
+parser that reads every number right and every unit wrong is a different
+problem from one that does the reverse, and one accuracy figure hides both.
+
+**Fabrication** — the headline, and not precision. A value the parser
+*persisted* that the report does not print, or a value persisted for a line the
+annotators marked as yielding nothing. A missed result is a gap a person can
+see; a wrong result is one nobody can. They are never added together.
+
+**Refusal** — lines that must yield nothing (page numbers, accession numbers,
+censored results) and whether the parser also yielded nothing. Most of a report
+is not a result, and a corpus recording only the results cannot measure whether
+the parser invents any, so a corpus without them is reported as incomplete.
+
+A value the parser produced but marked as **not persistable** is not a
+fabrication. Refusing out loud is what the status ladder exists to produce, and
+counting it as an error would push the system towards confident guesses.
+
+`should_not_be_extracted` is the field that does the most work, and it must say
+*why* — that reason is what the parser is being asked to reproduce.
+
+## The reasoning benchmark: four things counted, kept apart
 
 **Agreement.** True and false positives and negatives, and precision, recall
 and F1 from them. Every proportion carries a Wilson score interval, because a
@@ -81,6 +140,30 @@ is a code whose definition is not sharp enough to score — and it is destroyed
 by being resolved automatically. The rate is reported and it is one of the
 promotion requirements.
 
+## Two gates
+
+**Extraction readiness** gates whether the parser has been measured well enough
+for anything downstream to be measured at all — a reasoning score computed
+over a corpus whose extraction was never checked is a number about two layers
+at once.
+
+| Requirement | Value |
+|---|---|
+| `corpus_size` | 200 documents |
+| `fields_measured` | 500 transcribed result lines |
+| `refusable_lines` | 100 lines that must yield nothing |
+| `double_read` | every document, 2 annotators |
+| `disagreements_adjudicated` | at most 5% unresolved |
+| `no_fabrications` | **zero** |
+
+That last one is the only correctness bar in either benchmark. A parser that
+persists a number the report does not print is not a less-accurate parser; it
+is one whose output nobody can act on, and no amount of corpus size makes that
+measurable-and-fine.
+
+**Detector promotion** gates one detector moving from `NOT_VALIDATED` to
+`BENCHMARKED`.
+
 ## Promotion: measured, not good
 
 `BENCHMARKED` means the detector has been **measured**. It does not mean it
@@ -114,22 +197,29 @@ dossier, where approval requires a human to acknowledge each open question.
 ## Running it
 
 ```
-python -m intelligence.benchmark                       # how far off are we
-python -m intelligence.benchmark --corpus corpus.json  # validate and report
-python -m intelligence.benchmark --corpus corpus.json \
-    --outputs system.json --json scores.json           # score it
+python -m intelligence.benchmark
+python -m intelligence.benchmark --extraction-corpus extraction.json \
+    --extraction-outputs parsed.json
+python -m intelligence.benchmark --reasoning-corpus reports.json \
+    --outputs system.json --json scores.json
 ```
 
-Today:
+Today, and reported layer by layer rather than as one number:
 
 ```
+1. Extraction   text or image -> structured evidence
+corpus            none
+documents         0 of 200 required
+ready             no
+  - No extraction corpus exists. 200 documents, each transcribed by at
+    least 2 annotators, are needed before the parser can be measured.
+
+2. Clinical reasoning   structured evidence -> finding or condition
 corpus            none
 reports           0 of 200 required
 promotable        0
-
-Blocking:
-  - No annotated corpus exists. 200 reports, each read by at least 2
-    clinicians, are needed before any detector can be measured.
+  - No clinician-annotated corpus exists. 200 reports, each read by at
+    least 2 clinicians, are needed before any detector can be measured.
 ```
 
 That is the intended output. The apparatus exists, the data does not, and every

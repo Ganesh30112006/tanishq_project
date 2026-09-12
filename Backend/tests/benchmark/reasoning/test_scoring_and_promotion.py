@@ -20,7 +20,13 @@ from datetime import date
 
 import pytest
 
-from intelligence.benchmark import (
+from intelligence.benchmark import evaluate, readiness, wilson_interval
+from intelligence.benchmark.promotion import (
+    MIN_CORPUS_REPORTS,
+    MIN_NEGATIVE_EVENTS,
+    MIN_POSITIVE_EVENTS,
+)
+from intelligence.benchmark.reasoning import (
     Adjudication,
     BenchmarkItem,
     ConditionAnnotation,
@@ -30,15 +36,7 @@ from intelligence.benchmark import (
     EvidenceSufficiency,
     FindingAnnotation,
     ReportAnnotation,
-    evaluate,
-    readiness,
     score,
-    wilson_interval,
-)
-from intelligence.benchmark.promotion import (
-    MIN_CORPUS_REPORTS,
-    MIN_NEGATIVE_EVENTS,
-    MIN_POSITIVE_EVENTS,
 )
 from intelligence.findings.contracts import Confidence
 
@@ -358,16 +356,23 @@ def test_the_event_minimums_are_stated_rather_than_implied(value):
 
 
 # --- readiness, which is the honest answer today --------------------
-def test_readiness_with_no_corpus_says_so_plainly():
-    state = readiness(None)
-    assert state["reports"] == 0
-    assert state["promotable_codes"] == []
-    assert any("No annotated corpus exists" in line for line in state["blocking"])
+def test_readiness_reports_the_two_layers_separately():
+    """Never one number: the layers are fixed by completely different work."""
+    state = readiness(None, None)
+    assert set(state) == {"extraction", "reasoning"}
+
+    assert state["reasoning"]["reports"] == 0
+    assert state["reasoning"]["promotable_codes"] == []
+    assert any("No clinician-annotated corpus exists" in line
+               for line in state["reasoning"]["blocking"])
+
+    assert state["extraction"]["documents"] == 0
+    assert state["extraction"]["ready"] is False
 
 
 def test_readiness_names_what_is_still_blocking():
     corpus, outputs = _big_corpus(reports=10, positives=5)
-    state = readiness(score(corpus, outputs))
+    state = readiness(score(corpus, outputs))["reasoning"]
     assert state["reports"] == 10
     assert state["promotable_codes"] == []
     assert any("200 reports" in line or "reports," in line

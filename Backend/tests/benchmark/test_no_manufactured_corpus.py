@@ -19,7 +19,10 @@ import json
 from pathlib import Path
 
 from intelligence.benchmark import readiness
-from intelligence.benchmark.promotion import MIN_CORPUS_REPORTS
+from intelligence.benchmark.promotion import (
+    MIN_CORPUS_REPORTS,
+    MIN_EXTRACTION_DOCUMENTS,
+)
 from intelligence.findings import registry
 from intelligence.findings.contracts import DetectorValidation
 
@@ -42,9 +45,10 @@ def test_the_benchmark_directory_holds_documentation_and_nothing_else():
 
 
 def test_no_file_in_the_tree_claims_to_be_an_annotated_corpus():
-    """A corpus file is recognisable by its keys. Nothing in the repository
-    may look like one - including under tests, where fixtures are built in
-    memory precisely so that no file has to."""
+    """A corpus file is recognisable by its keys, and both the extraction and
+    the reasoning corpora share them. Nothing in the repository may look like
+    one - including under tests, where fixtures are built in memory precisely
+    so that no file has to."""
     skip = {".venv", "node_modules", ".git", "__pycache__", ".pytest_cache",
             "staticfiles", "media", ".ruff_cache"}
     offenders = []
@@ -64,10 +68,16 @@ def test_no_file_in_the_tree_claims_to_be_an_annotated_corpus():
 
 
 def test_with_no_corpus_nothing_is_measurable_and_the_tool_says_so():
-    state = readiness(None)
-    assert state["corpus"] == "none"
-    assert state["promotable_codes"] == []
-    assert str(MIN_CORPUS_REPORTS) in " ".join(state["blocking"])
+    state = readiness(None, None)
+    assert state["reasoning"]["corpus"] == "none"
+    assert state["reasoning"]["promotable_codes"] == []
+    assert str(MIN_CORPUS_REPORTS) in " ".join(state["reasoning"]["blocking"])
+
+    assert state["extraction"]["corpus"] == "none"
+    assert state["extraction"]["ready"] is False
+    assert str(MIN_EXTRACTION_DOCUMENTS) in " ".join(
+        state["extraction"]["blocking"]
+    )
 
 
 def test_and_so_every_detector_still_reports_that_it_has_never_been_measured():

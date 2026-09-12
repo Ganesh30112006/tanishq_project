@@ -27,7 +27,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from intelligence.benchmark.schema import (
+from intelligence.benchmark.reasoning.schema import (
     ANNOTATION_SCHEMA_VERSION,
     Adjudication,
     BenchmarkItem,

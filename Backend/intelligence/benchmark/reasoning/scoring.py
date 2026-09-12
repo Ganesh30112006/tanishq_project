@@ -28,43 +28,24 @@ somewhere it has no business, and both need a person.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 
-from intelligence.benchmark.labels import (
+from intelligence.benchmark.reasoning.labels import (
     LabelSource,
     condition_label,
     disagreements,
     finding_label,
 )
-from intelligence.benchmark.schema import (
+from intelligence.benchmark.reasoning.schema import (
     ConditionSupport,
     Corpus,
     Determination,
 )
+from intelligence.benchmark.statistics import (
+    CONFIDENCE_LEVEL,
+    wilson_interval,
+)
 from intelligence.findings.contracts import Confidence
-
-#: Wilson score interval coverage. Kept as a named constant so a report can
-#: say which interval it used rather than implying a convention.
-CONFIDENCE_LEVEL = 0.95
-_Z = 1.959963984540054
-
-
-def wilson_interval(successes: int, trials: int) -> tuple[float, float] | None:
-    """A confidence interval for a proportion that behaves at the extremes.
-
-    The normal approximation gives (1.0, 1.0) for four out of four, which is a
-    statement no four observations support. Wilson does not.
-    """
-    if trials <= 0:
-        return None
-    p = successes / trials
-    denominator = 1 + _Z**2 / trials
-    centre = (p + _Z**2 / (2 * trials)) / denominator
-    spread = (
-        _Z * math.sqrt(p * (1 - p) / trials + _Z**2 / (4 * trials**2))
-    ) / denominator
-    return (round(max(0.0, centre - spread), 4), round(min(1.0, centre + spread), 4))
 
 
 @dataclass(slots=True)

@@ -20,26 +20,15 @@ The rate is reported, and it is one of the promotion requirements.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
-from intelligence.benchmark.schema import (
+from intelligence.benchmark.adjudication import LabelSource, resolve
+from intelligence.benchmark.reasoning.schema import (
     Adjudication,
     BenchmarkItem,
     ConditionSupport,
     Determination,
     ReportAnnotation,
 )
-
-
-class LabelSource(str, Enum):  # noqa: UP042 - str mixin for reporting
-    #: Every annotator gave the same answer.
-    UNANIMOUS = "UNANIMOUS"
-    #: They differed and a named adjudicator ruled.
-    ADJUDICATED = "ADJUDICATED"
-    #: They differed and nobody ruled. Not scoreable.
-    UNRESOLVED = "UNRESOLVED"
-    #: Nobody thought the code applied to this report.
-    NOT_APPLICABLE = "NOT_APPLICABLE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,20 +47,6 @@ class Label:
         return self.source in (LabelSource.UNANIMOUS, LabelSource.ADJUDICATED)
 
 
-def _resolve(
-    code: str,
-    answers: list[str],
-    ruling: str | None,
-) -> tuple[LabelSource, str | None]:
-    if not answers:
-        return LabelSource.NOT_APPLICABLE, None
-    if len(set(answers)) == 1:
-        return LabelSource.UNANIMOUS, answers[0]
-    if ruling is not None:
-        return LabelSource.ADJUDICATED, ruling
-    return LabelSource.UNRESOLVED, None
-
-
 def finding_label(item: BenchmarkItem, code: str) -> Label:
     answers = [
         annotation.finding(code).determination.value
@@ -79,7 +54,8 @@ def finding_label(item: BenchmarkItem, code: str) -> Label:
         if annotation.finding(code) is not None
     ]
     ruled = _ruling_for(item.adjudication, code, kind="finding")
-    source, agreed = _resolve(code, answers, ruled)
+    resolved = resolve(code, answers, ruled)
+    source, agreed = resolved.source, resolved.agreed
     return Label(
         code=code,
         source=source,
@@ -95,7 +71,8 @@ def condition_label(item: BenchmarkItem, code: str) -> Label:
         if annotation.condition(code) is not None
     ]
     ruled = _ruling_for(item.adjudication, code, kind="condition")
-    source, agreed = _resolve(code, answers, ruled)
+    resolved = resolve(code, answers, ruled)
+    source, agreed = resolved.source, resolved.agreed
     return Label(
         code=code,
         source=source,
@@ -119,7 +96,8 @@ def _ruling_for(
 def review_label(item: BenchmarkItem) -> Label:
     """Whether the report needed a person, resolved the same way."""
     answers = [str(a.human_review_required) for a in item.annotations]
-    source, agreed = _resolve("HUMAN_REVIEW_REQUIRED", answers, None)
+    resolved = resolve("HUMAN_REVIEW_REQUIRED", answers, None)
+    source = resolved.source
     return Label(
         code="HUMAN_REVIEW_REQUIRED",
         source=source,

@@ -1,13 +1,54 @@
-# The gold-standard benchmark
+# The gold-standard benchmarks
 
-**This directory holds no data, and a manufactured corpus must never be put
-here.** A file of plausible-looking labels would be indistinguishable from
-clinician-annotated data a few months from now, and every number computed from
-it would inherit that. The tests build their fixtures in memory for exactly
-this reason.
+There are **two**, and they are annotated separately:
 
-What lives here is the corpus, once clinicians have produced it, and nothing
-else. The apparatus is in `intelligence/benchmark/`.
+| | Question | Who annotates |
+|---|---|---|
+| **Extraction** | text or image -> structured evidence. Did we read it correctly? | anyone who can read a laboratory report accurately |
+| **Reasoning** | structured evidence -> finding or condition. Did we conclude safely? | clinicians |
+
+A detector can reason flawlessly on a misread haemoglobin, and perfect
+extraction can feed an unsafe rule. Scored together those failures are
+indistinguishable. Keeping them apart is also what makes the larger corpus
+affordable: transcribing a printed report is not a clinical judgement, so the
+extraction corpus does not need clinician time.
+
+The reasoning benchmark is scored against the **annotators'** structured
+evidence rather than the parser's output, so a reasoning score measures
+reasoning.
+
+**This directory holds no data, and neither corpus may ever be manufactured.**
+A file of plausible-looking labels would be indistinguishable from real
+annotation a few months from now, and every number computed from it would
+inherit that. The tests build their fixtures in memory for exactly this reason.
+
+What lives here are the two corpora, once annotators have produced them, and
+nothing else. The apparatus is in `intelligence/benchmark/`.
+
+## What an extraction annotator is asked
+
+Per document, per printed line. No clinical judgement is involved: the question
+is what the page says, not what it means.
+
+| Field | |
+|---|---|
+| `printed_label` | the test name exactly as printed — this is what the parser sees |
+| `analyte` | the canonical name it refers to, or blank if it is not one we model |
+| `value`, `unit` | as printed, not converted |
+| `reference_text` | the range as printed |
+| `printed_flag` | H / L / any marker the report puts beside the result |
+| `section` | the heading the line sits under |
+| `should_not_be_extracted` | **true for every line that must yield nothing**, with `why_not` |
+
+That last field does the most work. Most of a report is not a result — page
+numbers, accession numbers, ages, dates, method notes, a result the assay
+declined to measure — and a parser that turns any of those into a clinical
+value has fabricated one. Recording them is how that gets measured rather than
+assumed; a corpus without them is reported as incomplete, because it can only
+measure what the parser reads and never what it invents.
+
+Also recorded per document: the report type, and whether the document is
+readable at all.
 
 ## Why this is the gate on everything
 
@@ -18,14 +59,15 @@ pages from many laboratories, each with its own reference ranges, spellings and
 layout. Whether a rule written from a textbook holds there is an empirical
 question and nobody has answered it.
 
-Until this corpus exists, the honest description of the system is: it applies
+Until these corpora exist, the honest description of the system is: it applies
 standard criteria correctly and its accuracy on real reports is unknown. Every
 finding carries that sentence, and the framework refuses to let a detector
 claim otherwise.
 
 ## What a clinician is asked
 
-Per report, per applicable code. The annotator first decides which codes the
+This is the reasoning corpus, and it needs clinicians. Per report, per
+applicable code. The annotator first decides which codes the
 report could reasonably carry — a lipid panel is not scored for thyroid codes —
 and then answers for each of them. Declaring a code applicable and not
 answering it is refused at load time, because an unanswered code silently
@@ -66,12 +108,14 @@ corpus. It is where the cases the rules get wrong describe themselves: a
 haemolysed sample, a patient who had been fasting, a laboratory whose ALP
 range is set for adolescents.
 
-## How the corpus is built
+## How either corpus is built
+
+The procedure is the same for both; only who annotates differs.
 
 1. **Sample reports the way they actually arrive.** Photographs and scans as
    well as clean PDFs, across the laboratories the system really sees. A corpus
    of tidy machine-generated PDFs measures a system nobody is using.
-2. **Two clinicians read every report independently.** One reader's habits
+2. **Two annotators read every document independently.** One reader's habits
    must not become the ground truth.
 3. **A third adjudicates every disagreement**, and records *why* they
    disagreed. Adjudications with no reason are refused.
@@ -82,7 +126,31 @@ range is set for adolescents.
 
 Start at 200–500 reports. The annotation schema matters more than the count.
 
-## What promotion requires
+## What the extraction gate requires
+
+Measured separately, and gating everything downstream: a reasoning score
+computed over a corpus whose extraction was never checked is a number about two
+layers at once.
+
+| Requirement | Value | Why |
+|---|---|---|
+| corpus size | 200 documents | |
+| result lines | 500 transcribed | below this the detection measurement is too thin |
+| refusable lines | 100 | without them the corpus cannot measure whether the parser invents values |
+| annotators | 2 per document | one person's transcription must not become the truth |
+| unadjudicated disagreements | at most 5% | |
+| **fabrications** | **zero** | the only correctness bar in either benchmark |
+
+The last row is not a performance floor. A parser that persists a number the
+report does not print is not a less-accurate parser; it is one whose output
+nobody can act on, and no corpus size makes that acceptable.
+
+A value the parser produced but marked **not persistable** is not a
+fabrication. Refusing out loud is the behaviour the whole status ladder exists
+to produce, and counting it as an error would push the system towards confident
+guesses.
+
+## What detector promotion requires
 
 `BENCHMARKED` means **measured**, not good. A detector whose measured precision
 is poor should be `BENCHMARKED` — measured, and known to be poor — not left at
@@ -111,16 +179,68 @@ made by a person who has read the numbers.
 ## Running it
 
 ```
-python -m intelligence.benchmark                          # how far off are we
-python -m intelligence.benchmark --corpus corpus.json     # validate and report
-python -m intelligence.benchmark --corpus corpus.json \
-    --outputs system.json --json scores.json              # score it
+python -m intelligence.benchmark
+python -m intelligence.benchmark --extraction-corpus extraction.json \
+    --extraction-outputs parsed.json
+python -m intelligence.benchmark --reasoning-corpus reports.json \
+    --outputs system.json --json scores.json
 ```
+
+The readiness output is always reported layer by layer, never as one number: a
+caller has to be able to see which layer is the obstacle, because the two are
+fixed by completely different work — one needs parser changes, the other needs
+clinician time.
 
 ## File format
 
-One JSON document per corpus. See `intelligence/benchmark/corpus.py` for the
-loader, which refuses rather than repairs.
+One JSON document per corpus, and the two have separate schemas. See
+`intelligence/benchmark/reasoning/corpus.py` and
+`intelligence/benchmark/extraction/corpus.py` for the loaders, which refuse
+rather than repair.
+
+An extraction corpus looks like this — note that the page-number line
+is as important as the result:
+
+```json
+{
+  "corpus_id": "clinic-a-extraction-2026-q1",
+  "schema_version": "benchmark-extraction-1",
+  "items": [
+    {
+      "document_id": "d-0001",
+      "source_sha256": "<hash of the document the annotators read>",
+      "capture": "phone photograph",
+      "annotations": [
+        {
+          "document_id": "d-0001",
+          "annotator_id": "annotator-1",
+          "annotated_on": "2026-02-11",
+          "document_type": "CBC",
+          "readable": true,
+          "fields": [
+            {
+              "analyte": "hemoglobin",
+              "printed_label": "Hemoglobin",
+              "value": 13.4,
+              "unit": "g/dL",
+              "reference_text": "13.0 - 17.0",
+              "section": "COMPLETE BLOOD COUNT"
+            },
+            {
+              "analyte": "",
+              "printed_label": "Page 1 of 3",
+              "should_not_be_extracted": true,
+              "why_not": "page furniture, not a result"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+And a reasoning corpus:
 
 ```json
 {

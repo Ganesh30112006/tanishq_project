@@ -17,7 +17,7 @@ from datetime import date
 
 import pytest
 
-from intelligence.benchmark import (
+from intelligence.benchmark.reasoning import (
     ANNOTATION_SCHEMA_VERSION,
     Adjudication,
     BenchmarkItem,
