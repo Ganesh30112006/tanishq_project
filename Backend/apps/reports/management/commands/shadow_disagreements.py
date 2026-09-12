@@ -22,7 +22,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
 from apps.common.enums import ReportClass
-from apps.reports import reader_comparison
+from apps.reports import reader_comparison, second_reader
 from apps.reports.models import ReaderComparison, ReaderDisagreement
 
 Kind = ReaderDisagreement.Kind
@@ -132,17 +132,101 @@ class Command(BaseCommand):
                 "them has not been tested on the reports that matter."
             )
 
+    def _profile(self, comparisons) -> None:
+        """One line per report, and the rate that matters at this stage.
+
+        The headline is **unsafe disagreements per 100 reports**: both readers
+        produced a number they stand behind, and the numbers differ. One of
+        them is a wrong clinical value carried with full confidence, and
+        nothing in either output says which.
+
+        The denominator is reports where the second reader actually answered.
+        A report it could not be consulted about never had the opportunity to
+        disagree, and counting those would let an outage look like safety.
+        """
+        buckets = {
+            "unsafe disagreement": 0,
+            "unresolved disagreement": 0,
+            "OCR failure": 0,
+            "safe abstention": 0,
+            "agreement": 0,
+        }
+        comparable = 0
+        for comparison in comparisons.filter(second_available=True).prefetch_related(
+            "disagreements"
+        ):
+            comparable += 1
+            rows = list(comparison.disagreements.all())
+            # Worst first: a report with one unsafe row is an unsafe report,
+            # whatever else it also contains.
+            if any(row.is_unsafe for row in rows):
+                buckets["unsafe disagreement"] += 1
+            elif any(row.classification == Classification.UNKNOWN for row in rows):
+                buckets["unresolved disagreement"] += 1
+            elif any(
+                row.classification == Classification.OCR_FAILURE for row in rows
+            ):
+                buckets["OCR failure"] += 1
+            elif rows:
+                buckets["safe abstention"] += 1
+            else:
+                buckets["agreement"] += 1
+
+        if not comparable:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(f"Per report, of {comparable} the second reader answered")
+        self.stdout.write("=" * 72)
+        for name, count in buckets.items():
+            share = count / comparable
+            self.stdout.write(f"{name:<26s} {count:>6d}   {share:>6.1%}")
+
+        rate = buckets["unsafe disagreement"] / comparable * 100
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                f"unsafe disagreements per 100 reports: {rate:.1f}"
+            )
+        )
+        self.stdout.write(
+            "    This is the number to watch, not agreement. The goal is not "
+            "for the two"
+        )
+        self.stdout.write(
+            "    readers to agree; it is that when they disagree, the clinical "
+            "record is"
+        )
+        self.stdout.write("    never made less safe.")
+        if comparable < 100:
+            self.stdout.write(
+                f"    ({buckets['unsafe disagreement']} in {comparable} "
+                f"reports. Below 100 the rate moves by whole reports and is "
+                f"not yet stable -"
+            )
+            self.stdout.write("    read the count, and read the examples.)")
+
     def _summary(self) -> None:
         comparisons = ReaderComparison.objects.all()
         total = comparisons.count()
         if not total:
-            self.stdout.write(
-                "No reports have been read twice yet.\n\n"
-                "Shadow mode is off, or no report has been processed since it "
-                "was switched on. Set DOCUMENT_INTELLIGENCE_MODE=shadow and "
-                "process reports; the comparison is written for every report "
-                "the service is consulted about."
-            )
+            current = second_reader.mode()
+            self.stdout.write("No reports have been read twice yet.")
+            self.stdout.write("")
+            if current == second_reader.OFF:
+                self.stdout.write(
+                    "DOCUMENT_INTELLIGENCE_MODE is off, so the service is not "
+                    "consulted. Set it to shadow and process reports."
+                )
+            else:
+                self.stdout.write(
+                    f"DOCUMENT_INTELLIGENCE_MODE is {current}, so a comparison "
+                    f"is written for every report the service is consulted "
+                    f"about. Either no report has been processed since it was "
+                    f"switched on, or the service could not be reached - check "
+                    f"that it is running and that INTELLIGENCE_SERVICE_TOKEN "
+                    f"matches on both processes."
+                )
             return
 
         unavailable = comparisons.filter(second_available=False).count()
@@ -168,12 +252,13 @@ class Command(BaseCommand):
         for kind in Kind.values:
             self.stdout.write(f"{kind:<24s} {by_kind.get(kind, 0)}")
 
-        unsafe = sum(
-            1 for d in differences.filter(
-                kind__in=[Kind.VALUE_DIFFERS, Kind.UNIT_DIFFERS],
-                second_persistable=True,
-            )
-        )
+        unsafe = differences.filter(
+            kind__in=[Kind.VALUE_DIFFERS, Kind.UNIT_DIFFERS],
+            second_persistable=True,
+        ).count()
+
+        self._profile(comparisons)
+
         self.stdout.write("")
         self.stdout.write("The counts that matter")
         self.stdout.write("=" * 72)

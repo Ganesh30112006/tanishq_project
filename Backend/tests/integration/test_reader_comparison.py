@@ -493,3 +493,108 @@ class TestTheRecordIsResearchOnly:
             f"the shadow record is read outside the modules that own it: "
             f"{offenders}"
         )
+
+
+def _row(output: str, label: str) -> int:
+    """The count from one line of the per-report profile."""
+    for line in output.splitlines():
+        if line.startswith(label):
+            return int(line[len(label):].split()[0])
+    raise AssertionError(f"{label!r} is not in the profile: {output}")
+
+
+# --- the number the first review should watch -------------------------
+class TestTheUnsafeRate:
+    """Unsafe disagreements per 100 reports, and its denominator.
+
+    The point of the rate is that one unsafe disagreement in a hundred reports
+    deserves more attention than the ninety-nine agreements beside it. The
+    denominator therefore has to be reports the second reader actually
+    answered: counting the ones it could not be consulted about would let an
+    outage look like safety.
+    """
+
+    def _record(self, patient, uploader, comparison):
+        report = _upload(patient, uploader)
+        return reader_comparison.record(
+            Report.objects.get(pk=report.pk), comparison,
+            mode=second_reader.SHADOW,
+        )
+
+    def _run(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("shadow_disagreements", stdout=out)
+        return out.getvalue()
+
+    def test_a_silent_service_is_not_in_the_denominator(
+        self, make_patient, make_user
+    ):
+        patient, uploader = make_patient(), make_user()
+        self._record(patient, uploader, _compare(
+            [_our_test("glucose", "5.4", "mmol/L")],
+            _opinion([_their_value("glucose", 15.4, "mmol/L")]),
+        ))
+        self._record(patient, uploader, _compare(
+            [_our_test("glucose", "5.4", "mmol/L")],
+            SecondOpinion(
+                consulted=True, available=False, unavailable_reason="timeout"
+            ),
+        ))
+
+        output = self._run()
+        # One comparable report, and it was unsafe: 100 per 100, not 50.
+        assert "of 1 the second reader answered" in output
+        assert "unsafe disagreements per 100 reports: 100.0" in output
+
+    def test_a_report_with_one_unsafe_row_is_an_unsafe_report(
+        self, make_patient, make_user
+    ):
+        """Whatever else it also contains. The worst thing on the report is
+        what the report is."""
+        patient, uploader = make_patient(), make_user()
+        self._record(patient, uploader, _compare(
+            [
+                _our_test("glucose", "5.4", "mmol/L"),
+                _our_test("tsh", "0.01", "uIU/mL"),
+            ],
+            _opinion([
+                _their_value("glucose", 15.4, "mmol/L"),
+                _their_value(
+                    "tsh", None, "uIU/mL", status="AMBIGUOUS", persists=False,
+                    reason="result_is_a_bound_not_a_number",
+                ),
+            ]),
+        ))
+        output = self._run()
+        assert "unsafe disagreement" in output
+        assert _row(output, "unsafe disagreement") == 1
+        assert _row(output, "safe abstention") == 0
+
+    def test_an_abstention_alone_is_not_unsafe(self, make_patient, make_user):
+        patient, uploader = make_patient(), make_user()
+        self._record(patient, uploader, _compare(
+            [_our_test("tsh", "0.01", "uIU/mL")],
+            _opinion([
+                _their_value(
+                    "tsh", None, "uIU/mL", status="AMBIGUOUS", persists=False,
+                    reason="result_is_a_bound_not_a_number",
+                )
+            ]),
+        ))
+        output = self._run()
+        assert "unsafe disagreements per 100 reports: 0.0" in output
+        assert _row(output, "safe abstention") == 1
+
+    def test_a_small_batch_says_the_rate_is_not_yet_stable(
+        self, make_patient, make_user
+    ):
+        patient, uploader = make_patient(), make_user()
+        self._record(patient, uploader, _compare(
+            [_our_test("glucose", "5.4", "mmol/L")],
+            _opinion([_their_value("glucose", 5.4, "mmol/L")]),
+        ))
+        assert "not yet stable" in self._run()

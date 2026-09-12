@@ -103,6 +103,38 @@ that is a different fact from "nobody has looked yet" only if the note says so.
 A disagreement that fits none of the classes is worth more than one that fits:
 it is a failure mode nobody anticipated. Record it in the note and raise it.
 
+## The number to watch: unsafe disagreements per 100 reports
+
+`python manage.py shadow_disagreements` prints a per-report profile:
+
+```
+Per report, of 100 the second reader answered
+unsafe disagreement             1     1.0%
+unresolved disagreement         2     2.0%
+OCR failure                     5     5.0%
+safe abstention                10    10.0%
+agreement                      82    82.0%
+
+unsafe disagreements per 100 reports: 1.0
+```
+
+The last row of the table is the comfortable one. The first is the one that
+matters: both readers produced a number they stand behind and the numbers
+differ, so one of them is a wrong clinical value carried with full confidence,
+and nothing in either output says which.
+
+A report with one unsafe row is an unsafe report whatever else it contains -
+the worst thing on it is what it is.
+
+The denominator is reports the second reader **actually answered**. A report it
+could not be consulted about never had the opportunity to disagree, and putting
+those in the denominator would let an outage look like safety. Below 100
+comparable reports the rate moves by whole reports; read the count and the
+examples, not the percentage.
+
+The goal is not for the two readers to agree. It is that when they disagree,
+the clinical record is never made less safe.
+
 ## Two numbers that will be misread
 
 **A safe abstention is not evidence that the parser is correct.** It
