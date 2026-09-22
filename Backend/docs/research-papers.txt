@@ -1,0 +1,727 @@
+================================================================================
+CARESENSE AI - PRIOR RESEARCH ON THE PROBLEMS THIS SUBSYSTEM IS SOLVING
+Reading list for the document-intelligence module
+Compiled 21 September 2026
+================================================================================
+
+WHAT THIS FILE IS
+
+A list of published work that has already studied the specific problems this
+module is working on: reading laboratory reports out of PDFs and scans,
+running a second reader silently before it is allowed to act, deciding when a
+machine should refuse to answer, writing an annotation specification before
+labelling starts, and reconciling units and reference ranges across
+laboratories.
+
+It is organised by the engineering question it answers, not by year or venue,
+so each group can be read on its own when that part of the system is being
+worked on.
+
+HOW EACH ENTRY IS MARKED
+
+  [VERIFIED]  I opened the article or its abstract page and read the title,
+              authors, venue and year off it. Details below are as printed.
+
+  [LISTING]   The publisher blocked automated access. Title, venue and URL
+              come from the search index only. Open it and confirm the
+              citation before putting it in a report or a paper. Authors are
+              left out where I could not read them.
+
+Nothing in this file is invented. Where a number is quoted, it is from the
+abstract or summary of the paper named directly above it.
+
+--------------------------------------------------------------------------------
+1. SILENT / SHADOW EVALUATION OF CLINICAL AI
+   Directly about the phase this project is in right now.
+--------------------------------------------------------------------------------
+
+[1.1] [VERIFIED]
+The silent trial - the bridge between bench-to-bedside clinical AI
+applications
+Kwong JCC, Erdman L, Khondker A, Skreta M, Goldenberg A, McCradden MD,
+Lorenzo AJ, Rickard M
+Frontiers in Digital Health, 2022; volume 4
+DOI 10.3389/fdgth.2022.929508
+https://www.frontiersin.org/journals/digital-health/articles/10.3389/fdgth.2022.929508/full
+
+  WHY IT MATTERS HERE
+  This is the closest published description of what DOCUMENT_INTELLIGENCE_MODE
+  = shadow is doing. The model runs prospectively on real patients while
+  clinicians stay blinded to its output. The authors report a case where model
+  performance went from 50 percent to 91 percent AUROC after the silent phase
+  exposed problems that retrospective validation had not. That is the argument
+  for treating the first batch as failure discovery rather than measurement.
+
+[1.2] [LISTING]
+A scoping review of silent trials for medical artificial intelligence
+Nature Health, 2025
+https://www.nature.com/articles/s44360-025-00048-z
+
+  WHY IT MATTERS HERE
+  The review of how silent trials are actually run in practice, and it reports
+  that there are no formal guidelines for them. Useful as the citation for why
+  the shadow-pilot runbook in docs/shadow-pilot.md had to be written from
+  first principles rather than adopted from a standard.
+
+[1.3] [LISTING]
+Prospective Evaluation of a 90-day Mortality Prediction Model: From Silent
+Pilots to Real Time Deployment in the EHR
+medRxiv preprint, 2023
+https://www.medrxiv.org/content/10.1101/2023.01.25.23284977.full.pdf
+
+  WHY IT MATTERS HERE
+  A worked account of the silent-pilot-to-deployment path, including the
+  pipeline and cohort faults that only appear at inference time. The failure
+  class it describes - a cohort definition that used criteria observable only
+  after the fact - is the same class as a classifier stratum that turns out
+  empty when the real batch runs.
+
+[1.4] [LISTING]
+STEP: A Modular Silent Trial Engine for Operational Evaluation of Digital
+Pathology AI in Routine Workflow
+arXiv:2608.28708
+https://arxiv.org/html/2608.28708
+
+  WHY IT MATTERS HERE
+  A silent-trial harness built as infrastructure rather than as a one-off
+  study. Worth comparing against the ReaderComparison / ReaderDisagreement
+  models and the shadow_disagreements command, which are the same idea in a
+  different domain.
+
+--------------------------------------------------------------------------------
+2. THE SECOND READER, DISAGREEMENT AND ARBITRATION
+   The evidence base behind "unsafe disagreements per 100 reports".
+--------------------------------------------------------------------------------
+
+[2.1] [VERIFIED]
+AI-integrated Screening to Replace Double Reading of Mammograms: A
+Population-wide Accuracy and Feasibility Study
+Elhakim MT, Stougaard SW, Graumann O, Nielsen M, Gerke O, Larsen LB,
+Rasmussen BSB
+Radiology: Artificial Intelligence, 2024; 6(6)
+DOI 10.1148/ryai.230529
+https://pubs.rsna.org/doi/full/10.1148/ryai.230529
+
+  WHY IT MATTERS HERE
+  The single most relevant empirical result for the second-reader design.
+  249,402 screening mammograms, three simulated integrations against standard
+  double reading with arbitration. Replacing the FIRST reader kept cancer
+  detection and cut screening volume. Replacing the SECOND reader lowered
+  sensitivity by 1.58 percent.
+
+  That asymmetry is the published form of the rule this project already
+  follows: a second reader that ADDS conservatism is safe, and a second reader
+  that REPLACES the existing one can remove safety even while its own accuracy
+  looks fine. It is the reason the shadow reader may hold and may never
+  release.
+
+[2.2] [VERIFIED]
+AI as a Second Reader Can Reduce Radiologists' Workload and Increase Accuracy
+in Screening Mammography
+Suri A
+Radiology: Artificial Intelligence, 2024; 6(6) - invited commentary on [2.1]
+DOI 10.1148/ryai.240624
+https://pmc.ncbi.nlm.nih.gov/articles/PMC11605140/
+
+  WHY IT MATTERS HERE
+  Short, and it makes the arbitration point explicitly: once one of the two
+  readers is a machine, the arbitrator is no longer comparing two human
+  opinions and the adjudication task itself changes. That is exactly the
+  problem the disagreement taxonomy and the "named reviewer plus written
+  reason" requirement in classify() are trying to make tractable.
+
+[2.3] [LISTING]
+Artificial intelligence as a second reader for screening mammography
+Radiology Advances, 2024; 1(2), umae011
+https://academic.oup.com/radadv/article/1/2/umae011/7667296
+
+  WHY IT MATTERS HERE
+  A second independent treatment of the same question, useful as a cross-check
+  on [2.1] rather than as a new argument.
+
+[2.4] [LISTING]
+A novel workflow for the safe and effective integration of AI as supporting
+reader in double reading breast cancer screening: A large-scale retrospective
+evaluation
+medRxiv preprint, 2022
+https://www.medrxiv.org/content/10.1101/2022.06.22.22276751.full.pdf
+
+  WHY IT MATTERS HERE
+  The word in the title is SUPPORTING reader, not replacement reader. Read it
+  for the workflow design - where the machine's opinion enters, and what
+  happens to a disagreement - rather than for the accuracy numbers.
+
+--------------------------------------------------------------------------------
+3. ABSTENTION, SELECTIVE PREDICTION AND WHAT REFUSING COSTS
+   The literature behind classification_margin_not_met and values_forgone.
+--------------------------------------------------------------------------------
+
+[3.1] [VERIFIED]
+Conformal selective prediction with cost aware deferral for safe clinical
+triage under distribution shift
+Kwon H, Kim D-J
+Scientific Reports, 2026
+DOI 10.1038/s41598-026-40637-w
+https://pmc.ncbi.nlm.nih.gov/articles/PMC13022086/
+
+  WHY IT MATTERS HERE
+  The formal version of what the abstention-cost measurement is groping
+  towards. Deferral is given an explicit cost, thresholds are chosen by
+  minimising clinical harm on held-out data rather than by maximising
+  accuracy, and the risk-coverage tradeoff is tracked under distribution
+  shift. The risk-coverage curve is the right shape for the trade the 2.0
+  margin is making: coverage is the classified fraction, risk is the unsafe
+  disagreement rate.
+
+[3.2] [LISTING]
+Abstaining Machine Learning - Philosophical Considerations
+arXiv:2409.00706
+https://arxiv.org/pdf/2409.00706
+
+  WHY IT MATTERS HERE
+  Distinguishes AMBIGUITY rejection (abstain where mistakes are likely) from
+  NOVELTY rejection (abstain where the input is unlike anything seen). The two
+  abstention reasons in the classifier map onto these almost exactly:
+  classification_margin_not_met is ambiguity rejection, and
+  no_recognised_keywords is novelty rejection. Worth reading before the reason
+  codes are extended, because the two want different remedies - a margin
+  policy fixes the first, wider keyword coverage fixes the second.
+
+[3.3] [LISTING]
+Uncertainty-Driven Reliability: Selective Prediction and Trustworthy
+Deployment in Modern Machine Learning
+arXiv:2508.07556
+https://arxiv.org/pdf/2508.07556
+
+  WHY IT MATTERS HERE
+  A recent survey. Use it to find the primary sources for whichever abstention
+  mechanism is chosen later, rather than as an argument in itself.
+
+[3.4] [LISTING]
+Interpretable and Fair Mechanisms for Abstaining Classifiers
+arXiv:2503.18826
+https://arxiv.org/pdf/2503.18826
+
+  WHY IT MATTERS HERE
+  Addresses a question this project will eventually have to answer: abstention
+  is not free and it is not evenly distributed. If the classifier abstains
+  disproportionately on one laboratory's layout or on scanned reports, that is
+  a coverage gap that falls on particular patients. The --coverage strata are
+  the place that would show up.
+
+--------------------------------------------------------------------------------
+4. EXTRACTING VALUES FROM LABORATORY REPORTS AND SCANNED DOCUMENTS
+   Prior art for the parser itself.
+--------------------------------------------------------------------------------
+
+[4.1] [VERIFIED]
+Extracting laboratory test information from paper-based reports
+Ma M-W, Gao X-S, Zhang Z-Y, Shang S-Y, Jin L, Liu P-L, Lv F, Ni W, Han Y-C,
+Zong H
+BMC Medical Informatics and Decision Making, 2023; 23:251
+DOI 10.1186/s12911-023-02346-6
+https://pmc.ncbi.nlm.nih.gov/articles/PMC10629084/
+
+  WHY IT MATTERS HERE
+  The closest published system to this one. An OCR module feeding an
+  information-extraction module, extracting exactly the four entities this
+  parser extracts: test item name, test result, measurement unit, and
+  reference value range. Reported averaged OCR accuracy 0.93 and overall IE
+  F1 0.86 (precision 0.90, recall 0.83) on 153 reports, at about 0.78 seconds
+  per report on CPU.
+
+  Two things to take from it. First, the IE module has MULTI-COLUMN handling
+  and line normalisation as named stages - the same column-layout problem that
+  produced the censored-value precedence bug here. Second, 0.86 F1 is what a
+  published, tuned, CRF-based pipeline scores on this task; that is the honest
+  reference point for what "good" looks like, and it is a long way from
+  perfect.
+
+[4.2] [VERIFIED]
+Deep learning-based NLP data pipeline for EHR-scanned document information
+extraction
+Hsu E, Malagaris I, Kuo Y-F, Sultana R, Roberts K
+JAMIA Open, 2022; 5(2), ooac045
+DOI 10.1093/jamiaopen/ooac045
+https://academic.oup.com/jamiaopen/article/5/2/ooac045/6605916
+
+  WHY IT MATTERS HERE
+  Image preprocessing (greyscale, dilation and erosion, contrast enhancement)
+  then Tesseract then classification. Two findings are directly usable: adding
+  DOCUMENT LAYOUT information - word position coordinates and page numbers -
+  significantly improved performance, and the extraction was framed as a
+  three-way classification over candidate numeric values ("is this number an
+  AHI value, an SaO2 value, or neither") rather than as free extraction.
+
+  That second framing is worth holding onto when schema-free extraction comes
+  up. Their answer to "which number on the page is the result" was to classify
+  candidates, which is close to what the _SECOND_NUMBER guard is doing by
+  refusing rather than guessing.
+
+[4.3] [LISTING]
+Leveraging large language models for structured information extraction from
+pathology reports
+arXiv:2502.12183
+https://arxiv.org/pdf/2502.12183
+
+  WHY IT MATTERS HERE
+  For the later LLM phase, not now. Read it against the grounding requirement:
+  what it does about values the model produces that are not on the page.
+
+[4.4] [VERIFIED]
+Measuring the sensitivity of LLM-based structured extraction to prompt,
+model, and schema choices in clinical discharge summaries
+Murin M
+arXiv:2606.05970, 4 June 2026
+https://arxiv.org/abs/2606.05970
+
+  WHY IT MATTERS HERE
+  Read this one before any schema-free extraction work. Its central finding is
+  that the largest source of inconsistency was SCHEMA DESIGN - specifically
+  the distinction between documented absence and silence - and not prompt
+  wording or model size. It also found that a larger model "raises agreement
+  on some fields and lowers it on others", so model choice redistributes
+  disagreement rather than removing it.
+
+  Documented absence against silence is already a distinction in the frozen
+  annotation spec (ABSENT against NOT_FOUND). This paper is empirical evidence
+  that getting that distinction right matters more than anything else that
+  will be tuned later.
+
+[4.5] [LISTING]
+Using natural language processing to extract information from clinical text
+in electronic medical records for populating clinical registries: a
+systematic review
+Journal of the American Medical Informatics Association, 2026; 33(2):484
+https://academic.oup.com/jamia/article/33/2/484/8287208
+
+  WHY IT MATTERS HERE
+  A current systematic review of the whole field, including the finding that
+  regular expressions remain the main technique used in rule-based clinical
+  extraction. Good for placing this parser in context and for finding
+  comparable systems.
+
+--------------------------------------------------------------------------------
+5. OCR QUALITY AND ITS EFFECT DOWNSTREAM
+   Behind "don't assume availability means correctness" and the OCR stratum.
+--------------------------------------------------------------------------------
+
+[5.1] [LISTING]
+Evaluating and mitigating the impact of OCR errors on information retrieval
+International Journal on Digital Libraries, 2023
+DOI 10.1007/s00799-023-00345-6
+https://link.springer.com/article/10.1007/s00799-023-00345-6
+
+  WHY IT MATTERS HERE
+  Documents that OCR errors propagate into downstream tasks - retrieval,
+  entity recognition, event detection - rather than staying local. The
+  cascading-error argument is the reason OCR_FAILURE is its own class in the
+  disagreement taxonomy instead of being folded into PARSER_ERROR.
+
+[5.2] [LISTING]
+Rethinking OCR Evaluation for Information Extraction in Business Documents
+Springer, 2025
+DOI 10.1007/978-981-95-4861-3_21
+https://link.springer.com/chapter/10.1007/978-981-95-4861-3_21
+
+  WHY IT MATTERS HERE
+  The important claim: character error rate and word error rate do not reflect
+  the impact of OCR noise on extraction, because they weigh every character
+  equally and extraction does not. A single corrupted digit in a haemoglobin
+  value and a corrupted letter in a page footer are the same CER and are not
+  the same event. If OCR quality is ever reported for this pipeline, this is
+  the argument for reporting it per extracted value, not per character.
+
+[5.3] [LISTING]
+Confidence-Aware Document OCR Error Detection
+arXiv:2409.04117
+https://arxiv.org/pdf/2409.04117
+
+  WHY IT MATTERS HERE
+  On using the OCR engine's own confidence to predict where it went wrong.
+  Relevant to the ocr_confidence value that is already threaded through
+  validate_value, and to whether that number deserves more weight than it
+  currently gets.
+
+--------------------------------------------------------------------------------
+6. UNITS, LOINC AND REFERENCE RANGES
+   Behind UnitRelation: SAME_UNIT / CONVERTIBLE / INCOMPATIBLE / UNKNOWN.
+--------------------------------------------------------------------------------
+
+[6.1] [VERIFIED - authors confirmed from the index; the article page is blocked]
+Automated standardization and harmonization of laboratory units in
+large-scale clinical data using open-source R functions
+Zayed AM, Sarikakis I, Delvaux N
+International Journal of Medical Informatics, 2025 (Epub 1 October 2025)
+https://pubmed.ncbi.nlm.nih.gov/41061385/
+
+  WHY IT MATTERS HERE
+  The largest reported attempt at exactly the problem the unit-relation work
+  is solving. On 163.9 million LOINC-mapped quantitative results: 96.2 percent
+  of records standardised, unit heterogeneity reduced by 81 percent, 99.97
+  percent correctness of standardised units on validation, and 83.4 percent of
+  standardised records harmonised to reference units.
+
+  Note what those numbers mean read the other way. Even with LOINC codes
+  already attached and a deterministic UCUM mapping, roughly 4 percent of
+  records could not be standardised at all. That residue is the population the
+  UNKNOWN relation exists for.
+
+[6.2] [LISTING]
+Harmonizing Logical Observation Identifiers Names and Codes (LOINC) Codes and
+Units in Real-World Oncology Data: Method Development and Evaluation
+JMIR Medical Informatics, 2026; e81254
+https://medinform.jmir.org/2026/1/e81254
+
+  WHY IT MATTERS HERE
+  Method paper on doing code and unit harmonisation together rather than
+  separately. Also carries the figure that 6 to 19 percent of laboratory tests
+  cannot be accurately mapped to LOINC - a useful ceiling to know about before
+  any LOINC work is proposed for this project.
+
+[6.3] [LISTING]
+Scalable Unit Harmonization in Medical Informatics via Bayesian-Optimized
+Retrieval and Transformer-Based Re-ranking
+arXiv:2505.00810 (also International Journal of Medical Informatics, 2025)
+https://arxiv.org/abs/2505.00810
+
+  WHY IT MATTERS HERE
+  A learned approach to unit matching. Read it for the failure cases it
+  reports rather than the architecture: the units it cannot resolve are likely
+  to be the same ones a deterministic matcher cannot resolve.
+
+[6.4] [LISTING]
+LUMA: A Mapping Assistant for Standardizing the Units of LOINC-Coded
+Laboratory Tests
+Applied Sciences, 2022; 12(12):5848
+https://www.mdpi.com/2076-3417/12/12/5848
+
+  WHY IT MATTERS HERE
+  An ASSISTANT, not an automaton - a human confirms the mapping. That is the
+  same posture as refusing to convert lakh/microlitre automatically and
+  sending it to a person instead.
+
+[6.5] [LISTING - could not open the page, reCAPTCHA; confirm before citing]
+Recommendations on Measurement Units - Why and How
+https://pmc.ncbi.nlm.nih.gov/articles/PMC6803776/
+
+  WHY IT MATTERS HERE
+  Background on why laboratories report the units they do, and why the same
+  analyte legitimately carries different units and different reference
+  intervals at different laboratories depending on assay, instrument and
+  reference population. This is the clinical justification for never
+  normalising a printed reference range by applying a conversion factor.
+
+--------------------------------------------------------------------------------
+7. ANNOTATION SPECIFICATIONS, GOLD STANDARDS AND AGREEMENT
+   Behind the frozen spec, the fingerprint, and the refusal to report
+   agreement percentage as the headline number.
+--------------------------------------------------------------------------------
+
+[7.1] [VERIFIED]
+Building Gold Standard Corpora for Medical Natural Language Processing Tasks
+Deleger L, Li Q, Lingren T, Kaiser M, Molnar K, Stoutenborough L, Kouril M,
+Marsolo K, Solti I
+AMIA Annual Symposium Proceedings, 2012; pages 144-153
+https://pmc.ncbi.nlm.nih.gov/articles/PMC3540456/
+
+  WHY IT MATTERS HERE
+  The practical account of writing annotation guidelines before annotating,
+  and of aligning the schema with existing standards so the corpus is reusable
+  afterwards. It reports high agreement (F-measures 0.8467 to 0.9176) and is
+  still candid that guidelines had to be developed iteratively - which is the
+  argument for freezing with a VERSION and a fingerprint rather than freezing
+  forever.
+
+[7.2] [VERIFIED]
+Counting on Consensus: Selecting the Right Inter-annotator Agreement Metric
+for NLP Annotation and Evaluation
+James J
+arXiv:2603.06865, 6 March 2026 (revised 1 April 2026)
+https://arxiv.org/abs/2603.06865
+
+  WHY IT MATTERS HERE
+  Directly supports the position already taken here. It organises agreement
+  measures by task type, shows how label imbalance and missing data distort
+  them, and argues for reporting DISAGREEMENT ANALYSIS alongside any agreement
+  figure. That is the published form of "two readers can agree while both are
+  wrong": the number is not the finding, the classified disagreements are.
+
+  Note also the label-imbalance point. For named entity recognition, kappa is
+  inflated by the large mass of unannotated tokens - which is exactly the
+  shape of lab-value extraction, where most of the page is not a result.
+
+[7.3] [LISTING]
+Inter-Annotator Reliability of Medical Events, Coreferences and Temporal
+Relations in Clinical Narratives by Annotators with Varying Levels of
+Clinical Expertise
+AMIA Annual Symposium Proceedings, 2012
+https://pmc.ncbi.nlm.nih.gov/articles/PMC3540452/
+
+  WHY IT MATTERS HERE
+  Measures how much annotator clinical expertise changes the labels. Relevant
+  to the adjudication design: who is allowed to classify a disagreement is a
+  measurable variable, not an administrative detail, which is why
+  classified_by is a required field.
+
+[7.4] [LISTING]
+A Comparison between Human and NLP-based Annotation of Clinical Trial
+Eligibility Criteria Text Using The OMOP Common Data Model
+https://pmc.ncbi.nlm.nih.gov/articles/PMC8378608/
+
+  WHY IT MATTERS HERE
+  Reports that nearly half of the discrepancies between the system and the
+  gold standard were errors in the GOLD STANDARD itself. That is the strongest
+  single reason the disagreement taxonomy carries an OLD_READER_ERROR class
+  and does not assume the existing reader is right.
+
+[7.5] [LISTING]
+Text Annotation Handbook: A Practical Guide for Machine Learning Projects
+arXiv:2310.11780
+https://arxiv.org/pdf/2310.11780
+
+  WHY IT MATTERS HERE
+  Practical rather than theoretical. Useful as a checklist against
+  docs/annotation-spec.md before clinicians are asked to use it.
+
+--------------------------------------------------------------------------------
+8. FABRICATION AND HALLUCINATION IN CLINICAL MODELS
+   Not needed yet. Needed before the LLM phase, and it is the evidence base
+   for the standing no-fabrication rule.
+--------------------------------------------------------------------------------
+
+[8.1] [VERIFIED]
+MedHallu: A Comprehensive Benchmark for Detecting Medical Hallucinations in
+Large Language Models
+Pandit S, Xu J, Hong J, Wang Z, Chen T, Xu K, Ding Y
+arXiv:2502.14302, 20 February 2025
+https://arxiv.org/abs/2502.14302
+
+  WHY IT MATTERS HERE
+  10,000 question-answer pairs from PubMedQA with systematically generated
+  hallucinated responses. The finding to carry forward: adding a "not sure"
+  response category substantially improved detection. An abstention option
+  improves a model's honesty about medical content - the same result the
+  classifier's abstention policy is relying on.
+
+[8.2] [LISTING]
+Large Language Models Are Highly Vulnerable to Adversarial Hallucination
+Attacks in Clinical Decision Support: A Multi-Model Assurance Analysis
+Communications Medicine, 2025 (also medRxiv 2025.03.18.25324184)
+https://www.nature.com/articles/s43856-025-01021-3
+https://www.medrxiv.org/content/10.1101/2025.03.18.25324184.full.pdf
+
+  WHY IT MATTERS HERE
+  The most alarming result for this project's use case. Six leading models,
+  300 physician-designed clinical vignettes, each containing ONE fabricated
+  element - a fictitious laboratory test, a fabricated physical or
+  radiological sign, or an invented disease. The models repeated or elaborated
+  on the planted error in up to 83 percent of cases. A mitigation prompt
+  halved the rate but did not remove it.
+
+  Read this as the justification for the architecture already chosen: a model
+  that is handed a document and asked what is in it will confirm a value that
+  is not there. Deterministic extraction with a character span is not
+  conservatism for its own sake.
+
+[8.3] [LISTING]
+MedHallBench: A New Benchmark for Assessing Hallucination in Medical Large
+Language Models
+arXiv:2412.18947
+https://arxiv.org/pdf/2412.18947
+
+  WHY IT MATTERS HERE
+  A second benchmark with clinician validation. Useful as a comparison point
+  to [8.1] on how medical hallucination is defined and scored, which is a
+  precondition for defining it consistently in this project's own spec.
+
+[8.4] [LISTING]
+MHB: Medical Hallucination Benchmark for Large Language Models in Complex
+Clinical Tasks
+Proceedings of the AAAI Conference on Artificial Intelligence
+https://ojs.aaai.org/index.php/AAAI/article/view/41243
+
+  WHY IT MATTERS HERE
+  4,695 samples and 20,288 evaluation rubrics validated by 60 licensed
+  physicians, built by injecting hallucination traps into realistic medical
+  data. The rubric-per-sample design is worth studying if the clinical
+  reasoning benchmark is ever expanded.
+
+--------------------------------------------------------------------------------
+9. BENCHMARK DESIGN AND REPORTING STANDARDS
+   Behind the two-benchmark split and what a written-up pilot should contain.
+--------------------------------------------------------------------------------
+
+[9.1] [LISTING]
+Reporting guideline for the early-stage clinical evaluation of decision
+support systems driven by artificial intelligence: DECIDE-AI
+Vasey B, Nagendran M, Denniston A, McCulloch P, and the DECIDE-AI expert group
+Nature Medicine, 2022; 28:924-933 (published simultaneously in BMJ 2022;
+377:e070904)
+https://www.nature.com/articles/s41591-022-01772-9
+
+  WHY IT MATTERS HERE
+  The 27-item checklist for exactly the stage between "the algorithm works in
+  a notebook" and "there is a trial". If the shadow pilot is ever written up,
+  this is the structure to write it against. Worth reading NOW rather than
+  later, because several of its items concern data that has to be captured
+  during the pilot and cannot be reconstructed afterwards.
+
+[9.2] [VERIFIED]
+TRIPOD+AI statement: updated guidance for reporting clinical prediction models
+that use regression or machine learning methods
+Collins GS, Moons KGM, Dhiman P, et al
+BMJ, 2024; 385:e078378
+DOI 10.1136/bmj-2023-078378
+https://pmc.ncbi.nlm.nih.gov/articles/PMC11019967/
+
+  WHY IT MATTERS HERE
+  The prediction-model counterpart to [9.1], and the relevant one for the CVD
+  engine rather than for the document parser. Supersedes TRIPOD 2015.
+
+[9.3] [LISTING]
+The TRIPOD-LLM reporting guideline for studies using large language models
+Nature Medicine, 2024
+https://www.nature.com/articles/s41591-024-03425-5
+
+  WHY IT MATTERS HERE
+  The LLM-specific guideline. File it for the LLM phase.
+
+[9.4] [VERIFIED]
+Beyond the Leaderboard: Rethinking Medical Benchmarks for Large Language
+Models
+Chen W, Yu G, Cheung Y-F, Ding M, Liu J, Ma Z, Wang W, Shen L
+arXiv:2508.04325, 6 August 2025 (revised 29 April 2026)
+https://arxiv.org/abs/2508.04325
+
+  WHY IT MATTERS HERE
+  Argues that medical benchmarks are disconnected from clinical practice and
+  that safety-critical evaluation - robustness and uncertainty awareness - is
+  widely neglected. Proposes MedCheck, a 46-criterion framework across five
+  stages of benchmark development.
+
+  This is external support for the two-benchmark split. A single combined
+  score is precisely the leaderboard artefact the paper is attacking, and
+  "uncertainty awareness" is the property the abstention reason codes make
+  measurable.
+
+[9.5] [LISTING]
+MEDIC: Comprehensive Evaluation of Leading Indicators for LLM Safety and
+Utility in Clinical Applications
+arXiv:2409.07314
+https://arxiv.org/pdf/2409.07314
+
+  WHY IT MATTERS HERE
+  Evaluates safety and utility as separate axes rather than collapsing them.
+  The same separation this project is enforcing between "how often is the
+  classifier wrong" and "how much does abstaining forgo".
+
+--------------------------------------------------------------------------------
+10. AUTOMATION BIAS AND FAILURE TAXONOMIES
+    Why a second opinion can make the record LESS safe, which is the whole
+    premise of the unsafe-disagreement metric.
+--------------------------------------------------------------------------------
+
+[10.1] [LISTING]
+Automation bias - a hidden issue for clinical decision support system use
+Studies in Health Technology and Informatics, 2011
+https://pubmed.ncbi.nlm.nih.gov/21335682/
+
+  WHY IT MATTERS HERE
+  The foundational statement: users over-accept computer output as a heuristic
+  replacement for vigilant information seeking and processing. If the second
+  reader is ever shown to a clinician, this is the mechanism by which a
+  machine that is right 95 percent of the time can still degrade decisions.
+
+[10.2] [LISTING]
+Automation bias in electronic prescribing
+BMC Medical Informatics and Decision Making, 2017
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5356416/
+
+  WHY IT MATTERS HERE
+  Measures automation bias directly, by counting clinicians switching from a
+  correct prescription to an incorrect one after seeing incorrect system
+  advice. That switch - correct to incorrect, caused by the system - is the
+  human-facing version of what is being counted here as an unsafe
+  disagreement.
+
+  A caution on numbers. Reviews in this area report single-digit percentage
+  switch rates, and one ECG study reports a fall in resident diagnostic
+  accuracy when the system was inaccurate. Those figures come from several
+  different studies; read the primary sources before quoting any of them.
+
+[10.3] [LISTING]
+Automation Bias in AI-Assisted Medical Decision-Making under Time Pressure in
+Computational Pathology
+arXiv:2411.00998
+https://arxiv.org/pdf/2411.00998
+
+  WHY IT MATTERS HERE
+  Adds the variable that matters in a real clinic and is usually missing from
+  the studies: time pressure. Also reports that training and experience reduce
+  false agreement with incorrect recommendations without eliminating it.
+
+[10.4] [LISTING]
+A Collaborative, Human-Centred Taxonomy of AI, Algorithmic, and Automation
+Harms
+arXiv:2407.01294
+https://arxiv.org/pdf/2407.01294
+
+  WHY IT MATTERS HERE
+  A general harm taxonomy. Useful as a cross-check on whether the nine-class
+  shadow taxonomy has a blind spot, particularly for harms that are not an
+  incorrect value - a correct value filed under the wrong panel, for instance.
+
+[10.5] [LISTING]
+A Real-World Evaluation of LLM Medication Safety Reviews in NHS Primary Care
+arXiv:2512.21127
+https://arxiv.org/pdf/2512.21127
+
+  WHY IT MATTERS HERE
+  Notable for a distinction this project's taxonomy does not yet make
+  explicitly: FAILURE REASONS (why the system failed) against FAILURE MODES
+  (how the failure presented). The current taxonomy mixes the two -
+  OCR_FAILURE is a reason, VALUE_DIFFERS is a mode. Worth raising at the first
+  review meeting, though not worth changing mid-pilot.
+
+--------------------------------------------------------------------------------
+READING ORDER, IF THE WHOLE LIST IS TOO MUCH
+--------------------------------------------------------------------------------
+
+Before the first batch:
+    [2.1]  Elhakim - replacing the second reader loses sensitivity
+    [4.1]  Ma - the closest existing lab-report pipeline, and its real F1
+    [1.1]  Kwong - what a silent trial is for
+
+Before the first review meeting:
+    [7.2]  James - report disagreement analysis, not an agreement number
+    [7.4]  the OMOP comparison - half the discrepancies were gold-standard errors
+    [3.1]  Kwon - risk-coverage, and the cost of deferral
+
+Before deciding what to build next:
+    [4.4]  Murin - schema design dominates; absence against silence
+    [6.1]  Zayed - what full-scale unit harmonisation actually achieves
+    [8.2]  the adversarial hallucination analysis - before any LLM is added
+
+--------------------------------------------------------------------------------
+GAPS - WHAT I SEARCHED FOR AND DID NOT FIND
+--------------------------------------------------------------------------------
+
+  - Any published work on lakh-per-microlitre platelet reporting, or on
+    automated handling of Indian-convention laboratory units generally. The
+    unit-harmonisation literature is UCUM and SI centred. If this is solved
+    here it appears to be new ground, and the conservative behaviour currently
+    in place is the defensible default until someone measures it.
+
+  - A published metric equivalent to "unsafe disagreements per 100 reports".
+    The mammography literature counts arbitration RATE and change in
+    sensitivity, not safety-directed disagreements. The closest formal framing
+    is the risk-coverage curve in [3.1].
+
+  - Any standard for what a shadow-mode disagreement taxonomy should contain.
+    [1.2] states directly that no formal guidelines for silent evaluation of
+    medical AI exist.
+
+================================================================================
+End of file. 44 entries across 10 sections.
+================================================================================
