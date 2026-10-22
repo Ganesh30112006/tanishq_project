@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 import signal
 import time
 import uuid
 
 from django.core.management.base import BaseCommand
+from django.db import DatabaseError
 
 from apps.jobs.health import beat
 from apps.jobs.runner import run_once
+
+logger = logging.getLogger("caresense.jobs")
 
 
 class Command(BaseCommand):
@@ -28,22 +32,37 @@ class Command(BaseCommand):
         signal.signal(signal.SIGINT, _stop)
         signal.signal(signal.SIGTERM, _stop)
 
+        def _beat(processed: int) -> None:
+            # A missed beat only makes the worker look stale for a moment;
+            # letting it raise would stop the worker for good.
+            try:
+                beat(worker_id, job_types=options["types"], processed=processed)
+            except DatabaseError:
+                logger.warning("worker_beat_failed", extra={"worker_id": worker_id}, exc_info=True)
+
         self.stdout.write(f"Starting {worker_id}")
         processed = 0
         # Beat immediately, so a worker that starts and then wedges is still
         # distinguishable from one that was never started at all.
-        beat(worker_id, job_types=options["types"], processed=processed)
+        _beat(processed)
         last_beat = time.monotonic()
 
         while not stopping["flag"]:
-            job = run_once(worker_id=worker_id, job_types=options["types"])
+            # A job's own failure is handled inside run_once. A database error
+            # while claiming one (a lock, a dropped connection) is passing, so
+            # the pass is skipped and the next one tries again.
+            try:
+                job = run_once(worker_id=worker_id, job_types=options["types"])
+            except DatabaseError:
+                logger.warning("worker_poll_failed", extra={"worker_id": worker_id}, exc_info=True)
+                job = None
             if job is not None:
                 processed += 1
 
             # On every pass, but written at most once a second so a busy worker
             # does not spend its time updating its own heartbeat row.
             if time.monotonic() - last_beat >= 1.0:
-                beat(worker_id, job_types=options["types"], processed=processed)
+                _beat(processed)
                 last_beat = time.monotonic()
 
             if options["once"]:
@@ -51,5 +70,5 @@ class Command(BaseCommand):
             if job is None:
                 time.sleep(options["idle_sleep"])
 
-        beat(worker_id, job_types=options["types"], processed=processed)
+        _beat(processed)
         self.stdout.write(f"Worker stopped after {processed} job(s)")
