@@ -310,6 +310,14 @@ DOCUMENT_INTELLIGENCE = {
     "MODE": env("DOCUMENT_INTELLIGENCE_MODE", "off") or "off",
 }
 
+# The patient-facing AI analysis of each report (apps/reports/analysis.py).
+# Separate from the mode above: that governs whether the service may change a
+# report's processing outcome, this governs whether the patient is shown what
+# the AI read. The analysis is stored as AI output, never as a clinical value.
+AI_ANALYSIS = {
+    "ENABLED": env_bool("AI_ANALYSIS_ENABLED", True),
+}
+
 # --------------------------------------------------------------------------
 # File uploads (untrusted; see section 39)
 # --------------------------------------------------------------------------

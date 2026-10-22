@@ -3,7 +3,13 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.common.enums import ReportClass
-from apps.reports.models import Report, ReportFinding, ReportSection, ReportTest
+from apps.reports.models import (
+    Report,
+    ReportAnalysis,
+    ReportFinding,
+    ReportSection,
+    ReportTest,
+)
 
 
 class ReportTestSerializer(serializers.ModelSerializer):
@@ -103,3 +109,19 @@ class ReportUploadSerializer(serializers.Serializer):
     # Optional: text already obtained from OCR (or supplied directly in tests /
     # for plain-text reports). The client never supplies structured values.
     extracted_text = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
+
+
+class ReportAnalysisSerializer(serializers.ModelSerializer):
+    """The AI's analysis as the patient sees it. AI output, not a record."""
+
+    report_id = serializers.UUIDField(source="report.public_id", read_only=True)
+    analysed_at = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = ReportAnalysis
+        fields = [
+            "report_id", "status", "reason_code", "reason", "urgent", "values",
+            "findings", "unusable", "text_source", "knowledge_version",
+            "range_table_version", "detectors_run", "policy_version", "analysed_at",
+        ]
+        read_only_fields = fields

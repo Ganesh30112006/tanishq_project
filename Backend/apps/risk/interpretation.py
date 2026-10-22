@@ -188,8 +188,8 @@ def next_steps(band: str, *, has_gaps: bool) -> list[dict[str, str]]:
     if band in ELEVATED_BANDS:
         steps.append(
             {
-                "action": "BOOK_APPOINTMENT",
-                "label": "Book a consultation",
+                "action": "SEE_A_DOCTOR",
+                "label": "See a doctor soon",
                 "detail": (
                     "Show this estimate and your recent reports to a doctor. Only a "
                     "doctor can tell you what it means for you. This tool cannot."
@@ -199,8 +199,8 @@ def next_steps(band: str, *, has_gaps: bool) -> list[dict[str, str]]:
     elif band == "MEDIUM":
         steps.append(
             {
-                "action": "BOOK_APPOINTMENT",
-                "label": "Book a consultation",
+                "action": "SEE_A_DOCTOR",
+                "label": "Mention this to a doctor",
                 "detail": "Please mention this to a doctor at your next visit.",
             }
         )

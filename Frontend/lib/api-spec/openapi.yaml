@@ -334,6 +334,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReportQuality"
 
+  /reports/{reportId}/analysis/:
+    get:
+      operationId: getReportAnalysis
+      tags: [reports]
+      summary: The AI's analysis of a report for the patient (AI output, not a clinical record)
+      description: >-
+        What the AI read on this report, what it held back and why, and the
+        hedged findings it built. Status is PENDING until the AI has looked.
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The analysis, or PENDING
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportAnalysis"
+        "404":
+          description: Report not found or not accessible
+
+  /reports/{reportId}/analyse/:
+    post:
+      operationId: retryReportAnalysis
+      tags: [reports]
+      summary: Ask the AI again, when it could not look at the report the first time
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Already analysed; the existing analysis is returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportAnalysis"
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportAnalysis"
+
   /reports/{reportId}/file/:
     get:
       operationId: downloadReportFile
@@ -1674,6 +1723,8 @@ components:
         - HBA1C
         - LIVER
         - KIDNEY
+        - THYROID
+        - ELECTROLYTES
         - URINALYSIS
         - PATHOLOGY
         - RADIOLOGY
@@ -1764,6 +1815,145 @@ components:
           type: number
         note:
           type: string
+
+    AnalysisValue:
+      type: object
+      required: [analyte, label, unit, reference_text, reference_status, printed_flag, critical, source_text, state, note]
+      properties:
+        analyte:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        reference_text:
+          type: string
+        reference_status:
+          type: string
+        printed_flag:
+          type: string
+        critical:
+          type: boolean
+        page:
+          type: number
+          nullable: true
+        source_text:
+          type: string
+        text_source:
+          type: string
+        state:
+          type: string
+          enum: [USED, NOT_SURE, READERS_DISAGREE]
+        note:
+          type: string
+
+    AnalysisEvidence:
+      type: object
+      required: [key, kind]
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+        value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        reference_text:
+          type: string
+        reference_status:
+          type: string
+        page:
+          type: number
+          nullable: true
+        source_text:
+          type: string
+
+    AnalysisFinding:
+      type: object
+      required: [code, label, plain_name, plain_explanation, next_steps, level, category, confidence, validation_status, evidence_used, evidence_missing, caveats, withheld, withheld_reason]
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        plain_name:
+          type: string
+        plain_explanation:
+          type: string
+        next_steps:
+          type: array
+          items:
+            type: string
+        level:
+          type: number
+        category:
+          type: string
+        confidence:
+          type: string
+        validation_status:
+          type: string
+        evidence_used:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisEvidence"
+        evidence_missing:
+          type: array
+          items:
+            type: string
+        caveats:
+          type: array
+          items:
+            type: string
+        withheld:
+          type: boolean
+        withheld_reason:
+          type: string
+
+    ReportAnalysis:
+      type: object
+      required: [report_id, status]
+      properties:
+        report_id:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, READY, HELD_BACK, UNAVAILABLE]
+        reason_code:
+          type: string
+        reason:
+          type: string
+        urgent:
+          type: boolean
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisValue"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisFinding"
+        unusable:
+          type: array
+          items:
+            type: string
+        text_source:
+          type: string
+        knowledge_version:
+          type: string
+        range_table_version:
+          type: string
+        detectors_run:
+          type: number
+        policy_version:
+          type: string
+        analysed_at:
+          type: string
+          format: date-time
 
     MedicalReport:
       type: object
@@ -3145,7 +3335,7 @@ components:
       properties:
         action:
           type: string
-          enum: [BOOK_APPOINTMENT, ADD_RESULTS, KEEP_MONITORING, DISCUSS_SYMPTOMS]
+          enum: [SEE_A_DOCTOR, ADD_RESULTS, KEEP_MONITORING, DISCUSS_SYMPTOMS]
         label:
           type: string
         detail:

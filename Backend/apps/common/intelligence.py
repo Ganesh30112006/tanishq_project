@@ -68,6 +68,8 @@ class DocumentProcessResult:
     #: Results the service says it could see but did not extract, because it
     #: could not name the report type. A count only.
     values_forgone: int = 0
+    #: Present only when ``detect_findings`` was requested and values were read.
+    findings: dict[str, Any] | None = None
 
     @property
     def needs_human_review(self) -> bool:
@@ -158,6 +160,8 @@ class IntelligenceClient:
         correlation_id: str,
         document_type_hint: str = "",
         operations: list[str] | None = None,
+        patient_sex: str = "",
+        patient_age_years: float | None = None,
     ) -> DocumentProcessResult:
         """Send authorized document *content* for structured extraction.
 
@@ -177,6 +181,11 @@ class IntelligenceClient:
         }
         if operations is not None:
             body["requested_operations"] = operations
+        # Attributes for choosing a reference interval, never identifiers.
+        if patient_sex:
+            body["patient_sex"] = patient_sex
+        if patient_age_years is not None:
+            body["patient_age_years"] = patient_age_years
 
         data = self._post(
             "/v1/documents/process", body, correlation_id=correlation_id
@@ -196,6 +205,7 @@ class IntelligenceClient:
             capabilities=data.get("capabilities", {}),
             notes=data.get("notes", []),
             values_forgone=int(data.get("values_forgone") or 0),
+            findings=data.get("findings"),
         )
 
     def document_capabilities(self, *, correlation_id: str) -> dict[str, Any]:

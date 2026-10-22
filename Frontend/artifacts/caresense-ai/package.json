@@ -76,5 +76,10 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@fontsource-variable/newsreader": "5.2.8",
+    "@fontsource/atkinson-hyperlegible": "5.2.8",
+    "@fontsource/ibm-plex-mono": "5.2.7"
   }
 }

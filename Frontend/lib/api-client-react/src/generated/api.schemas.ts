@@ -233,6 +233,8 @@ export const ReportClass = {
   HBA1C: 'HBA1C',
   LIVER: 'LIVER',
   KIDNEY: 'KIDNEY',
+  THYROID: 'THYROID',
+  ELECTROLYTES: 'ELECTROLYTES',
   URINALYSIS: 'URINALYSIS',
   PATHOLOGY: 'PATHOLOGY',
   RADIOLOGY: 'RADIOLOGY',
@@ -291,6 +293,86 @@ export interface ReportQuality {
   tests_total: number;
   tests_validated: number;
   note: string;
+}
+
+export type AnalysisValueState = typeof AnalysisValueState[keyof typeof AnalysisValueState];
+
+
+export const AnalysisValueState = {
+  USED: 'USED',
+  NOT_SURE: 'NOT_SURE',
+  READERS_DISAGREE: 'READERS_DISAGREE',
+} as const;
+
+export interface AnalysisValue {
+  analyte: string;
+  label: string;
+  value?: number | null;
+  unit: string;
+  reference_text: string;
+  reference_status: string;
+  printed_flag: string;
+  critical: boolean;
+  page?: number | null;
+  source_text: string;
+  text_source?: string;
+  state: AnalysisValueState;
+  note: string;
+}
+
+export interface AnalysisEvidence {
+  key: string;
+  kind: string;
+  value?: number | null;
+  unit?: string;
+  reference_text?: string;
+  reference_status?: string;
+  page?: number | null;
+  source_text?: string;
+}
+
+export interface AnalysisFinding {
+  code: string;
+  label: string;
+  plain_name: string;
+  plain_explanation: string;
+  next_steps: string[];
+  level: number;
+  category: string;
+  confidence: string;
+  validation_status: string;
+  evidence_used: AnalysisEvidence[];
+  evidence_missing: string[];
+  caveats: string[];
+  withheld: boolean;
+  withheld_reason: string;
+}
+
+export type ReportAnalysisStatus = typeof ReportAnalysisStatus[keyof typeof ReportAnalysisStatus];
+
+
+export const ReportAnalysisStatus = {
+  PENDING: 'PENDING',
+  READY: 'READY',
+  HELD_BACK: 'HELD_BACK',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export interface ReportAnalysis {
+  report_id: string;
+  status: ReportAnalysisStatus;
+  reason_code?: string;
+  reason?: string;
+  urgent?: boolean;
+  values?: AnalysisValue[];
+  findings?: AnalysisFinding[];
+  unusable?: string[];
+  text_source?: string;
+  knowledge_version?: string;
+  range_table_version?: string;
+  detectors_run?: number;
+  policy_version?: string;
+  analysed_at?: string;
 }
 
 export interface MedicalReport {
@@ -437,7 +519,7 @@ export type NextStepAction = typeof NextStepAction[keyof typeof NextStepAction];
 
 
 export const NextStepAction = {
-  BOOK_APPOINTMENT: 'BOOK_APPOINTMENT',
+  SEE_A_DOCTOR: 'SEE_A_DOCTOR',
   ADD_RESULTS: 'ADD_RESULTS',
   KEEP_MONITORING: 'KEEP_MONITORING',
   DISCUSS_SYMPTOMS: 'DISCUSS_SYMPTOMS',

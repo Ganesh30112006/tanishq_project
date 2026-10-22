@@ -127,7 +127,7 @@ class DashboardService:
                 tone="critical" if risk.level in ("HIGH", "CRITICAL") else "warning" if risk.level == "MEDIUM" else "positive" if risk.level else "neutral",
             ),
             Metric(
-                label="Workflow status",
+                label="Record status",
                 value=ctx.status.replace("_", " ").title(),
                 context="Based on your open alerts and current risk",
                 tone="critical" if ctx.status == "REVIEW_REQUIRED" else "warning" if ctx.status == "MONITORING" else "positive",

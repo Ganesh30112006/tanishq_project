@@ -203,6 +203,12 @@ class FindingOut(BaseModel):
     evidence_used: list[EvidenceRefOut] = Field(default_factory=list)
     evidence_missing: list[str] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
+    #: From the approved knowledge entry for ``code``, never generated. Empty
+    #: when the code has no entry, so a caller shows nothing rather than prose
+    #: nobody approved.
+    plain_name: str = ""
+    plain_explanation: str = ""
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class FindingsOut(BaseModel):
@@ -307,6 +313,17 @@ def findings_out(report) -> FindingsOut | None:
     if report is None:
         return None
     from intelligence.knowledge.findings import KNOWLEDGE_VERSION
+    from intelligence.knowledge.findings import get as knowledge_for
+
+    def _knowledge(code: str) -> dict[str, Any]:
+        entry = knowledge_for(code)
+        if entry is None:
+            return {}
+        return {
+            "plain_name": entry.canonical_name,
+            "plain_explanation": entry.plain_explanation,
+            "next_steps": list(entry.next_steps),
+        }
 
     return FindingsOut(
         findings=[
@@ -330,6 +347,7 @@ def findings_out(report) -> FindingsOut | None:
                 ],
                 evidence_missing=list(f.evidence_missing),
                 caveats=list(f.caveats),
+                **_knowledge(f.code),
             )
             for f in report.findings
         ],

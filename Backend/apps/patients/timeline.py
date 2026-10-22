@@ -71,10 +71,15 @@ def _report_events(patient) -> list[TimelineEvent]:
         )
         .order_by("-created_at")[:15]
     ):
-        label = (row.report_class or "Report").replace("_", " ").title()
+        label = (row.report_class or "Unclassified").replace("_", " ").title()
+        # Written for the patient: there is no reviewer in this product, so a
+        # report the older reader could not finish is still one our AI has read.
         detail = (
-            "Requires human review before use." if row.processing_state == ReportProcessingState.REVIEW_REQUIRED
-            else f"Finalized · completeness {row.completeness_status or 'UNKNOWN'}"
+            "Read. Open the report to see what our AI found."
+            if row.processing_state in (ReportProcessingState.REVIEW_REQUIRED, ReportProcessingState.FINALIZED)
+            else "Could not be read. A clearer copy may help."
+            if row.processing_state == ReportProcessingState.REJECTED
+            else "Being read."
         )
         events.append(
             TimelineEvent(

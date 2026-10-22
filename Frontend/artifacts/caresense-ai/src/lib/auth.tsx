@@ -53,6 +53,13 @@ interface AuthContextValue {
   user: Me | null;
   isLoading: boolean;
   error: string | null;
+  /** The server could not be reached while restoring a session. The token is
+   *  kept - a network blip is not a reason to sign someone out. */
+  unreachable: boolean;
+  /** A stored session was refused by the server (expired or revoked). */
+  sessionEnded: boolean;
+  /** Try restoring the session again after `unreachable`. */
+  retryConnection: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Public patient sign-up. Creates a login, never a clinical record. */
   register: (details: RegisterDetails) => Promise<void>;
@@ -102,6 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Me | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // The token getter is read fresh on every request (see custom-fetch.ts),
   // so a logout/login mid-session is picked up without re-registering it.
@@ -118,13 +128,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const me = await getMe();
-        if (!cancelled) setUser(me);
-      } catch {
-        // A stale/expired/revoked token fails closed: drop it and require a
-        // fresh login rather than showing a half-authenticated app.
         if (!cancelled) {
+          setUser(me);
+          setUnreachable(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status < 500) {
+          // A stale/expired/revoked token fails closed: drop it and require a
+          // fresh login rather than showing a half-authenticated app.
           setToken(null);
           writeStoredToken(null);
+          setSessionEnded(true);
+          setUnreachable(false);
+        } else {
+          // No answer, or the server failed. Say so, and keep the session for
+          // when it comes back.
+          setUnreachable(true);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -134,12 +154,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-    // Only re-run when the token identity changes.
+    // Only re-run when the token identity changes, or on an explicit retry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, attempt]);
+
+  const retryConnection = useCallback(() => {
+    setIsLoading(true);
+    setAttempt((n) => n + 1);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
+    setSessionEnded(false);
     try {
       const issued = await apiLogin({ email, password });
       writeStoredToken(issued.access_token);
@@ -219,8 +245,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, error, login, register, logout, hasPermission, hasAnyPermission, hasRole }),
-    [user, isLoading, error, login, register, logout, hasPermission, hasAnyPermission, hasRole],
+    () => ({ user, isLoading, error, unreachable, sessionEnded, retryConnection, login, register, logout, hasPermission, hasAnyPermission, hasRole }),
+    [user, isLoading, error, unreachable, sessionEnded, retryConnection, login, register, logout, hasPermission, hasAnyPermission, hasRole],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,32 +10,22 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity, Building2, ClipboardList, FlaskConical, KeyRound, Link2, Plus,
-  ScrollText, ShieldCheck, Stethoscope, UserPlus, Users, UserX,
+  ScrollText, ShieldCheck, UserPlus, Users, UserX,
 } from 'lucide-react';
 import {
-  getListAssignmentsQueryKey,
   getListAuditLogsQueryKey,
-  getListDoctorsQueryKey,
   getListLaboratoriesQueryKey,
-  getListLabTechniciansQueryKey,
   getListMissingDataTasksQueryKey,
   getListPatientsQueryKey,
   getListReconciliationEventsQueryKey,
   getListUsersQueryKey,
-  useCreateAssignment,
-  useCreateDoctor,
   useCreateLaboratory,
-  useCreateLabTechnician,
   useCreateUser,
   useDeactivateUser,
-  useEndAssignment,
   useGrantRole,
   useLinkPatientAccount,
-  useListAssignments,
   useListAuditLogs,
-  useListDoctors,
   useListLaboratories,
-  useListLabTechnicians,
   useListMissingDataTasks,
   useListPatients,
   useListReconciliationEvents,
@@ -52,10 +42,14 @@ import {
   PageHeading, POSITIVE_BADGE, QueryError, SectionTitle, shortDate, Skeleton, titleCase,
 } from '@/components/ui-kit';
 
-const ROLES: UserRole[] = ['PATIENT', 'DOCTOR', 'LAB_TECHNICIAN', 'ADMIN'];
+// Account roles this console can grant. Doctor and lab-technician accounts
+// are still served by the backend - existing holders keep working exactly as
+// before - but this build no longer carries a clinician or lab workspace for
+// them to use, so creating a new one from here would be a dead end.
+const ROLES: UserRole[] = ['PATIENT', 'ADMIN'];
 const SEXES: PatientSex[] = ['FEMALE', 'MALE', 'INTERSEX', 'UNKNOWN'];
 
-type TabKey = 'people' | 'patients' | 'care-teams' | 'laboratories' | 'oversight';
+type TabKey = 'people' | 'patients' | 'laboratories' | 'oversight';
 
 interface Tab {
   key: TabKey;
@@ -67,7 +61,6 @@ interface Tab {
 const TABS: Tab[] = [
   { key: 'people', label: 'People', icon: Users, anyPerm: [PERM.USERS_MANAGE] },
   { key: 'patients', label: 'Patients', icon: UserPlus, anyPerm: [PERM.PATIENT_REGISTER, PERM.USERS_MANAGE] },
-  { key: 'care-teams', label: 'Care teams', icon: Stethoscope, anyPerm: [PERM.STAFF_MANAGE] },
   { key: 'laboratories', label: 'Laboratories', icon: FlaskConical, anyPerm: [PERM.STAFF_MANAGE] },
   { key: 'oversight', label: 'Oversight', icon: ShieldCheck, anyPerm: [PERM.AUDIT_READ, PERM.RECONCILIATION_MANAGE] },
 ];
@@ -110,7 +103,6 @@ export default function AdminConsole() {
 
       {active === 'people' && <PeopleSection />}
       {active === 'patients' && <PatientsSection />}
-      {active === 'care-teams' && <CareTeamsSection />}
       {active === 'laboratories' && <LaboratoriesSection />}
       {active === 'oversight' && <OversightSection />}
     </div>
@@ -210,7 +202,7 @@ function PeopleSection() {
 
 function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({ email: '', full_name: '', password: '' });
-  const [role, setRole] = useState<UserRole>('DOCTOR');
+  const [role, setRole] = useState<UserRole>('PATIENT');
   const create = useCreateUser();
   const grant = useGrantRole();
   const update = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -251,7 +243,7 @@ function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 }
 
 function RolesModal({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
-  const [role, setRole] = useState<UserRole>('DOCTOR');
+  const [role, setRole] = useState<UserRole>('PATIENT');
   const grant = useGrantRole();
   const revoke = useRevokeRole();
   const busy = grant.isPending || revoke.isPending;
@@ -387,7 +379,7 @@ function RegisterPatientModal({ onClose, onDone }: { onClose: () => void; onDone
   return (
     <Modal
       title="Register patient"
-      description="Creates an identity only. Conditions, medications and results are recorded through their own validated paths. If you are a clinician, you are placed on this patient's care team."
+      description="Creates an identity only. Conditions, medications and results are recorded through their own validated paths."
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-4" data-testid="form-register-patient">
@@ -440,163 +432,23 @@ function LinkAccountModal({ patient, onClose, onDone }: { patient: { id: string;
 }
 
 // ---------------------------------------------------------------------------
-// Care teams: clinician profiles and assignments
-// ---------------------------------------------------------------------------
-
-function CareTeamsSection() {
-  const queryClient = useQueryClient();
-  const [creatingDoctor, setCreatingDoctor] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const doctorsQuery = useListDoctors(undefined, { query: { queryKey: getListDoctorsQueryKey() } });
-  const assignParams = { status: 'ACTIVE' };
-  const assignmentsQuery = useListAssignments(assignParams, { query: { queryKey: getListAssignmentsQueryKey(assignParams) } });
-  const endAssignment = useEndAssignment();
-  const refreshDoctors = () => queryClient.invalidateQueries({ queryKey: getListDoctorsQueryKey() });
-  const refreshAssignments = () => queryClient.invalidateQueries({ queryKey: getListAssignmentsQueryKey(assignParams) });
-
-  return (
-    <div className="space-y-6">
-      <Panel
-        eyebrow="Staff"
-        title="Clinicians"
-        action={<ActionButton icon={Plus} label="Add clinician" variant="primary" onClick={() => setCreatingDoctor(true)} />}
-      >
-        {doctorsQuery.isLoading ? <RowSkeleton />
-          : doctorsQuery.isError ? <div className="p-5"><QueryError onRetry={() => doctorsQuery.refetch()} message="Clinician profiles are unavailable." /></div>
-          : doctorsQuery.data?.results.length ? (
-            <div className="divide-y divide-border">
-              {doctorsQuery.data.results.map((doctor) => (
-                <div key={doctor.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" data-testid={`row-doctor-${doctor.id}`}>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{doctor.full_name || doctor.email}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{doctor.registration_number}{doctor.specialty ? ` · ${doctor.specialty}` : ''} · {doctor.email}</p>
-                  </div>
-                  <Badge className={doctor.is_active ? POSITIVE_BADGE : NEUTRAL_BADGE}>{doctor.is_active ? 'Active' : 'Inactive'}</Badge>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState icon={Stethoscope} title="No clinician profiles" detail="Add a profile for an account that already holds the Doctor role." />}
-      </Panel>
-
-      <Panel
-        eyebrow="Access"
-        title="Doctor–patient assignments"
-        action={<ActionButton icon={Plus} label="Assign patient" variant="primary" onClick={() => setAssigning(true)} />}
-      >
-        <p className="border-b border-border bg-secondary/40 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
-          An assignment is what authorizes a clinician to open a record. Ending one revokes that access immediately.
-        </p>
-        {assignmentsQuery.isLoading ? <RowSkeleton />
-          : assignmentsQuery.isError ? <div className="p-5"><QueryError onRetry={() => assignmentsQuery.refetch()} message="Assignments are unavailable." /></div>
-          : assignmentsQuery.data?.results.length ? (
-            <div className="divide-y divide-border">
-              {assignmentsQuery.data.results.map((row) => (
-                <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" data-testid={`row-assignment-${row.id}`}>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{row.patient_name} <span className="font-normal text-muted-foreground">{row.patient_mrn}</span></p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{row.doctor_name || 'Clinician'} · since {shortDate(row.assigned_at)}{row.reason ? ` · ${row.reason}` : ''}</p>
-                  </div>
-                  <ActionButton
-                    icon={UserX}
-                    label="End access"
-                    variant="danger"
-                    onClick={() => endAssignment.mutate({ assignmentId: row.id, data: { reason: 'Ended by administrator' } }, { onSuccess: refreshAssignments })}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState icon={Stethoscope} title="No active assignments" detail="Assign a patient to a clinician to grant clinical access." />}
-      </Panel>
-
-      {creatingDoctor && <CreateDoctorModal onClose={() => setCreatingDoctor(false)} onDone={refreshDoctors} />}
-      {assigning && <AssignPatientModal onClose={() => setAssigning(false)} onDone={refreshAssignments} />}
-    </div>
-  );
-}
-
-function CreateDoctorModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [form, setForm] = useState({ user_email: '', registration_number: '', specialty: '' });
-  const create = useCreateDoctor();
-  const update = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!form.user_email || !form.registration_number) return;
-    create.mutate({ data: { ...form, specialty: form.specialty || undefined } }, { onSuccess: () => { onDone(); onClose(); } });
-  }
-
-  return (
-    <Modal title="Add clinician" description="The account must already hold the Doctor role. Grant it under People first if it does not." onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4" data-testid="form-create-doctor">
-        <FormField label="Account email"><input type="email" value={form.user_email} onChange={update('user_email')} required className={FIELD_CLASS} data-testid="input-doctor-email" /></FormField>
-        <FormField label="Registration number"><input value={form.registration_number} onChange={update('registration_number')} required className={FIELD_CLASS} data-testid="input-doctor-registration" /></FormField>
-        <FormField label="Specialty (optional)"><input value={form.specialty} onChange={update('specialty')} className={FIELD_CLASS} data-testid="input-doctor-specialty" /></FormField>
-        <FormError error={create.error} />
-        <ModalActions onClose={onClose} submitting={create.isPending} disabled={!form.user_email || !form.registration_number} submitLabel="Add clinician" />
-      </form>
-    </Modal>
-  );
-}
-
-function AssignPatientModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [doctorId, setDoctorId] = useState('');
-  const [patientId, setPatientId] = useState('');
-  const [reason, setReason] = useState('');
-  const [search, setSearch] = useState('');
-  const doctorsQuery = useListDoctors(undefined, { query: { queryKey: getListDoctorsQueryKey() } });
-  const patientParams = { search: search.trim() || undefined, page_size: 8 };
-  const patientsQuery = useListPatients(patientParams, { query: { queryKey: getListPatientsQueryKey(patientParams) } });
-  const create = useCreateAssignment();
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!doctorId || !patientId) return;
-    create.mutate(
-      { data: { doctor_id: doctorId, patient_id: patientId, reason: reason || undefined } },
-      { onSuccess: () => { onDone(); onClose(); } },
-    );
-  }
-
-  return (
-    <Modal title="Assign patient to clinician" description="This grants the clinician access to that patient's record from now on." onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4" data-testid="form-assign-patient">
-        <FormField label="Clinician">
-          <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} required className={FIELD_CLASS} data-testid="select-assign-doctor">
-            <option value="">Select a clinician…</option>
-            {(doctorsQuery.data?.results || []).filter((d) => d.is_active).map((d) => (
-              <option key={d.id} value={d.id}>{d.full_name || d.email} · {d.registration_number}</option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="Patient">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or MRN" className={FIELD_CLASS} data-testid="input-assign-patient-search" />
-          <select value={patientId} onChange={(e) => setPatientId(e.target.value)} required className={`${FIELD_CLASS} mt-2`} data-testid="select-assign-patient">
-            <option value="">Select a patient…</option>
-            {(patientsQuery.data?.results || []).map((p) => (
-              <option key={p.id} value={p.id}>{p.full_name} · {p.mrn}</option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Cardiology referral" className={FIELD_CLASS} data-testid="input-assign-reason" /></FormField>
-        <FormError error={create.error} />
-        <ModalActions onClose={onClose} submitting={create.isPending} disabled={!doctorId || !patientId} submitLabel="Grant access" />
-      </form>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Laboratories and technicians
+// Laboratories
+//
+// This used to carry two panels: the laboratory directory below, and a
+// "Laboratory technicians" staff panel for onboarding lab-technician
+// accounts. That staff panel was retired along with the lab workspace itself
+// (see the note in App.tsx) - existing technician accounts and the lab
+// report pipeline underneath them keep working, there is just no screen
+// here to create new ones. The laboratory directory stays: facilities are
+// still real institutional data, referenced by reports regardless of who
+// uploads them.
 // ---------------------------------------------------------------------------
 
 function LaboratoriesSection() {
   const queryClient = useQueryClient();
   const [creatingLab, setCreatingLab] = useState(false);
-  const [creatingTech, setCreatingTech] = useState(false);
   const labsQuery = useListLaboratories({ query: { queryKey: getListLaboratoriesQueryKey() } });
-  const techQuery = useListLabTechnicians(undefined, { query: { queryKey: getListLabTechniciansQueryKey() } });
   const refreshLabs = () => queryClient.invalidateQueries({ queryKey: getListLaboratoriesQueryKey() });
-  const refreshTechs = () => queryClient.invalidateQueries({ queryKey: getListLabTechniciansQueryKey() });
 
   return (
     <div className="space-y-6">
@@ -615,29 +467,10 @@ function LaboratoriesSection() {
                 </div>
               ))}
             </div>
-          ) : <EmptyState icon={Building2} title="No laboratories" detail="Create a laboratory before onboarding technicians." />}
-      </Panel>
-
-      <Panel eyebrow="Staff" title="Laboratory technicians" action={<ActionButton icon={Plus} label="Add technician" variant="primary" onClick={() => setCreatingTech(true)} />}>
-        {techQuery.isLoading ? <RowSkeleton />
-          : techQuery.isError ? <div className="p-5"><QueryError onRetry={() => techQuery.refetch()} message="Technicians are unavailable." /></div>
-          : techQuery.data?.results.length ? (
-            <div className="divide-y divide-border">
-              {techQuery.data.results.map((tech) => (
-                <div key={tech.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" data-testid={`row-tech-${tech.id}`}>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{tech.full_name || tech.email}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{tech.laboratory_code}{tech.employee_id ? ` · ${tech.employee_id}` : ''} · {tech.email}</p>
-                  </div>
-                  <Badge className={tech.is_active ? POSITIVE_BADGE : NEUTRAL_BADGE}>{tech.is_active ? 'Active' : 'Inactive'}</Badge>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState icon={FlaskConical} title="No technicians" detail="Attach an account holding the Lab technician role to a laboratory." />}
+          ) : <EmptyState icon={Building2} title="No laboratories" detail="Create a laboratory to get started." />}
       </Panel>
 
       {creatingLab && <CreateLaboratoryModal onClose={() => setCreatingLab(false)} onDone={refreshLabs} />}
-      {creatingTech && <CreateTechnicianModal labs={labsQuery.data?.results || []} onClose={() => setCreatingTech(false)} onDone={refreshTechs} />}
     </div>
   );
 }
@@ -661,35 +494,6 @@ function CreateLaboratoryModal({ onClose, onDone }: { onClose: () => void; onDon
         <FormField label="Address (optional)"><input value={form.address} onChange={update('address')} className={FIELD_CLASS} data-testid="input-lab-address" /></FormField>
         <FormError error={create.error} />
         <ModalActions onClose={onClose} submitting={create.isPending} disabled={!form.code || !form.name} submitLabel="Create laboratory" />
-      </form>
-    </Modal>
-  );
-}
-
-function CreateTechnicianModal({ labs, onClose, onDone }: { labs: { id: string; code: string; name: string }[]; onClose: () => void; onDone: () => void }) {
-  const [form, setForm] = useState({ user_email: '', laboratory_id: '', employee_id: '' });
-  const create = useCreateLabTechnician();
-  const update = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!form.user_email || !form.laboratory_id) return;
-    create.mutate({ data: { ...form, employee_id: form.employee_id || undefined } }, { onSuccess: () => { onDone(); onClose(); } });
-  }
-
-  return (
-    <Modal title="Add technician" description="The account must already hold the Lab technician role." onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4" data-testid="form-create-technician">
-        <FormField label="Account email"><input type="email" value={form.user_email} onChange={update('user_email')} required className={FIELD_CLASS} data-testid="input-tech-email" /></FormField>
-        <FormField label="Laboratory">
-          <select value={form.laboratory_id} onChange={update('laboratory_id')} required className={FIELD_CLASS} data-testid="select-tech-lab">
-            <option value="">Select a laboratory…</option>
-            {labs.map((lab) => <option key={lab.id} value={lab.id}>{lab.name} · {lab.code}</option>)}
-          </select>
-        </FormField>
-        <FormField label="Employee ID (optional)"><input value={form.employee_id} onChange={update('employee_id')} className={FIELD_CLASS} data-testid="input-tech-employee" /></FormField>
-        <FormError error={create.error} />
-        <ModalActions onClose={onClose} submitting={create.isPending} disabled={!form.user_email || !form.laboratory_id} submitLabel="Add technician" />
       </form>
     </Modal>
   );

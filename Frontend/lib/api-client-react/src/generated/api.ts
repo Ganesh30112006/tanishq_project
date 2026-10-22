@@ -96,6 +96,7 @@ import type {
   PatientProfile,
   PatientRegisterRequest,
   RegisterRequest,
+  ReportAnalysis,
   ReportQuality,
   ReportUploadRequest,
   RevokedSessions,
@@ -1157,6 +1158,155 @@ export function useGetReportQuality<TData = Awaited<ReturnType<typeof getReportQ
 
 
 
+
+export const getGetReportAnalysisUrl = (reportId: string,) => {
+
+
+
+
+  return `/api/v1/reports/${reportId}/analysis/`
+}
+
+/**
+ * What the AI read on this report, what it held back and why, and the hedged findings it built. Status is PENDING until the AI has looked.
+ * @summary The AI's analysis of a report for the patient (AI output, not a clinical record)
+ */
+export const getReportAnalysis = async (reportId: string, options?: Parameters<typeof customFetch>[1]): Promise<ReportAnalysis> => {
+
+  return customFetch<ReportAnalysis>(getGetReportAnalysisUrl(reportId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReportAnalysisQueryKey = (reportId: string,) => {
+    return [
+    `/api/v1/reports/${reportId}/analysis/`
+    ] as const;
+    }
+
+
+export const getGetReportAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getReportAnalysis>>, TError = ErrorType<void>>(reportId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReportAnalysisQueryKey(reportId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReportAnalysis>>> = ({ signal }) => getReportAnalysis(reportId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: reportId !== null && reportId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReportAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReportAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getReportAnalysis>>>
+export type GetReportAnalysisQueryError = ErrorType<void>
+
+
+/**
+ * @summary The AI's analysis of a report for the patient (AI output, not a clinical record)
+ */
+
+export function useGetReportAnalysis<TData = Awaited<ReturnType<typeof getReportAnalysis>>, TError = ErrorType<void>>(
+ reportId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReportAnalysisQueryOptions(reportId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRetryReportAnalysisUrl = (reportId: string,) => {
+
+
+
+
+  return `/api/v1/reports/${reportId}/analyse/`
+}
+
+/**
+ * @summary Ask the AI again, when it could not look at the report the first time
+ */
+export const retryReportAnalysis = async (reportId: string, options?: Parameters<typeof customFetch>[1]): Promise<ReportAnalysis> => {
+
+  return customFetch<ReportAnalysis>(getRetryReportAnalysisUrl(reportId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryReportAnalysisMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryReportAnalysis>>, TError,{reportId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryReportAnalysis>>, TError,{reportId: string}, TContext> => {
+
+const mutationKey = ['retryReportAnalysis'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryReportAnalysis>>, {reportId: string}> = (props) => {
+          const {reportId} = props ?? {};
+
+          return  retryReportAnalysis(reportId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryReportAnalysisMutationResult = NonNullable<Awaited<ReturnType<typeof retryReportAnalysis>>>
+
+    export type RetryReportAnalysisMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Ask the AI again, when it could not look at the report the first time
+ */
+export const useRetryReportAnalysis = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryReportAnalysis>>, TError,{reportId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryReportAnalysis>>,
+        TError,
+        {reportId: string},
+        TContext
+      > => {
+      return useMutation(getRetryReportAnalysisMutationOptions(options));
+    }
 
 export const getDownloadReportFileUrl = (reportId: string,) => {
 

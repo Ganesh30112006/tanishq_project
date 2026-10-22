@@ -10,6 +10,10 @@
   score).
 * ``GET /api/v1/reports/{id}/file`` - stream the stored original (authorized;
   never via a client-supplied path).
+* ``GET /api/v1/reports/{id}/analysis`` - the AI's analysis for the patient:
+  what it read, what it held back and why. AI output, not a clinical record.
+* ``POST /api/v1/reports/{id}/analyse`` - ask again, when the AI could not
+  look at the report the first time.
 """
 from __future__ import annotations
 
@@ -37,8 +41,12 @@ from apps.authz.relationships import visible_patient_queryset
 from apps.common.enums import ValidationStatus
 from apps.common.errors import AccessDenied, ResourceNotFound
 from apps.jobs.services import JobService
-from apps.reports.models import Report
-from apps.reports.serializers import ReportSerializer, ReportUploadSerializer
+from apps.reports.models import Report, ReportAnalysis
+from apps.reports.serializers import (
+    ReportAnalysisSerializer,
+    ReportSerializer,
+    ReportUploadSerializer,
+)
 from apps.reports.services import ReportService
 
 _READ_PERMS = (REPORT_READ_OWN, REPORT_READ_ASSIGNED, LAB_WORKFLOW_ACCESS)
@@ -169,6 +177,37 @@ class ReportViewSet(
                 "note": "Data-quality metric only; not a medical health score.",
             }
         )
+
+    # -- AI analysis --------------------------------------------
+    @action(detail=True, methods=["get"])
+    def analysis(self, request: Request, public_id=None) -> Response:
+        report = self.get_object()  # runs object-level authorization
+        audit_service.record(
+            audit.REPORT_ACCESS, actor=request.user, resource=report, metadata={"view": "analysis"}
+        )
+        found = ReportAnalysis.objects.filter(report=report).first()
+        if found is None:
+            # Not yet read. Said plainly, so the page can show "the AI is
+            # looking at this" rather than an empty analysis that looks clean.
+            return Response({"report_id": str(report.public_id), "status": "PENDING"})
+        return Response(ReportAnalysisSerializer(found).data)
+
+    @action(detail=True, methods=["post"])
+    def analyse(self, request: Request, public_id=None) -> Response:
+        report = self.get_object()
+        found = ReportAnalysis.objects.filter(report=report).first()
+        # Only a read that never happened is retried on request. A finished
+        # analysis is re-read when the report changes, not because someone
+        # would prefer a different answer.
+        if found is not None and found.status != ReportAnalysis.Status.UNAVAILABLE:
+            return Response(ReportAnalysisSerializer(found).data)
+        attempt = found.updated_at.isoformat() if found else "first"
+        JobService().enqueue(
+            "reports.analyse",
+            payload={"report_id": str(report.public_id)},
+            idempotency_key=f"reports.analyse:{report.public_id}:retry:{attempt}",
+        )
+        return Response({"report_id": str(report.public_id), "status": "PENDING"}, status=status.HTTP_202_ACCEPTED)
 
     # -- original file ------------------------------------------
     @action(detail=True, methods=["get"])

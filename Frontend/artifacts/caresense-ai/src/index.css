@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -46,6 +45,18 @@
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
 
+  /* Brand, and the clinical-severity ladder. Kept separate from each other on
+     purpose: --accent used to double as both "this is the brand colour" and
+     "this needs attention", which meant the warning tint for a MEDIUM risk
+     band was, by coincidence, the same hue as the logo. --brand is now the
+     only thing that means "CareSense", and --accent means only "attention". */
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-risk-high: hsl(var(--risk-high));
+  --color-risk-high-foreground: hsl(var(--risk-high-foreground));
+
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
@@ -61,10 +72,15 @@
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* One crisp shape language. These override Tailwind's own radius scale, so
+     every rounded-xl / rounded-2xl already written across the app follows it
+     rather than each component carrying its own soft, generic curve. */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 7px;
+  --radius-2xl: 9px;
+  --radius-3xl: 12px;
 }
 
 /* LIGHT MODE */
@@ -79,269 +95,228 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  --background: 210 20% 97%;
-
-  --foreground: 215 24% 18%;
-
-  --border: 214 18% 87%;
-
+  --background: 210 25% 97%;
+  --foreground: 222 30% 15%;
+  --border: 214 20% 88%;
   --card: 0 0% 100%;
+  --card-foreground: 222 30% 15%;
+  --card-border: 214 20% 88%;
 
-  --card-foreground: 215 24% 18%;
-
-  --card-border: 214 18% 87%;
-
-  --sidebar: 215 24% 18%;
-
-  --sidebar-foreground: 210 20% 94%;
-
-  --sidebar-border: 215 18% 28%;
-
-  --sidebar-primary: 48 94% 58%;
-
-  --sidebar-primary-foreground: 215 24% 18%;
-
-  --sidebar-accent: 215 20% 25%;
-
-  --sidebar-accent-foreground: 210 20% 94%;
-
-  --sidebar-ring: 48 94% 58%;
+  --sidebar: 224 34% 11%;
+  --sidebar-foreground: 210 25% 95%;
+  --sidebar-border: 224 24% 21%;
+  --sidebar-primary: 171 72% 46%;
+  --sidebar-primary-foreground: 224 34% 9%;
+  --sidebar-accent: 224 24% 18%;
+  --sidebar-accent-foreground: 210 25% 95%;
+  --sidebar-ring: 171 72% 46%;
 
   --popover: 0 0% 100%;
+  --popover-foreground: 222 30% 15%;
+  --popover-border: 214 20% 88%;
 
-  --popover-foreground: 215 24% 18%;
-
-  --popover-border: 214 18% 87%;
-
-  --primary: 215 24% 18%;
-
+  --primary: 171 68% 30%;
   --primary-foreground: 0 0% 100%;
+  --secondary: 212 22% 94%;
+  --secondary-foreground: 222 30% 15%;
+  --muted: 212 22% 94%;
+  --muted-foreground: 217 15% 44%;
 
-  --secondary: 210 18% 93%;
+  /* Attention / warning surface - not the brand colour (see --brand below). */
+  --accent: 43 92% 56%;
+  --accent-foreground: 27 55% 22%;
 
-  --secondary-foreground: 215 24% 18%;
-
-  --muted: 210 18% 93%;
-
-  --muted-foreground: 215 11% 47%;
-
-  --accent: 48 94% 58%;
-
-  --accent-foreground: 215 24% 18%;
-
-  --destructive: 3 62% 49%;
-
+  --destructive: 4 72% 44%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 214 18% 78%;
-  --ring: 48 94% 58%;
-  --chart-1: 215 24% 18%;
-  --chart-2: 48 94% 58%;
-  --chart-3: 194 34% 45%;
-  --chart-4: 3 62% 49%;
-  --chart-5: 215 11% 47%;
+  --input: 214 20% 80%;
+  --ring: 171 60% 38%;
 
-  --app-font-sans: 'DM Sans', sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono: 'Space Mono', monospace;
-  --radius: 0.5rem; /* 8px */
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
-  --shadow-sm:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-md:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-lg:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-xl:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
+  /* The one colour that means "CareSense": the logo chip, brand flourishes,
+     and the sidebar's active-nav highlight. Never reused for status. */
+  --brand: 171 72% 33%;
+  --brand-foreground: 0 0% 100%;
+
+  /* Good / low risk / improving. */
+  --success: 152 52% 27%;
+  --success-foreground: 0 0% 100%;
+
+  /* HIGH risk sits between the amber of --accent (MEDIUM) and the red of
+     --destructive (CRITICAL) - a four-rung ladder needs a fourth colour,
+     not a reused one. */
+  --risk-high: 26 82% 40%;
+  --risk-high-foreground: 0 0% 100%;
+
+  --chart-1: 171 68% 30%;
+  --chart-2: 43 92% 56%;
+  --chart-3: 152 52% 27%;
+  --chart-4: 4 72% 44%;
+  --chart-5: 217 15% 44%;
+
+  /* Type. A serif made for long reading carries the headings, so a page reads
+     like a clear medical document rather than a console. The body face was
+     drawn for low-vision readers - the people most likely to squint at a lab
+     value - and keeps 1/l/I and 0/O apart. Measured values stay in the
+     monospace. Every face is bundled locally, never fetched from a CDN. */
+  --app-font-sans: 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+  --app-font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+  --app-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius: 0.375rem; /* 6px */
+  /* Soft, slate-tinted elevation. Cards stay outlined; shadows are reserved
+     for things that genuinely float - dialogs, the logo chip, active tabs. */
+  --shadow-2xs: 0 1px 0 0 hsl(222 30% 15% / 0.03);
+  --shadow-xs: 0 1px 2px 0 hsl(222 30% 15% / 0.05);
+  --shadow-sm: 0 1px 2px 0 hsl(222 30% 15% / 0.06), 0 1px 3px 0 hsl(222 30% 15% / 0.04);
+  --shadow: 0 2px 4px -1px hsl(222 30% 15% / 0.06), 0 1px 3px 0 hsl(222 30% 15% / 0.05);
+  --shadow-md: 0 4px 8px -2px hsl(222 30% 15% / 0.08), 0 2px 4px -2px hsl(222 30% 15% / 0.05);
+  --shadow-lg: 0 12px 20px -6px hsl(222 30% 15% / 0.12), 0 4px 8px -4px hsl(222 30% 15% / 0.06);
+  --shadow-xl: 0 20px 32px -10px hsl(222 30% 15% / 0.18), 0 8px 12px -6px hsl(222 30% 15% / 0.08);
+  --shadow-2xl: 0 32px 56px -16px hsl(222 30% 15% / 0.26);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
-
-  /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
-  --sidebar-primary-border: hsl(
-    from hsl(var(--sidebar-primary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-
-  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(var(--sidebar-accent));
-  --sidebar-accent-border: hsl(
-    from hsl(var(--sidebar-accent)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-
-  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --primary-border: hsl(var(--primary));
-  --primary-border: hsl(
-    from hsl(var(--primary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-
-  /* Fallback for older browsers */
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --secondary-border: hsl(var(--secondary));
-  --secondary-border: hsl(
-    from hsl(var(--secondary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-
-  /* Fallback for older browsers */
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --muted-border: hsl(var(--muted));
-  --muted-border: hsl(
-    from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) /
-      alpha
-  );
-
-  /* Fallback for older browsers */
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --accent-border: hsl(var(--accent));
-  --accent-border: hsl(
-    from hsl(var(--accent)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-
-  /* Fallback for older browsers */
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
-  --destructive-border: hsl(
-    from hsl(var(--destructive)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
 .dark {
   --button-outline: rgba(255, 255, 255, 0.1);
   --badge-outline: rgba(255, 255, 255, 0.05);
-
-  --opaque-button-border-intensity: 9; /* In terms of percentages */
-
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 215 24% 11%;
+  --background: 224 30% 9%;
+  --foreground: 210 25% 94%;
+  --border: 224 20% 22%;
+  --card: 224 26% 13%;
+  --card-foreground: 210 25% 94%;
+  --card-border: 224 20% 22%;
 
-  --foreground: 210 20% 94%;
+  --sidebar: 226 36% 6%;
+  --sidebar-foreground: 210 25% 94%;
+  --sidebar-border: 224 20% 16%;
+  --sidebar-primary: 171 72% 46%;
+  --sidebar-primary-foreground: 224 34% 9%;
+  --sidebar-accent: 224 20% 16%;
+  --sidebar-accent-foreground: 210 25% 94%;
+  --sidebar-ring: 171 72% 46%;
 
-  --border: 215 18% 28%;
+  --popover: 224 26% 13%;
+  --popover-foreground: 210 25% 94%;
+  --popover-border: 224 20% 22%;
 
-  --card: 215 21% 15%;
+  --primary: 171 62% 48%;
+  --primary-foreground: 222 32% 10%;
+  --secondary: 224 18% 19%;
+  --secondary-foreground: 210 25% 94%;
+  --muted: 224 18% 19%;
+  --muted-foreground: 216 12% 68%;
 
-  --card-foreground: 210 20% 94%;
-
-  --card-border: 215 18% 28%;
-
-  --sidebar: 215 26% 8%;
-
-  --sidebar-foreground: 210 20% 94%;
-
-  --sidebar-border: 215 18% 20%;
-
-  --sidebar-primary: 48 94% 58%;
-
-  --sidebar-primary-foreground: 215 24% 18%;
-
-  --sidebar-accent: 215 20% 18%;
-
-  --sidebar-accent-foreground: 210 20% 94%;
-
-  --sidebar-ring: 48 94% 58%;
-
-  --popover: 215 21% 15%;
-
-  --popover-foreground: 210 20% 94%;
-
-  --popover-border: 215 18% 28%;
-
-  --primary: 48 94% 58%;
-
-  --primary-foreground: 215 24% 18%;
-
-  --secondary: 215 20% 22%;
-
-  --secondary-foreground: 210 20% 94%;
-
-  --muted: 215 20% 22%;
-
-  --muted-foreground: 215 12% 67%;
-
-  --accent: 48 94% 58%;
-
-  --accent-foreground: 215 24% 18%;
-
-  --destructive: 3 62% 56%;
-
+  --accent: 43 88% 58%;
+  --accent-foreground: 43 90% 72%;
+  --destructive: 4 72% 60%;
   --destructive-foreground: 0 0% 100%;
 
   /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
-  --input: 215 18% 38%;
-  --ring: 48 94% 58%;
-  --chart-1: 48 94% 58%;
-  --chart-2: 194 34% 58%;
-  --chart-3: 3 62% 56%;
-  --chart-4: 210 20% 94%;
-  --chart-5: 215 12% 67%;
+  --input: 224 18% 32%;
+  --ring: 171 60% 50%;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-sm:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-md:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-lg:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-xl:
-    0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0),
-    0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
+  --brand: 171 70% 48%;
+  --brand-foreground: 222 32% 10%;
+  --success: 152 48% 52%;
+  --success-foreground: 152 48% 10%;
+  --risk-high: 26 85% 60%;
+  --risk-high-foreground: 26 40% 12%;
+
+  --chart-1: 171 70% 48%;
+  --chart-2: 43 88% 58%;
+  --chart-3: 152 48% 52%;
+  --chart-4: 4 72% 60%;
+  --chart-5: 216 12% 68%;
+
+  --shadow-2xs: 0 1px 0 0 hsl(0 0% 0% / 0.2);
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.35), 0 1px 3px 0 hsl(0 0% 0% / 0.25);
+  --shadow: 0 2px 4px -1px hsl(0 0% 0% / 0.35), 0 1px 3px 0 hsl(0 0% 0% / 0.3);
+  --shadow-md: 0 4px 8px -2px hsl(0 0% 0% / 0.4), 0 2px 4px -2px hsl(0 0% 0% / 0.3);
+  --shadow-lg: 0 12px 20px -6px hsl(0 0% 0% / 0.5), 0 4px 8px -4px hsl(0 0% 0% / 0.35);
+  --shadow-xl: 0 20px 32px -10px hsl(0 0% 0% / 0.55), 0 8px 12px -6px hsl(0 0% 0% / 0.4);
+  --shadow-2xl: 0 32px 56px -16px hsl(0 0% 0% / 0.65);
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
+  * { @apply border-border; }
+  html { background: hsl(var(--background)); }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    min-width: 320px;
+    /* 16px body: the readable floor for patients, many of whom read on a phone. */
+    font-size: 16px;
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
   }
-}
-
-@layer base {
-  html { background: hsl(var(--background)); }
-  body { min-width: 320px; }
+  /* The serif carries headings. Optical sizing on, so a 44px page title and a
+     20px section title are each drawn for their own size. */
+  h1, h2 {
+    font-family: var(--app-font-serif);
+    font-optical-sizing: auto;
+    font-weight: 560;
+    letter-spacing: -0.015em;
+  }
+  table, .tabular { font-variant-numeric: tabular-nums; }
+  ::selection { background: hsl(var(--brand) / .2); }
   button, a, input, select { -webkit-tap-highlight-color: transparent; }
-  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid hsl(var(--accent) / .7);
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+    outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
+  input:focus, select:focus, textarea:focus { border-color: hsl(var(--ring)); }
+  summary::-webkit-details-marker { display: none; }
+  [role='button'], button:not(:disabled), summary, label[for], select { cursor: pointer; }
 }
 
 @keyframes rise-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.page-enter { animation: rise-in .42s ease-out both; }
-.stagger-1 { animation-delay: 50ms; }
-.stagger-2 { animation-delay: 100ms; }
-.stagger-3 { animation-delay: 150ms; }
-.stagger-4 { animation-delay: 200ms; }
-.mono-label { font-family: var(--app-font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+/* Fill mode `backwards`, never `both`. A held end state keeps a transform on
+   the element (browsers interpolate toward an identity matrix, even when the
+   keyframe says `none`), and any transform makes that element the containing
+   block for position:fixed descendants - which trapped every dialog's
+   full-screen overlay inside the page it was opened from. `backwards` still
+   holds the hidden start state through the stagger delays below. */
+.page-enter { animation: rise-in .36s cubic-bezier(.2,.7,.2,1) backwards; }
+.stagger-1 { animation-delay: 40ms; }
+.stagger-2 { animation-delay: 80ms; }
+.stagger-3 { animation-delay: 120ms; }
+.stagger-4 { animation-delay: 160ms; }
+
+/* Small capitals in the monospace: the voice of labels, units and section
+   marks - the parts of a page that were measured or filed, not written. */
+.mono-label { font-family: var(--app-font-mono); font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+.font-display { font-family: var(--app-font-serif); font-optical-sizing: auto; }
+
+/* Ruled paper with a margin line, for the sign-in and error pages: the app's
+   subject is a printed report, so its front door looks like one. */
+.ruled-paper {
+  background-image:
+    linear-gradient(90deg, transparent 63px, hsl(var(--brand) / .16) 63px, hsl(var(--brand) / .16) 64px, transparent 64px),
+    repeating-linear-gradient(180deg, transparent 0 31px, hsl(var(--border) / .7) 31px 32px);
+}
 .clinical-grid {
   background-image: linear-gradient(hsl(var(--border) / .38) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / .38) 1px, transparent 1px);
   background-size: 28px 28px;

@@ -347,3 +347,56 @@ class ReaderDisagreement(UUIDTimeStampedModel):
             self.kind in (self.Kind.VALUE_DIFFERS, self.Kind.UNIT_DIFFERS)
             and self.second_persistable
         )
+
+
+class ReportAnalysis(UUIDTimeStampedModel):
+    """What the AI could and could not conclude from one report, for the patient.
+
+    **This is AI output, not a clinical record.** Nothing here becomes a
+    ``ReportTest`` or a ``Provenance``, and no clinical code path reads it. It
+    is a snapshot of one reading by the document service - the values it used,
+    each with the report line it came from, and the findings it built on them -
+    stamped with the versions that produced it, so any sentence a patient was
+    shown can be traced back to the rule and the evidence behind it.
+
+    There is no doctor in the loop, so where a result would once have waited for
+    one, the AI holds back instead: a value the two readers read differently is
+    withheld, and so is every finding that stood on it. Holding back is always
+    shown, with its reason - silence would look like a clean result.
+    """
+
+    class Status(models.TextChoices):
+        #: The AI read the report and is showing what it found.
+        READY = "READY", "Ready"
+        #: The AI read nothing it could stand behind, and says why.
+        HELD_BACK = "HELD_BACK", "Held back"
+        #: The AI could not be asked. Not a judgement about the report.
+        UNAVAILABLE = "UNAVAILABLE", "Unavailable"
+
+    report = models.OneToOneField(Report, on_delete=models.CASCADE, related_name="analysis")
+    status = models.CharField(max_length=12, choices=Status.choices)
+    #: Machine-readable, for routing and admin counts.
+    reason_code = models.CharField(max_length=40, blank=True)
+    #: Patient-facing, simple Indian English.
+    reason = models.CharField(max_length=255, blank=True)
+    #: True when the laboratory itself flagged a result as critical.
+    urgent = models.BooleanField(default=False)
+    values = models.JSONField(default=list, blank=True)
+    findings = models.JSONField(default=list, blank=True)
+    #: Analytes on the report that could not be used, as the service named them.
+    unusable = models.JSONField(default=list, blank=True)
+    #: The report version this analysis read; a reprocessed report is re-read.
+    report_version = models.PositiveIntegerField(default=1)
+    source_sha256 = models.CharField(max_length=64, blank=True)
+    text_source = models.CharField(max_length=20, blank=True)
+    knowledge_version = models.CharField(max_length=40, blank=True)
+    range_table_version = models.CharField(max_length=40, blank=True)
+    detectors_run = models.PositiveIntegerField(default=0)
+    policy_version = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        db_table = "reports_analysis"
+        indexes = [models.Index(fields=["status"]), models.Index(fields=["reason_code"])]
+
+    def __str__(self) -> str:
+        return f"analysis {self.report_id}: {self.status}"

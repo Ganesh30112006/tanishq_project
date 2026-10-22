@@ -10,7 +10,7 @@ export type NextStepAction = typeof NextStepAction[keyof typeof NextStepAction];
 
 
 export const NextStepAction = {
-  BOOK_APPOINTMENT: 'BOOK_APPOINTMENT',
+  SEE_A_DOCTOR: 'SEE_A_DOCTOR',
   ADD_RESULTS: 'ADD_RESULTS',
   KEEP_MONITORING: 'KEEP_MONITORING',
   DISCUSS_SYMPTOMS: 'DISCUSS_SYMPTOMS',

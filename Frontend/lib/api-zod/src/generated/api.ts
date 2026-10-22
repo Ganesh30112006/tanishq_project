@@ -314,7 +314,7 @@ export const ListReportsResponse = zod.object({
 export const UploadReportBody = zod.object({
   "patient_id": zod.string().describe('Public id of an authorized patient.'),
   "file": zod.instanceof(File),
-  "class_hint": zod.enum(['CBC', 'LIPID', 'GLUCOSE', 'HBA1C', 'LIVER', 'KIDNEY', 'URINALYSIS', 'PATHOLOGY', 'RADIOLOGY', 'PRESCRIPTION', 'DISCHARGE', 'CLINICAL_NOTE', 'OTHER']).optional(),
+  "class_hint": zod.enum(['CBC', 'LIPID', 'GLUCOSE', 'HBA1C', 'LIVER', 'KIDNEY', 'THYROID', 'ELECTROLYTES', 'URINALYSIS', 'PATHOLOGY', 'RADIOLOGY', 'PRESCRIPTION', 'DISCHARGE', 'CLINICAL_NOTE', 'OTHER']).optional(),
   "extracted_text": zod.string().optional().describe('Optional plain text already obtained from the document.')
 })
 
@@ -447,6 +447,133 @@ export const GetReportQualityResponse = zod.object({
   "tests_total": zod.number(),
   "tests_validated": zod.number(),
   "note": zod.string()
+})
+
+
+/**
+ * What the AI read on this report, what it held back and why, and the hedged findings it built. Status is PENDING until the AI has looked.
+ * @summary The AI's analysis of a report for the patient (AI output, not a clinical record)
+ */
+export const GetReportAnalysisParams = zod.object({
+  "reportId": zod.coerce.string()
+})
+
+export const GetReportAnalysisResponse = zod.object({
+  "report_id": zod.string(),
+  "status": zod.enum(['PENDING', 'READY', 'HELD_BACK', 'UNAVAILABLE']),
+  "reason_code": zod.string().optional(),
+  "reason": zod.string().optional(),
+  "urgent": zod.boolean().optional(),
+  "values": zod.array(zod.object({
+  "analyte": zod.string(),
+  "label": zod.string(),
+  "value": zod.number().nullish(),
+  "unit": zod.string(),
+  "reference_text": zod.string(),
+  "reference_status": zod.string(),
+  "printed_flag": zod.string(),
+  "critical": zod.boolean(),
+  "page": zod.number().nullish(),
+  "source_text": zod.string(),
+  "text_source": zod.string().optional(),
+  "state": zod.enum(['USED', 'NOT_SURE', 'READERS_DISAGREE']),
+  "note": zod.string()
+})).optional(),
+  "findings": zod.array(zod.object({
+  "code": zod.string(),
+  "label": zod.string(),
+  "plain_name": zod.string(),
+  "plain_explanation": zod.string(),
+  "next_steps": zod.array(zod.string()),
+  "level": zod.number(),
+  "category": zod.string(),
+  "confidence": zod.string(),
+  "validation_status": zod.string(),
+  "evidence_used": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.string(),
+  "value": zod.number().nullish(),
+  "unit": zod.string().optional(),
+  "reference_text": zod.string().optional(),
+  "reference_status": zod.string().optional(),
+  "page": zod.number().nullish(),
+  "source_text": zod.string().optional()
+})),
+  "evidence_missing": zod.array(zod.string()),
+  "caveats": zod.array(zod.string()),
+  "withheld": zod.boolean(),
+  "withheld_reason": zod.string()
+})).optional(),
+  "unusable": zod.array(zod.string()).optional(),
+  "text_source": zod.string().optional(),
+  "knowledge_version": zod.string().optional(),
+  "range_table_version": zod.string().optional(),
+  "detectors_run": zod.number().optional(),
+  "policy_version": zod.string().optional(),
+  "analysed_at": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Ask the AI again, when it could not look at the report the first time
+ */
+export const RetryReportAnalysisParams = zod.object({
+  "reportId": zod.coerce.string()
+})
+
+export const RetryReportAnalysisResponse = zod.object({
+  "report_id": zod.string(),
+  "status": zod.enum(['PENDING', 'READY', 'HELD_BACK', 'UNAVAILABLE']),
+  "reason_code": zod.string().optional(),
+  "reason": zod.string().optional(),
+  "urgent": zod.boolean().optional(),
+  "values": zod.array(zod.object({
+  "analyte": zod.string(),
+  "label": zod.string(),
+  "value": zod.number().nullish(),
+  "unit": zod.string(),
+  "reference_text": zod.string(),
+  "reference_status": zod.string(),
+  "printed_flag": zod.string(),
+  "critical": zod.boolean(),
+  "page": zod.number().nullish(),
+  "source_text": zod.string(),
+  "text_source": zod.string().optional(),
+  "state": zod.enum(['USED', 'NOT_SURE', 'READERS_DISAGREE']),
+  "note": zod.string()
+})).optional(),
+  "findings": zod.array(zod.object({
+  "code": zod.string(),
+  "label": zod.string(),
+  "plain_name": zod.string(),
+  "plain_explanation": zod.string(),
+  "next_steps": zod.array(zod.string()),
+  "level": zod.number(),
+  "category": zod.string(),
+  "confidence": zod.string(),
+  "validation_status": zod.string(),
+  "evidence_used": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.string(),
+  "value": zod.number().nullish(),
+  "unit": zod.string().optional(),
+  "reference_text": zod.string().optional(),
+  "reference_status": zod.string().optional(),
+  "page": zod.number().nullish(),
+  "source_text": zod.string().optional()
+})),
+  "evidence_missing": zod.array(zod.string()),
+  "caveats": zod.array(zod.string()),
+  "withheld": zod.boolean(),
+  "withheld_reason": zod.string()
+})).optional(),
+  "unusable": zod.array(zod.string()).optional(),
+  "text_source": zod.string().optional(),
+  "knowledge_version": zod.string().optional(),
+  "range_table_version": zod.string().optional(),
+  "detectors_run": zod.number().optional(),
+  "policy_version": zod.string().optional(),
+  "analysed_at": zod.coerce.date().optional()
 })
 
 
@@ -826,7 +953,7 @@ export const ListRiskAssessmentsResponse = zod.object({
 }),
   "reliability_note": zod.string().optional(),
   "next_steps": zod.array(zod.object({
-  "action": zod.enum(['BOOK_APPOINTMENT', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
+  "action": zod.enum(['SEE_A_DOCTOR', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
   "label": zod.string(),
   "detail": zod.string()
 }))
@@ -916,7 +1043,7 @@ export const RequestRiskAnalysisResponse = zod.object({
 }),
   "reliability_note": zod.string().optional(),
   "next_steps": zod.array(zod.object({
-  "action": zod.enum(['BOOK_APPOINTMENT', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
+  "action": zod.enum(['SEE_A_DOCTOR', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
   "label": zod.string(),
   "detail": zod.string()
 }))

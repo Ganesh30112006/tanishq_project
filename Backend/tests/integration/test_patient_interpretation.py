@@ -141,10 +141,13 @@ def test_every_reading_says_it_is_not_a_diagnosis():
         assert reading["next_steps"], "a result with no next step is inert"
 
 
-def test_an_elevated_result_offers_a_consultation():
+def test_an_elevated_result_sends_the_patient_to_a_doctor():
+    # There is no doctor inside the product, so the step points outside it
+    # rather than at a booking page nobody can fill.
     row = _result(calibrated_score=Decimal("0.88"))
     actions = {step["action"] for step in interpret(row)["next_steps"]}
-    assert "BOOK_APPOINTMENT" in actions
+    assert "SEE_A_DOCTOR" in actions
+    assert "BOOK_APPOINTMENT" not in actions
 
 
 def test_a_blocked_assessment_has_no_reading():
