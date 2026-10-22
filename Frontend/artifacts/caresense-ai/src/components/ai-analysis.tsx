@@ -3,6 +3,7 @@ import {
   getGetReportAnalysisQueryKey,
   useGetReportAnalysis,
   useRetryReportAnalysis,
+  type AnalysisEvidence,
   type AnalysisFinding,
   type AnalysisValue,
   type ReportAnalysis,
@@ -98,6 +99,7 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
   const patterns = shown.filter((f) => f.level < 3);
   const couldNotTell = findings.filter((f) => !f.withheld && f.confidence === 'INSUFFICIENT' && f.level >= 3);
   const heldBack = findings.filter((f) => f.withheld);
+  const byCode = new Map(findings.map((f) => [f.code, f]));
 
   return (
     <div className="space-y-6">
@@ -124,13 +126,13 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
 
       {conditions.length > 0 && (
         <FindingGroup title="Possible conditions" detail="Our AI found a pattern of results that can fit these conditions. Only a doctor can confirm or rule them out.">
-          {conditions.map((f) => <FindingCard key={f.code} finding={f} />)}
+          {conditions.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} />)}
         </FindingGroup>
       )}
 
       {patterns.length > 0 && (
         <FindingGroup title="Results outside the normal range" detail="Each of these is a single sign. On its own it does not mean you have a disease.">
-          {patterns.map((f) => <FindingCard key={f.code} finding={f} />)}
+          {patterns.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} />)}
         </FindingGroup>
       )}
 
@@ -188,9 +190,24 @@ function FindingGroup({ title, detail, children }: { title: string; detail: stri
   );
 }
 
-function FindingCard({ finding }: { finding: AnalysisFinding }) {
+// A finding can rest on another finding (a possible condition on "Raised TSH").
+// Follow those links so every value behind the card is shown with its line.
+function measuredEvidence(finding: AnalysisFinding, byCode: Map<string, AnalysisFinding>, seen = new Set<string>()): AnalysisEvidence[] {
+  seen.add(finding.code);
+  return finding.evidence_used.flatMap((e) => {
+    if (e.kind !== 'finding') return [e];
+    const basis = byCode.get(e.key);
+    return basis && !seen.has(basis.code) ? measuredEvidence(basis, byCode, seen) : [];
+  });
+}
+
+function FindingCard({ finding, byCode }: { finding: AnalysisFinding; byCode: Map<string, AnalysisFinding> }) {
   const confidence = CONFIDENCE[finding.confidence] ?? { label: finding.confidence, className: NEUTRAL_BADGE };
-  const measured = finding.evidence_used.filter((e) => e.kind !== 'finding');
+  const measured = measuredEvidence(finding, byCode).filter((e, i, all) => all.findIndex((o) => o.key === e.key) === i);
+  const builtOn = finding.evidence_used
+    .filter((e) => e.kind === 'finding')
+    .map((e) => byCode.get(e.key)?.plain_name || byCode.get(e.key)?.label)
+    .filter(Boolean);
   return (
     <div className="rounded-xl border border-border p-4" data-testid={`ai-finding-${finding.code}`}>
       <div className="flex flex-wrap items-center gap-2">
@@ -198,6 +215,7 @@ function FindingCard({ finding }: { finding: AnalysisFinding }) {
         <Badge className={confidence.className}>{confidence.label}</Badge>
       </div>
       {finding.plain_explanation && <p className="mt-2 text-sm leading-relaxed">{finding.plain_explanation}</p>}
+      {builtOn.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Built on: {builtOn.join(', ')}</p>}
       {measured.length > 0 && (
         <ul className="mt-3 space-y-1.5">
           {measured.map((e, i) => (
