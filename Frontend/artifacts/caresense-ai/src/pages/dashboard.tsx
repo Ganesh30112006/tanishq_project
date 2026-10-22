@@ -47,7 +47,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         {/* Hero */}
         <section className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(135deg,hsl(var(--brand))_0%,hsl(171_72%_22%)_100%)] p-7 text-[hsl(var(--brand-foreground))] sm:p-10 xl:col-span-8" aria-labelledby="hero-title">
           <HeroArt />

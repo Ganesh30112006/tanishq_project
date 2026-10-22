@@ -18,7 +18,7 @@ export default function Settings() {
   return (
     <div className="page-enter">
       <PageHeading eyebrow="CareSense / settings" title="Settings" detail="Your account, your data, and how your record is protected." />
-      <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="lg:sticky lg:top-24 lg:self-start">
           <ul className="flex gap-1 overflow-x-auto lg:flex-col">
             {SECTIONS.map(({ id, label, icon: Icon }) => (

@@ -143,7 +143,7 @@ export function PatientProfilePage() {
       <Tile label="Latest alert" value={patient.latest_alert || 'None'} note={patient.latest_alert ? 'Please show this to a doctor' : 'Nothing needs attention right now'} tone={patient.latest_alert ? 'critical' : undefined} />
     </div>
 
-    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+    <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
       <section className="rounded-[22px] border border-border bg-card" aria-labelledby="risk-title">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-5"><div><p className="mono-label text-muted-foreground">Your estimate</p><h2 id="risk-title" className="mt-1 text-[24px]">Heart risk analysis</h2></div>{canAnalyse && <RunAnalysisButton patientId={patientId} onDone={refresh} />}</div>
         <div className="p-6">{riskQuery.isLoading ? <div className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-4" /><Skeleton className="h-4" /></div> : riskQuery.isError ? <InlineUnavailable label="Risk analysis is unavailable just now." /> : assessment?.status === 'BLOCKED' ? <BlockedCard assessment={assessment} /> : assessment ? <RiskCard patient={patient} assessment={assessment} /> : <EmptyState icon={ShieldCheck} title="Not analysed yet" detail={canAnalyse ? 'Run the analysis to see what your saved results suggest.' : 'No estimate is available for this record.'} />}</div>
