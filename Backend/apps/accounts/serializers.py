@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.accounts.permissions import PermissionResolver
+from apps.patients.validators import validate_date_of_birth
 
 
 class LoginSerializer(serializers.Serializer):
@@ -83,7 +84,9 @@ class SelfRegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     full_name = serializers.CharField(max_length=200)
     password = serializers.CharField(write_only=True, min_length=12, max_length=128)
-    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    date_of_birth = serializers.DateField(
+        required=False, allow_null=True, validators=[validate_date_of_birth]
+    )
     sex = serializers.ChoiceField(
         choices=["FEMALE", "MALE", "INTERSEX", "UNKNOWN"], required=False, default="UNKNOWN"
     )

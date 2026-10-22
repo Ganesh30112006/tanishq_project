@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.patients import presentation
 from apps.patients.models import Patient, PatientIdentityCandidate, PatientMergeRecord, Sex
+from apps.patients.validators import validate_date_of_birth
 
 _COMPUTED_FIELDS = [
     "initials", "age", "risk_level", "risk_label", "risk_score", "trend",
@@ -280,7 +281,9 @@ class PatientRegisterSerializer(serializers.Serializer):
     mrn = serializers.CharField(max_length=64)
     given_name = serializers.CharField(max_length=100)
     family_name = serializers.CharField(max_length=100)
-    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    date_of_birth = serializers.DateField(
+        required=False, allow_null=True, validators=[validate_date_of_birth]
+    )
     sex = serializers.ChoiceField(choices=Sex.choices, default=Sex.UNKNOWN)
     phone = serializers.CharField(max_length=32, required=False, allow_blank=True)
     # Optional: immediately give the new record a care team.

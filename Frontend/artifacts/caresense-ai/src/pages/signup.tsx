@@ -3,6 +3,12 @@ import { AlertCircle, Loader2, UserPlus } from 'lucide-react';
 import { AuthLayout } from '@/components/auth-layout';
 import { useAuth } from '@/lib/auth';
 
+/** Today's date as YYYY-MM-DD in the person's own time zone. */
+function todayIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 const FIELD = 'h-12 w-full rounded-lg border border-input bg-card px-3.5 text-[16px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring';
 
 /**
@@ -34,6 +40,15 @@ export default function SignUp({ onShowLogin }: { onShowLogin: () => void }) {
     }
     if (password.length < 12) {
       setLocalError('Use at least 12 characters.');
+      return;
+    }
+    // Mirrors the server's check so the reason is shown in plain words.
+    if (dateOfBirth && dateOfBirth > todayIso()) {
+      setLocalError('Date of birth cannot be in the future.');
+      return;
+    }
+    if (dateOfBirth && new Date().getFullYear() - Number(dateOfBirth.slice(0, 4)) > 130) {
+      setLocalError('Please check the year of birth.');
       return;
     }
     if (!agreed) {
@@ -73,7 +88,7 @@ export default function SignUp({ onShowLogin }: { onShowLogin: () => void }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-[13px] font-bold">Date of birth</span>
-              <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={FIELD} data-testid="input-signup-dob" />
+              <input type="date" max={todayIso()} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={FIELD} data-testid="input-signup-dob" />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[13px] font-bold">Sex</span>
