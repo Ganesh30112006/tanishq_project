@@ -2,7 +2,7 @@
  * Providers, the sign-in gate and the router. Pages live in src/pages and the
  * signed-in frame in components/app-shell.
  */
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { AppShell } from '@/components/app-shell';
 import { BrandMark, NotFoundPage, UnreachablePage } from '@/components/error-page';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { queryClient } from '@/lib/query-client';
 import Login from '@/pages/login';
 import SignUp from '@/pages/signup';
 import AdminConsole from '@/pages/admin';
@@ -22,7 +23,6 @@ import Settings from '@/pages/settings';
 import PrivacyPolicy from '@/pages/privacy';
 import { PatientProfilePage, Patients } from '@/pages/record';
 
-const queryClient = new QueryClient();
 
 function AuthenticatedRouter() {
   const [location] = useLocation();

@@ -104,7 +104,7 @@ export function PatientProfilePage() {
     return <NoAccessPage title="Patient records are private" detail="Your account manages accounts, not health records. Reading what is inside a record is kept separate on purpose. To register a patient or link a login to a record, use the Admin page." />;
   }
   if (patientQuery.isLoading) return <PageLoading />;
-  if (patientQuery.isError || !patient) return <QueryError onRetry={() => patientQuery.refetch()} message="This health record is unavailable." />;
+  if (patientQuery.isError || !patient) return <QueryError onRetry={() => patientQuery.refetch()} message="This health record is unavailable." error={patientQuery.error} />;
   const assessment = riskQuery.data?.results?.[0] as RiskAssessment | undefined;
   const timeline = timelineQuery.data as TimelineEvent[] | undefined;
   const reports = reportsQuery.data?.results as MedicalReport[] | undefined;

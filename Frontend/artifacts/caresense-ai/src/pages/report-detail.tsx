@@ -42,7 +42,7 @@ export default function ReportDetailPage() {
   }
 
   if (reportQuery.isLoading) return <PageLoading />;
-  if (reportQuery.isError || !report) return <QueryError onRetry={() => reportQuery.refetch()} message="This report is unavailable." />;
+  if (reportQuery.isError || !report) return <QueryError onRetry={() => reportQuery.refetch()} message="This report is unavailable." error={reportQuery.error} />;
   const quality = qualityQuery.data as ReportQuality | undefined;
   const state = patientReportStatus(report.processing_state);
 

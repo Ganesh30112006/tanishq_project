@@ -4,6 +4,7 @@
  * Extracted from `App.tsx` so the admin console can reuse the same building
  * blocks without importing the router module back into itself.
  */
+import { ApiError } from '@workspace/api-client-react';
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NoAccessErrorPage } from './error-page';
@@ -136,8 +137,13 @@ export function PageLoading() {
   return <div className="space-y-6" aria-label="Loading"><div className="space-y-3"><Skeleton className="h-3 w-24" /><Skeleton className="h-10 w-64" /></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div><Skeleton className="h-80 w-full" /></div>;
 }
 
-export function QueryError({ onRetry, message = 'We could not load this workspace.' }: { onRetry: () => void; message?: string }) {
-  return <div className="flex flex-col gap-5 rounded-2xl border border-border border-l-[3px] border-l-[hsl(var(--destructive))] bg-card px-6 py-7 sm:flex-row sm:items-center sm:justify-between" role="alert"><div className="flex items-start gap-3"><AlertCircle className="mt-1 shrink-0 text-[hsl(var(--destructive))]" size={20} /><div><h2 className="text-[22px] leading-snug">{message}</h2><p className="mt-1 max-w-md text-[15px] text-muted-foreground">This is usually a passing connection problem. Nothing on your record has changed.</p></div></div><button onClick={onRetry} className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:brightness-110 sm:self-center" data-testid="button-retry"><RefreshCw size={15} />Try again</button></div>;
+export function QueryError({ onRetry, message = 'We could not load this workspace.', error }: { onRetry: () => void; message?: string; error?: unknown }) {
+  // Not found / not yours is a final answer: trying again will not change it.
+  const missing = error instanceof ApiError && (error.status === 404 || error.status === 403);
+  const detail = missing
+    ? 'We could not find it. The link may be old, or it may not be on your account.'
+    : 'This is usually a passing connection problem. Nothing on your record has changed.';
+  return <div className="flex flex-col gap-5 rounded-2xl border border-border border-l-[3px] border-l-[hsl(var(--destructive))] bg-card px-6 py-7 sm:flex-row sm:items-center sm:justify-between" role="alert"><div className="flex items-start gap-3"><AlertCircle className="mt-1 shrink-0 text-[hsl(var(--destructive))]" size={20} /><div><h2 className="text-[22px] leading-snug">{message}</h2><p className="mt-1 max-w-md text-[15px] text-muted-foreground">{detail}</p></div></div>{missing ? null : <button onClick={onRetry} className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:brightness-110 sm:self-center" data-testid="button-retry"><RefreshCw size={15} />Try again</button>}</div>;
 }
 
 export function EmptyState({ icon: Icon, title, detail }: { icon: typeof AlertCircle; title: string; detail: string }) {
