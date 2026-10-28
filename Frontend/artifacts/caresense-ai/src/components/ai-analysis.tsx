@@ -9,7 +9,7 @@ import {
   type ReportAnalysis,
 } from '@workspace/api-client-react';
 import { AlertTriangle, Eye, EyeOff, HelpCircle, Loader2, RefreshCw, Sparkles, Stethoscope } from 'lucide-react';
-import { ATTENTION_BADGE, Badge, CRITICAL_BADGE, InlineUnavailable, NEUTRAL_BADGE, POSITIVE_BADGE, Skeleton, formatValue } from './ui-kit';
+import { ATTENTION_BADGE, Badge, CRITICAL_BADGE, InlineUnavailable, NEUTRAL_BADGE, POSITIVE_BADGE, Skeleton, formatValue, titleCase } from './ui-kit';
 
 // The AI's analysis of one report, as the patient sees it.
 //
@@ -35,6 +35,21 @@ const REFERENCE_STATUS: Record<string, string> = {
   BELOW: 'Below range',
   WITHIN: 'In range',
 };
+
+type Names = Map<string, string>;
+
+// Evidence carries the reader's key ("free_t4", "tsh"); the values table
+// carries the name the laboratory printed. Use the printed name for every
+// test on the report, whatever the condition - no list of tests to keep up.
+export function analyteName(key: string, names: Names): string {
+  const printed = names.get(key.toLowerCase());
+  if (printed) return printed;
+  // Short keys are abbreviations (TSH, ALT, GGT); longer ones are words.
+  return !key.includes('_') && key.length <= 4 ? key.toUpperCase() : titleCase(key);
+}
+
+// "Needs" lists mix sentences with bare keys; only the keys are renamed.
+const missingName = (entry: string, names: Names) => (/^[a-z0-9_]+$/.test(entry) ? analyteName(entry, names) : entry);
 
 export function AiAnalysisSection({ reportId }: { reportId: string }) {
   const queryClient = useQueryClient();
@@ -100,6 +115,7 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
   const couldNotTell = findings.filter((f) => !f.withheld && f.confidence === 'INSUFFICIENT' && f.level >= 3);
   const heldBack = findings.filter((f) => f.withheld);
   const byCode = new Map(findings.map((f) => [f.code, f]));
+  const names: Names = new Map(values.filter((v) => v.analyte && v.label).map((v) => [v.analyte.toLowerCase(), v.label]));
 
   return (
     <div className="space-y-6">
@@ -126,13 +142,13 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
 
       {conditions.length > 0 && (
         <FindingGroup title="Possible conditions" detail="Our AI found a pattern of results that can fit these conditions. Only a doctor can confirm or rule them out.">
-          {conditions.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} />)}
+          {conditions.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} names={names} />)}
         </FindingGroup>
       )}
 
       {patterns.length > 0 && (
         <FindingGroup title="Results outside the normal range" detail="Each of these is a single sign. On its own it does not mean you have a disease.">
-          {patterns.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} />)}
+          {patterns.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} names={names} />)}
         </FindingGroup>
       )}
 
@@ -147,7 +163,7 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
               <HelpCircle size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">{f.plain_name || f.label}</p>
-                {f.evidence_missing.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Needs: {f.evidence_missing.join(', ')}</p>}
+                {f.evidence_missing.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Needs: {f.evidence_missing.map((m) => missingName(m, names)).join(', ')}</p>}
               </div>
             </div>
           ))}
@@ -201,7 +217,7 @@ function measuredEvidence(finding: AnalysisFinding, byCode: Map<string, Analysis
   });
 }
 
-function FindingCard({ finding, byCode }: { finding: AnalysisFinding; byCode: Map<string, AnalysisFinding> }) {
+function FindingCard({ finding, byCode, names }: { finding: AnalysisFinding; byCode: Map<string, AnalysisFinding>; names: Names }) {
   const confidence = CONFIDENCE[finding.confidence] ?? { label: finding.confidence, className: NEUTRAL_BADGE };
   const measured = measuredEvidence(finding, byCode).filter((e, i, all) => all.findIndex((o) => o.key === e.key) === i);
   const builtOn = finding.evidence_used
@@ -220,14 +236,14 @@ function FindingCard({ finding, byCode }: { finding: AnalysisFinding; byCode: Ma
         <ul className="mt-3 space-y-1.5">
           {measured.map((e, i) => (
             <li key={`${e.key}-${i}`} className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{e.key.replace(/_/g, ' ')}</span> {formatValue(e.value)} {e.unit}
+              <span className="font-medium text-foreground">{analyteName(e.key, names)}</span> {formatValue(e.value)} {e.unit}
               {e.reference_text ? <> · normal range {e.reference_text}</> : null}
               {e.source_text ? <span className="mt-0.5 block font-mono text-[11px]">Read from: “{e.source_text}”</span> : null}
             </li>
           ))}
         </ul>
       )}
-      {finding.evidence_missing.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Would help to know: {finding.evidence_missing.join(', ')}</p>}
+      {finding.evidence_missing.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Would help to know: {finding.evidence_missing.map((m) => missingName(m, names)).join(', ')}</p>}
       {finding.next_steps.length > 0 && (
         <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-relaxed">
           {finding.next_steps.map((s) => <li key={s}>{s}</li>)}
