@@ -3,9 +3,9 @@ import { Link, useLocation } from 'wouter';
 import { Activity, ArrowRight, ArrowUpRight, BarChart3, Bell, FileText, ScanText, ShieldCheck, Sparkles, Stethoscope, Upload } from 'lucide-react';
 import { getGetDashboardSummaryQueryKey, getListReportsQueryKey, useGetDashboardSummary, useListReports } from '@workspace/api-client-react';
 import type { DashboardSummary, MedicalReport, UserRole } from '@workspace/api-client-react';
-import { Badge, EmptyState, PageLoading, QueryError, relativeTime, shortDate, Skeleton, titleCase } from '@/components/ui-kit';
+import { Badge, EmptyState, PageLoading, QueryError, relativeTime, shortDate, Skeleton } from '@/components/ui-kit';
 import { PERM, useAuth } from '@/lib/auth';
-import { isPatientView, patientReportStatus, primaryRole, ROLE_LABEL } from '@/lib/display';
+import { isPatientView, patientReportStatus, primaryRole, reportTypeLabel, ROLE_LABEL } from '@/lib/display';
 import { requestUpload } from '@/lib/upload-intent';
 
 const TONE_BAR: Record<string, string> = {
@@ -167,7 +167,7 @@ function LatestReports() {
                 <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-border bg-background text-[hsl(var(--brand))]"><FileText size={18} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-bold">{report.title}</span>
-                  <span className="mt-0.5 block text-[13px] text-muted-foreground">{titleCase(report.report_class) || 'Unclassified'} · {shortDate(report.created_at)}</span>
+                  <span className="mt-0.5 block text-[13px] text-muted-foreground">{reportTypeLabel(report)} · {shortDate(report.created_at)}</span>
                 </span>
                 <Badge className={`hidden whitespace-nowrap sm:inline-flex ${state.className}`}>{state.label}</Badge>
                 <ArrowUpRight size={16} className="shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />

@@ -18,6 +18,11 @@ export interface MedicalReport {
   /** @nullable */
   uploaded_by?: string | null;
   report_class: string;
+  /**
+     * The AI's report type, given only when report_class is empty or OTHER.
+     * @nullable
+     */
+  ai_report_class?: string | null;
   class_hint?: string;
   /** @nullable */
   classification_confidence?: string | null;

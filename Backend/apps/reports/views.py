@@ -92,7 +92,7 @@ class ReportViewSet(
         if report_status:
             qs = qs.filter(processing_state=report_status)
         return (
-            qs.select_related("patient", "schema", "uploaded_by")
+            qs.select_related("patient", "schema", "uploaded_by", "analysis")
             .prefetch_related("tests", "sections", "findings")
             .order_by("-created_at")
         )

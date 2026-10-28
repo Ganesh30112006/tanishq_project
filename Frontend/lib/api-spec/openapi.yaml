@@ -1941,6 +1941,9 @@ components:
           type: array
           items:
             type: string
+        report_type:
+          type: string
+          description: The kind of report the AI's classifier committed to, or empty when it could not tell.
         text_source:
           type: string
         knowledge_version:
@@ -1972,6 +1975,9 @@ components:
           type: ["string", "null"]
         report_class:
           type: string
+        ai_report_class:
+          type: ["string", "null"]
+          description: The AI's report type, given only when report_class is empty or OTHER.
         class_hint:
           type: string
         classification_confidence:

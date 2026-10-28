@@ -13,7 +13,7 @@ import {
   Modal, ModalActions, NoAccessPage, PageButton, PageHeading, PageLoading, POSITIVE_BADGE, QueryError, relativeTime, shortDate, Skeleton, titleCase,
 } from '@/components/ui-kit';
 import { PERM, useAuth } from '@/lib/auth';
-import { isPatientView, patientReportStatus, riskClass, statusClass } from '@/lib/display';
+import { isPatientView, patientReportStatus, reportTypeLabel, riskClass, statusClass } from '@/lib/display';
 import { isRiskyLevel } from '@/lib/risk-display';
 import { requestUpload } from '@/lib/upload-intent';
 
@@ -210,7 +210,7 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
 
 function ReportRow({ report }: { report: MedicalReport }) {
   const state = patientReportStatus(report.processing_state);
-  return <Link href={`/reports/${report.id}`} className="flex items-center gap-3 rounded-xl p-3 hover:bg-secondary/60" data-testid={`link-report-${report.id}`}><span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border text-[hsl(var(--brand))]"><FileText size={17} /></span><div className="min-w-0 flex-1"><p className="truncate font-bold">{report.title}</p><p className="mt-0.5 text-[13px] text-muted-foreground">{titleCase(report.report_class) || 'Unclassified'} · {shortDate(report.created_at)}</p></div><Badge className={`whitespace-nowrap ${state.className}`}>{state.label}</Badge></Link>;
+  return <Link href={`/reports/${report.id}`} className="flex items-center gap-3 rounded-xl p-3 hover:bg-secondary/60" data-testid={`link-report-${report.id}`}><span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border text-[hsl(var(--brand))]"><FileText size={17} /></span><div className="min-w-0 flex-1"><p className="truncate font-bold">{report.title}</p><p className="mt-0.5 text-[13px] text-muted-foreground">{reportTypeLabel(report)} · {shortDate(report.created_at)}</p></div><Badge className={`whitespace-nowrap ${state.className}`}>{state.label}</Badge></Link>;
 }
 
 const PATIENT_SEXES = ['FEMALE', 'MALE', 'INTERSEX', 'UNKNOWN'] as const;

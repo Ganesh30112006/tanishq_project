@@ -367,6 +367,8 @@ export interface ReportAnalysis {
   values?: AnalysisValue[];
   findings?: AnalysisFinding[];
   unusable?: string[];
+  /** The kind of report the AI's classifier committed to, or empty when it could not tell. */
+  report_type?: string;
   text_source?: string;
   knowledge_version?: string;
   range_table_version?: string;
@@ -383,6 +385,11 @@ export interface MedicalReport {
   /** @nullable */
   uploaded_by?: string | null;
   report_class: string;
+  /**
+     * The AI's report type, given only when report_class is empty or OTHER.
+     * @nullable
+     */
+  ai_report_class?: string | null;
   class_hint?: string;
   /** @nullable */
   classification_confidence?: string | null;

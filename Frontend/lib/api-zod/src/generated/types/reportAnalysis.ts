@@ -18,6 +18,8 @@ export interface ReportAnalysis {
   values?: AnalysisValue[];
   findings?: AnalysisFinding[];
   unusable?: string[];
+  /** The kind of report the AI's classifier committed to, or empty when it could not tell. */
+  report_type?: string;
   text_source?: string;
   knowledge_version?: string;
   range_table_version?: string;

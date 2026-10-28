@@ -7,7 +7,7 @@ import { AiAnalysisSection } from '@/components/ai-analysis';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge, EmptyState, formatValue, InlineUnavailable, NEUTRAL_BADGE, PageLoading, QueryError, shortDate, titleCase } from '@/components/ui-kit';
 import { useAuth } from '@/lib/auth';
-import { isPatientView, labStatusClass, patientReportStatus } from '@/lib/display';
+import { isPatientView, labStatusClass, patientReportStatus, reportType, reportTypeLabel } from '@/lib/display';
 
 export default function ReportDetailPage() {
   const { reportId = '' } = useParams<{ reportId: string }>();
@@ -54,7 +54,7 @@ export default function ReportDetailPage() {
         <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-[hsl(var(--brand)/.1)] text-[hsl(var(--brand))]"><FileText size={26} /></span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mono-label text-[hsl(var(--brand))]">{titleCase(report.report_class) || 'Unclassified'}</span>
+            <span className="mono-label text-[hsl(var(--brand))]">{reportTypeLabel(report)}</span>
             <Badge className={state.className}>{state.label}</Badge>
           </div>
           <h1 className="mt-2 break-words text-[32px] leading-tight sm:text-[42px]">{report.title}</h1>
@@ -76,7 +76,7 @@ export default function ReportDetailPage() {
           <section className="rounded-2xl border border-border bg-card p-5" aria-labelledby="facts-title">
             <h2 id="facts-title" className="text-[20px]">About this report</h2>
             <dl className="mt-4 space-y-3 text-sm">
-              <Fact icon={FileText} label="Type" value={titleCase(report.report_class) || 'Not worked out yet'} />
+              <Fact icon={FileText} label="Type" value={reportTypeFact(report)} />
               <Fact icon={CalendarDays} label="Sample taken" value={shortDate(report.collected_at)} />
               <Fact icon={CalendarDays} label="Uploaded" value={shortDate(report.created_at)} />
             </dl>
@@ -97,6 +97,14 @@ export default function ReportDetailPage() {
       </div>
     </div>
   );
+}
+
+// Where the type came from the AI reader rather than the pipeline, say so: it
+// is the AI's reading of the page, like every value it shows.
+function reportTypeFact(report: MedicalReport): string {
+  const type = reportType(report);
+  if (!type) return 'Not worked out yet';
+  return type.byAi ? `${type.label} (worked out by our AI)` : type.label;
 }
 
 function Fact({ icon: Icon, label, value }: { icon: typeof FileText; label: string; value: string }) {

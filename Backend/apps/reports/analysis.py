@@ -37,6 +37,7 @@ import uuid
 from django.conf import settings
 from django.utils import timezone
 
+from apps.common.enums import ReportClass
 from apps.reports import reader_comparison
 from apps.reports.models import Report, ReportAnalysis
 from apps.reports.second_reader import SecondOpinion
@@ -128,6 +129,7 @@ def analyse(report: Report, *, client=None) -> ReportAnalysis:
             report, ReportAnalysis.Status.HELD_BACK, "could_not_read",
             source_sha256=result.source_sha256, text_source=result.text_source,
         )
+    report_type = classified_type(result)
 
     disputed = disputed_analytes(report, result.values)
     values = [_value_row(v, disputed) for v in result.values]
@@ -144,6 +146,7 @@ def analyse(report: Report, *, client=None) -> ReportAnalysis:
 
     return _save(
         report, status, code,
+        report_type=report_type,
         # Urgency errs the other way: a critical flag either reader saw is
         # shown, even on a value held back, because "see a doctor today" is
         # the safe direction to be wrong in.
@@ -157,6 +160,23 @@ def analyse(report: Report, *, client=None) -> ReportAnalysis:
         range_table_version=findings_block.get("range_table_version", ""),
         detectors_run=int(findings_block.get("detectors_run") or 0),
     )
+
+
+def classified_type(result) -> str:
+    """The report type the service's classifier committed to, or "".
+
+    Only a CLASSIFIED result counts. The classifier abstains when a document
+    could be two kinds, and an abstention stays empty rather than becoming its
+    top guess. Read defensively: the service is deployed separately, and a
+    response that predates these fields simply names no type.
+    """
+    classification = getattr(result, "classification", None) or {}
+    if classification.get("status") != "CLASSIFIED":
+        return ""
+    value = getattr(result, "report_type", None) or classification.get("type") or ""
+    if value == ReportClass.OTHER or value not in ReportClass.values:
+        return ""
+    return value
 
 
 def disputed_analytes(report: Report, second_values: list[dict]) -> set[str]:
@@ -275,6 +295,7 @@ def _save(report: Report, status: str, code: str, **fields) -> ReportAnalysis:
         "values": [],
         "findings": [],
         "unusable": [],
+        "report_type": "",
         "source_sha256": "",
         "text_source": "",
         "knowledge_version": "",

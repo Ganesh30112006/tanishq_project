@@ -385,6 +385,12 @@ class ReportAnalysis(UUIDTimeStampedModel):
     findings = models.JSONField(default=list, blank=True)
     #: Analytes on the report that could not be used, as the service named them.
     unusable = models.JSONField(default=list, blank=True)
+    #: The kind of report the service's classifier committed to - any
+    #: ``ReportClass`` it knows, not only the four the existing pipeline has
+    #: schemas for. Empty when it abstained. Shown to the patient where the
+    #: existing pipeline could not tell; it never replaces
+    #: ``Report.report_class``, which picks the schema and finds duplicates.
+    report_type = models.CharField(max_length=20, blank=True)
     #: The report version this analysis read; a reprocessed report is re-read.
     report_version = models.PositiveIntegerField(default=1)
     source_sha256 = models.CharField(max_length=64, blank=True)

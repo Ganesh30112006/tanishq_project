@@ -3,7 +3,7 @@
  * words a patient reads for a report's state.
  */
 import type { ReportClass, ReportProcessingState, UserRole } from '@workspace/api-client-react';
-import { ATTENTION_BADGE, CRITICAL_BADGE, NEUTRAL_BADGE, POSITIVE_BADGE } from '@/components/ui-kit';
+import { ATTENTION_BADGE, CRITICAL_BADGE, NEUTRAL_BADGE, POSITIVE_BADGE, titleCase } from '@/components/ui-kit';
 import { PERM } from '@/lib/auth';
 
 export const ROLE_LABEL: Record<UserRole, string> = {
@@ -82,6 +82,44 @@ export const REPORT_CLASS_OPTIONS: ReportClass[] = [
   'CBC', 'LIPID', 'GLUCOSE', 'HBA1C', 'LIVER', 'KIDNEY', 'THYROID', 'ELECTROLYTES', 'URINALYSIS',
   'PATHOLOGY', 'RADIOLOGY', 'PRESCRIPTION', 'DISCHARGE', 'CLINICAL_NOTE', 'OTHER',
 ];
+
+// Every report type in the words an Indian patient uses for it. Title-casing
+// the code gave "Liver", "Kidney" and "Clinical Note", none of which says what
+// kind of report it is.
+export const REPORT_CLASS_LABEL: Record<ReportClass, string> = {
+  CBC: 'Blood count (CBC)',
+  LIPID: 'Cholesterol (lipid profile)',
+  GLUCOSE: 'Blood sugar',
+  HBA1C: 'HbA1c (3-month sugar)',
+  LIVER: 'Liver function (LFT)',
+  KIDNEY: 'Kidney function (KFT)',
+  THYROID: 'Thyroid',
+  ELECTROLYTES: 'Electrolytes',
+  URINALYSIS: 'Urine test',
+  PATHOLOGY: 'Pathology / biopsy',
+  RADIOLOGY: 'Scan / X-ray',
+  PRESCRIPTION: 'Prescription',
+  DISCHARGE: 'Discharge summary',
+  CLINICAL_NOTE: "Doctor's note",
+  OTHER: 'Other',
+};
+
+type Typed = { report_class?: string | null; ai_report_class?: string | null };
+
+/**
+ * The kind of report, for a patient. The reading pipeline's own type comes
+ * first; where it could not tell, the server sends the type the AI reader
+ * worked out (`ai_report_class`), and `byAi` says so.
+ */
+export function reportType(report: Typed): { label: string; byAi: boolean } | null {
+  const own = report.report_class && report.report_class !== 'OTHER' ? report.report_class : '';
+  const code = own || report.ai_report_class || report.report_class || '';
+  if (!code) return null;
+  const label = REPORT_CLASS_LABEL[code as ReportClass] ?? titleCase(code);
+  return { label, byAi: !own && Boolean(report.ai_report_class) };
+}
+
+export const reportTypeLabel = (report: Typed, empty = 'Unclassified') => reportType(report)?.label ?? empty;
 
 /**
  * A report's processing state, in the words a patient reads.

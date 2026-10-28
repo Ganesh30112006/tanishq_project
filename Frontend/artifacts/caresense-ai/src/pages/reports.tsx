@@ -4,9 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, CheckCircle2, FileText, FileUp, Loader2, Upload, X } from 'lucide-react';
 import { getListPatientsQueryKey, getListReportsQueryKey, useListPatients, useListReports, useUploadReport } from '@workspace/api-client-react';
 import type { MedicalReport, ReportClass, ReportProcessingState } from '@workspace/api-client-react';
-import { Badge, EmptyState, FIELD_CLASS, FormError, NoAccessPage, PageButton, PageHeading, QueryError, shortDate, Skeleton, titleCase } from '@/components/ui-kit';
+import { Badge, EmptyState, FIELD_CLASS, FormError, NoAccessPage, PageButton, PageHeading, QueryError, shortDate, Skeleton } from '@/components/ui-kit';
 import { PERM, useAuth } from '@/lib/auth';
-import { isPatientView, patientReportStatus, REPORT_CLASS_OPTIONS, REPORT_FILTERS } from '@/lib/display';
+import { isPatientView, patientReportStatus, REPORT_CLASS_LABEL, REPORT_CLASS_OPTIONS, REPORT_FILTERS, reportTypeLabel } from '@/lib/display';
 import { consumeUploadRequest, onUploadRequested } from '@/lib/upload-intent';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tif,.tiff';
@@ -65,7 +65,7 @@ function ReportCard({ report, index, showPatient }: { report: MedicalReport; ind
           <div className="h-1.5 w-12 rounded-full bg-[hsl(var(--brand)/.5)]" />
           <div className="mt-2.5 space-y-1.5">{[90, 70, 82, 60, 75].map((w, i) => <div key={i} className="flex justify-between gap-2"><span className="h-1 rounded-full bg-border" style={{ width: `${w * 0.55}%` }} /><span className={`h-1 w-4 rounded-full ${i === 2 ? 'bg-[hsl(var(--accent))]' : 'bg-border'}`} /></div>)}</div>
         </div>
-        <span className="mono-label absolute left-4 top-4 rounded-[4px] bg-card/90 px-1.5 py-0.5 text-[hsl(var(--brand))] ring-1 ring-inset ring-border">{titleCase(report.report_class) || 'Unclassified'}</span>
+        <span className="mono-label absolute left-4 top-4 rounded-[4px] bg-card/90 px-1.5 py-0.5 text-[hsl(var(--brand))] ring-1 ring-inset ring-border">{reportTypeLabel(report)}</span>
         <ArrowUpRight size={18} className="absolute right-4 top-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[hsl(var(--brand))]" />
       </div>
       <div className="flex flex-1 flex-col p-5">
@@ -175,7 +175,7 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
                   <span className="mb-1.5 block text-[13px] font-bold">Type of report <span className="font-normal text-muted-foreground">(optional)</span></span>
                   <select value={classHint} onChange={(e) => setClassHint(e.target.value)} className={FIELD_CLASS} data-testid="select-report-class">
                     <option value="">Let our AI work it out</option>
-                    {REPORT_CLASS_OPTIONS.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
+                    {REPORT_CLASS_OPTIONS.map((option) => <option key={option} value={option}>{REPORT_CLASS_LABEL[option]}</option>)}
                   </select>
                 </label>
                 <button type="button" onClick={submit} disabled={!target || upload.isPending} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-[15px] font-bold text-primary-foreground hover:brightness-110 disabled:opacity-60" data-testid="button-upload-submit">

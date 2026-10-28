@@ -56,6 +56,7 @@ class ReportSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     uploaded_by = serializers.SerializerMethodField()
     title = serializers.SerializerMethodField()
+    ai_report_class = serializers.SerializerMethodField()
     tests = ReportTestSerializer(many=True, read_only=True)
     sections = ReportSectionSerializer(many=True, read_only=True)
     findings = ReportFindingSerializer(many=True, read_only=True)
@@ -69,6 +70,7 @@ class ReportSerializer(serializers.ModelSerializer):
             "title",
             "uploaded_by",
             "report_class",
+            "ai_report_class",
             "class_hint",
             "classification_confidence",
             "processing_state",
@@ -95,10 +97,30 @@ class ReportSerializer(serializers.ModelSerializer):
             return None
         return obj.uploaded_by.full_name or obj.uploaded_by.email
 
+    def get_ai_report_class(self, obj: Report) -> str | None:
+        """The AI's report type, offered only where ``report_class`` has none.
+
+        The existing pipeline types four panels; the AI reader knows every
+        kind in ``ReportClass``. Where the pipeline named a type, that type
+        stands - it is the one its schema and duplicate checks used.
+        """
+        if obj.report_class and obj.report_class != ReportClass.OTHER:
+            return None
+        try:
+            analysis = obj.analysis
+        except ReportAnalysis.DoesNotExist:
+            return None
+        if analysis.report_version != obj.version:
+            return None  # read from an earlier version of this report
+        return analysis.report_type or None
+
     def get_title(self, obj: Report) -> str:
         if obj.original_filename:
             return obj.original_filename
-        label = obj.get_report_class_display() if obj.report_class else "Unclassified"
+        code = obj.report_class
+        if not code or code == ReportClass.OTHER:
+            code = self.get_ai_report_class(obj) or code
+        label = ReportClass(code).label if code else "Unclassified"
         return f"{label} report"
 
 
@@ -121,7 +143,7 @@ class ReportAnalysisSerializer(serializers.ModelSerializer):
         model = ReportAnalysis
         fields = [
             "report_id", "status", "reason_code", "reason", "urgent", "values",
-            "findings", "unusable", "text_source", "knowledge_version",
+            "findings", "unusable", "report_type", "text_source", "knowledge_version",
             "range_table_version", "detectors_run", "policy_version", "analysed_at",
         ]
         read_only_fields = fields
