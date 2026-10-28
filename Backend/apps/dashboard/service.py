@@ -119,6 +119,9 @@ class DashboardService:
 
         ctx = build_card_context(patient)
         risk = ctx.risk
+        # "Stable" is a judgement, and with no estimate and no alert nothing
+        # has been judged. A new record must not open on reassurance.
+        unchecked = ctx.status == "STABLE" and risk.level is None
         metrics = [
             Metric(
                 label="Current risk",
@@ -128,9 +131,12 @@ class DashboardService:
             ),
             Metric(
                 label="Record status",
-                value=ctx.status.replace("_", " ").title(),
-                context="Based on your open alerts and current risk",
-                tone="critical" if ctx.status == "REVIEW_REQUIRED" else "warning" if ctx.status == "MONITORING" else "positive",
+                value="Not checked yet" if unchecked else ctx.status.replace("_", " ").title(),
+                context=(
+                    "Upload a report or run the analysis so there is something to check"
+                    if unchecked else "Based on your open alerts and current risk"
+                ),
+                tone="neutral" if unchecked else "critical" if ctx.status == "REVIEW_REQUIRED" else "warning" if ctx.status == "MONITORING" else "positive",
             ),
         ]
         from apps.alerts.models import Alert
