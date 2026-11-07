@@ -323,6 +323,10 @@ INTELLIGENCE = {
     "BASE_URL": env("INTELLIGENCE_SERVICE_URL", "http://127.0.0.1:9001"),
     "SERVICE_TOKEN": env("INTELLIGENCE_SERVICE_TOKEN", ""),
     "TIMEOUT_SECONDS": float(env("INTELLIGENCE_SERVICE_TIMEOUT_SECONDS", "30") or "30"),
+    # Reading a scan takes minutes: each page is cleaned and read more than once, and
+    # a report may run to 30 pages. Only background jobs make this call, so no person
+    # is left waiting on it. At 30 seconds a scanned report failed as "unavailable".
+    "DOCUMENT_TIMEOUT_SECONDS": float(env("INTELLIGENCE_DOCUMENT_TIMEOUT_SECONDS", "1800") or "1800"),
 }
 
 # How much the document-intelligence service is allowed to affect a report.

@@ -92,7 +92,9 @@ class IntelligenceClient:
             )
         self.timeout = timeout or settings.INTELLIGENCE["TIMEOUT_SECONDS"]
 
-    def _post(self, path: str, body: dict[str, Any], *, correlation_id: str) -> dict[str, Any]:
+    def _post(
+        self, path: str, body: dict[str, Any], *, correlation_id: str, timeout: float | None = None,
+    ) -> dict[str, Any]:
         import httpx
 
         headers = {
@@ -102,7 +104,7 @@ class IntelligenceClient:
         }
         try:
             response = httpx.post(
-                f"{self.base_url}{path}", json=body, headers=headers, timeout=self.timeout
+                f"{self.base_url}{path}", json=body, headers=headers, timeout=timeout or self.timeout
             )
         except httpx.HTTPError as exc:  # pragma: no cover - network failure path
             raise UpstreamUnavailable(
@@ -188,7 +190,8 @@ class IntelligenceClient:
             body["patient_age_years"] = patient_age_years
 
         data = self._post(
-            "/v1/documents/process", body, correlation_id=correlation_id
+            "/v1/documents/process", body, correlation_id=correlation_id,
+            timeout=settings.INTELLIGENCE["DOCUMENT_TIMEOUT_SECONDS"],
         )
         return DocumentProcessResult(
             document_id=data.get("document_id", document_id),

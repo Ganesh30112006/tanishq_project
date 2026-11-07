@@ -481,7 +481,7 @@ def _dec(value) -> object:
 
 def _parse_dt(token: str) -> dt.datetime | None:
     token = token.strip()
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%m/%d/%Y"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%d/%m/%Y"):  # day first, as Indian laboratories print it
         try:
             naive = dt.datetime.strptime(token, fmt)
             return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
