@@ -56,7 +56,7 @@ export default function Dashboard() {
             <h1 id="hero-title" className="mt-3 text-[38px] leading-[1.05] sm:text-[52px]">{summary?.greeting || 'Welcome back'}</h1>
             <p className="mt-4 max-w-lg text-[17px] leading-relaxed opacity-90">
               {patientView
-                ? 'Upload a lab report and our AI will read it line by line, explain what stands out, and tell you honestly what it could not work out.'
+                ? 'Upload a lab report and our AI will read the values it can, explain what stands out, and tell you honestly what it could not work out.'
                 : isAdmin ? 'Look after accounts, watch how the AI is doing, and keep every patient record safe.' : 'A short view of what needs your attention today.'}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
@@ -75,13 +75,13 @@ export default function Dashboard() {
           </div>
           <div className="mt-3 flex-1 divide-y divide-border px-6 pb-3">
             {metrics.length ? metrics.map((metric, index) => (
-              <div key={metric.label} className={`page-enter stagger-${index + 1} flex items-center gap-4 py-4`} data-testid={`card-metric-${index}`}>
+              <div key={metric.label} className={`page-enter stagger-${index + 1} flex flex-wrap items-center gap-x-4 gap-y-2 py-4`} data-testid={`card-metric-${index}`}>
                 <span className={`h-10 w-1 shrink-0 rounded-full ${TONE_BAR[metric.tone || ''] ?? 'bg-muted-foreground/30'}`} aria-hidden="true" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-[11rem] flex-1 basis-[11rem]">
                   <p className="text-sm font-bold">{metric.label}</p>
                   <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{metric.context}</p>
                 </div>
-                <p className={`font-display shrink-0 text-[30px] font-semibold leading-none ${metric.tone === 'critical' ? 'text-[hsl(var(--destructive))]' : ''}`}>{metric.value}</p>
+                <p className={`font-display ml-auto text-right text-[26px] font-semibold leading-tight ${metric.tone === 'critical' ? 'text-[hsl(var(--destructive))]' : ''}`}>{metric.value}</p>
               </div>
             )) : <p className="py-6 text-sm text-muted-foreground">Nothing to show yet.</p>}
           </div>
@@ -94,7 +94,7 @@ export default function Dashboard() {
               <p className="mono-label text-muted-foreground">For you</p>
               <h2 id="attention-title" className="mt-1 text-[22px]">Needs your attention</h2>
             </div>
-            <Link href="/alerts" className="inline-flex items-center gap-1 text-sm font-bold text-[hsl(var(--brand))] hover:underline" data-testid="link-view-all-alerts">View all<ArrowRight size={15} /></Link>
+            <Link href="/alerts" className="-my-2 inline-flex items-center gap-1 py-2 text-sm font-bold text-[hsl(var(--brand))] hover:underline" data-testid="link-view-all-alerts">View all<ArrowRight size={15} /></Link>
           </div>
           <div className="mt-3 px-3 pb-3">
             {attention.length ? attention.map((item) => <ActivityRow key={item.id} item={item} />) : <EmptyState icon={ShieldCheck} title="Nothing needs you right now" detail="When something on your record needs a look, it will show up here." />}
@@ -112,11 +112,11 @@ export default function Dashboard() {
         {/* How it works */}
         {patientView && (
           <section className="rounded-[22px] border border-dashed border-[hsl(var(--brand)/.35)] bg-[hsl(var(--brand)/.04)] p-6 sm:p-8 xl:col-span-12" aria-labelledby="how-title">
-            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+            <div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-end">
               <h2 id="how-title" className="text-[24px]">How CareSense works</h2>
               <p className="text-sm text-muted-foreground">Three steps. Your doctor always has the final word.</p>
             </div>
-            <ol className="mt-6 grid gap-4 md:grid-cols-3">
+            <ol className="mt-6 grid gap-4 lg:grid-cols-3">
               {[
                 { icon: Upload, title: 'Upload your report', detail: 'A PDF from the lab works best. The file stays private to you.' },
                 { icon: ScanText, title: 'Our AI reads it', detail: 'It checks each value against the normal range printed on your report, and shows you the exact line it read.' },
@@ -156,7 +156,7 @@ function LatestReports() {
           <p className="mono-label text-muted-foreground">Documents</p>
           <h2 id="latest-title" className="mt-1 text-[22px]">Latest reports</h2>
         </div>
-        <Link href="/reports" className="inline-flex items-center gap-1 text-sm font-bold text-[hsl(var(--brand))] hover:underline">All<ArrowRight size={15} /></Link>
+        <Link href="/reports" className="-my-2 inline-flex items-center gap-1 py-2 text-sm font-bold text-[hsl(var(--brand))] hover:underline">All<ArrowRight size={15} /></Link>
       </div>
       <div className="mt-3 px-3 pb-3">
         {query.isLoading ? <div className="space-y-2 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>

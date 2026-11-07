@@ -31,3 +31,12 @@ def display_number(value: object) -> str:
             normalized = normalized.quantize(Decimal(1))
         return format(normalized, "f")
     return str(value)
+
+
+def report_class_name(value: str | None) -> str:
+    """A report type in words: "Complete blood count", never the code "Cbc"."""
+    from apps.common.enums import ReportClass
+
+    if not value or value == ReportClass.OTHER:
+        return "Lab"
+    return ReportClass(value).label if value in ReportClass.values else "Lab"

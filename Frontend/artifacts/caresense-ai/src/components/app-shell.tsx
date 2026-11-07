@@ -205,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <footer className="mx-auto hidden max-w-[1360px] items-center justify-between gap-4 border-t border-border px-8 py-6 text-[13px] text-muted-foreground md:flex">
           <span>CareSense explains reports. It does not diagnose. Always show your results to a doctor.</span>
-          <span className="flex items-center gap-4"><Link href="/privacy" className="font-bold hover:text-foreground">Privacy policy</Link><button type="button" onClick={() => setHelpOpen(true)} className="font-bold hover:text-foreground">Help</button></span>
+          <span className="flex items-center gap-4"><Link href="/privacy" className="whitespace-nowrap font-bold hover:text-foreground">Privacy policy</Link><button type="button" onClick={() => setHelpOpen(true)} className="font-bold hover:text-foreground">Help</button></span>
         </footer>
       </div>
 

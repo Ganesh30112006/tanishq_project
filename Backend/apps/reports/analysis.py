@@ -310,15 +310,46 @@ def _finding_row(finding: dict, *, withheld: bool, reason: str) -> dict:
     }
 
 
+#: Why a value was not used, in words a patient can follow. Anything not listed
+#: gets the general sentence: a machine code must never reach the screen.
+_NOT_SURE_NOTES = {
+    "unrecognised_analyte": "Our AI does not know this test yet, so it has not used this value.",
+    "no_unit": "Our AI could not find a unit for this value, so it has not used it.",
+    "unit_not_convertible_for_analyte": "Our AI does not know this unit for this test, so it has not used this value.",
+    "outside_plausibility_bounds": (
+        "This number looks too high or too low to be a real result, so our AI has not "
+        "used it. Please check it on your printed report."
+    ),
+    "more_than_one_number_on_the_line": (
+        "Our AI found more than one number here and could not tell which is the result, "
+        "so it has not used it."
+    ),
+    "result_is_a_bound_not_a_number": "This result is given as a limit, not an exact number, so our AI has not used it.",
+    "value_is_not_numeric": "Our AI could not find a clear number here, so it has not used it.",
+    "ocr_readings_disagree": (
+        "Our AI read this part of the scan twice and got different answers, so it has "
+        "not used this value. Please check it on your printed report."
+    ),
+    "outside_any_panel": "Our AI could not tell which part of the report this value belongs to, so it has not used it.",
+    "same_analyte_reported_with_different_values": (
+        "This report shows this test more than once with different numbers, so our AI has not used it."
+    ),
+    "printed_flag_disagrees_with_range": (
+        "The high or low mark on the report does not match the printed range, so our AI "
+        "has not used this value."
+    ),
+    "reference_range_unparseable": "Our AI could not read the normal range for this value, so it has not used it.",
+    "reference_unit_not_comparable": "The normal range is printed in a different unit, so our AI has not used this value.",
+}
+
+
 def _not_sure_note(reason: str) -> str:
     if reason == "ocr_number_uncertain":
         return (
             "Our AI could not read this number clearly on the scan, so it has not "
             "used it. Please check it on your printed report."
         )
-    if reason:
-        return f"Our AI was not sure about this value ({reason.replace('_', ' ').lower()}), so it has not used it."
-    return "Our AI was not sure about this value, so it has not used it."
+    return _NOT_SURE_NOTES.get(reason, "Our AI was not sure about this value, so it has not used it.")
 
 
 def _save(report: Report, status: str, code: str, **fields) -> ReportAnalysis:

@@ -12,12 +12,11 @@ import { BrandMark } from './error-page';
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-[100dvh] bg-background lg:grid-cols-[1.05fr_1fr]">
-      <aside className="ruled-paper relative hidden flex-col justify-between overflow-hidden border-r border-border bg-[hsl(var(--brand)/.035)] px-14 py-12 lg:flex">
+      <aside className="ruled-paper relative hidden flex-col justify-between overflow-hidden border-r lg:sticky lg:top-0 lg:h-[100dvh] lg:self-start border-border bg-[hsl(var(--brand)/.035)] px-14 py-12 lg:flex">
         <Wordmark />
         <div className="max-w-xl">
-          <p className="mono-label text-[hsl(var(--brand))]">AI report reader</p>
-          <h1 className="mt-4 text-[52px] leading-[1.02] xl:text-[60px]">Your lab report, explained in <em className="text-[hsl(var(--brand))]">plain words</em>.</h1>
-          <p className="mt-5 max-w-md text-[17px] leading-relaxed text-muted-foreground">Upload a report. Our AI reads every line, shows you which values are outside the normal range, and tells you honestly what it could not work out.</p>
+          <h1 className="text-[52px] leading-[1.02] xl:text-[60px]">Your lab report, explained in <em className="text-[hsl(var(--brand))]">plain words</em>.</h1>
+          <p className="mt-5 max-w-md text-[17px] leading-relaxed text-muted-foreground">Upload a report. Our AI reads the values it can, shows you which values are outside the normal range, and tells you honestly what it could not work out.</p>
           <ExampleReport />
         </div>
         <ul className="grid max-w-xl grid-cols-3 gap-6 border-t border-border pt-6 text-[13px] leading-snug text-muted-foreground">

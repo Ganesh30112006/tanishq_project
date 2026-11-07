@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from apps.common.display import display_number, display_term
+from apps.common.display import display_number, display_term, report_class_name
 
 
 @dataclass(slots=True)
@@ -71,7 +71,7 @@ def _report_events(patient) -> list[TimelineEvent]:
         )
         .order_by("-created_at")[:15]
     ):
-        label = (row.report_class or "Unclassified").replace("_", " ").title()
+        label = report_class_name(row.report_class)
         # Written for the patient: there is no reviewer in this product, so a
         # report the older reader could not finish is still one our AI has read.
         detail = (

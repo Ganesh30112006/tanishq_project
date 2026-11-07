@@ -20,7 +20,7 @@ from datetime import datetime
 from django.conf import settings
 from django.db.models import OuterRef, Subquery
 
-from apps.common.display import display_term
+from apps.common.display import display_term, report_class_name
 from apps.common.enums import (
     JobState,
     MissingDataTaskStatus,
@@ -304,7 +304,7 @@ class DashboardService:
             items.append(ActivityItem(
                 id=str(row.public_id),
                 title=f"Report · {row.patient.full_name}",
-                detail=f"{(row.report_class or 'Unclassified').title()} - {row.processing_state.replace('_', ' ').title()}",
+                detail=f"{report_class_name(row.report_class)} - {row.processing_state.replace('_', ' ').title()}",
                 timestamp=row.created_at, type="report",
             ))
         for row in (

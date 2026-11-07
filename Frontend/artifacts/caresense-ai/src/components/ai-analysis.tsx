@@ -31,11 +31,21 @@ const VALUE_STATE: Record<string, { label: string; className: string }> = {
   READERS_DISAGREE: { label: 'Held back', className: ATTENTION_BADGE },
 };
 
+// The names the reading service sends (ReferenceStatus in contracts.py).
 const REFERENCE_STATUS: Record<string, string> = {
-  ABOVE: 'Above range',
-  BELOW: 'Below range',
-  WITHIN: 'In range',
+  ABOVE_REFERENCE_RANGE: 'Above range',
+  BELOW_REFERENCE_RANGE: 'Below range',
+  WITHIN_REFERENCE_RANGE: 'In range',
 };
+
+// A value the AI would not use can still be one the report shows as abnormal,
+// and this is the one thing about it the patient must not miss.
+const looksOutOfRange = (v: AnalysisValue) =>
+  v.reference_status === 'ABOVE_REFERENCE_RANGE' || v.reference_status === 'BELOW_REFERENCE_RANGE' || ['H', 'HH', 'L', 'LL'].includes(v.printed_flag);
+
+// A number the reader could not tie to a test: a registration number, a page
+// number, a line from the signature block. Kept out of the main table.
+const isOtherNumber = (v: AnalysisValue) => !v.analyte && !looksOutOfRange(v);
 
 type Names = Map<string, string>;
 
@@ -96,6 +106,7 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
   const values = analysis.values ?? [];
   const findings = analysis.findings ?? [];
   const criticals = values.filter((v) => v.critical);
+  const unsureAbnormal = values.filter((v) => v.state !== 'USED' && looksOutOfRange(v));
 
   // Say who judged it critical: the laboratory, or our danger limits. A
   // patient must never be told their lab said something it did not.
@@ -130,6 +141,10 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
   const heldBack = findings.filter((f) => f.withheld);
   const byCode = new Map(findings.map((f) => [f.code, f]));
   const names: Names = new Map(values.filter((v) => v.analyte && v.label).map((v) => [v.analyte.toLowerCase(), v.label]));
+  // Most single results have no finding of their own. Such a result is still
+  // outside the range on the patient's report, and the screen must say so.
+  const inAFinding = new Set(shown.flatMap((f) => (f.evidence_used ?? []).map((e) => e.key.toLowerCase())));
+  const outsideRange = values.filter((v) => v.state === 'USED' && looksOutOfRange(v) && !inAFinding.has(v.analyte.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -161,19 +176,32 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
         </div>
       )}
 
+      {unsureAbnormal.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.08)] p-4" role="status" data-testid="text-ai-unsure-abnormal">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-[hsl(var(--accent-foreground))]" />
+          <p className="text-sm leading-relaxed">{unsureAbnormal.length === 1 ? 'A result on this report may be' : 'Some results on this report may be'} outside the normal range, but our AI could not read {unsureAbnormal.length === 1 ? 'it' : 'them'} clearly enough to use: {unsureAbnormal.map((v) => v.label).join(', ')}. Please check your printed report and show it to a doctor.</p>
+        </div>
+      )}
+
       {conditions.length > 0 && (
         <FindingGroup title="Possible conditions" detail="Our AI found a pattern of results that can fit these conditions. Only a doctor can confirm or rule them out.">
           {conditions.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} names={names} />)}
         </FindingGroup>
       )}
 
-      {patterns.length > 0 && (
+      {(patterns.length > 0 || outsideRange.length > 0) && (
         <FindingGroup title="Results outside the normal range" detail="Each of these is a single sign. On its own it does not mean you have a disease.">
           {patterns.map((f) => <FindingCard key={f.code} finding={f} byCode={byCode} names={names} />)}
+          {outsideRange.map((v) => (
+            <div key={`${v.analyte}-${v.page}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl border border-border p-4" data-testid={`ai-outside-${v.analyte}`}>
+              <p className="text-sm font-medium">{v.label}</p>
+              <p className="text-sm">{formatValue(v.value)} {v.unit}<span className="ml-2 text-xs text-muted-foreground">{REFERENCE_STATUS[v.reference_status] ?? 'Marked by your lab'}{v.reference_text ? ` (normal range ${v.reference_text})` : ''}</span></p>
+            </div>
+          ))}
         </FindingGroup>
       )}
 
-      {analysis.status === 'READY' && conditions.length === 0 && patterns.length === 0 && (
+      {analysis.status === 'READY' && conditions.length === 0 && patterns.length === 0 && outsideRange.length === 0 && unsureAbnormal.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="text-ai-nothing-found">Our AI did not find any result outside the normal range among the values it could read. This does not rule out a health problem.</p>
       )}
 
@@ -274,34 +302,45 @@ function FindingCard({ finding, byCode, names }: { finding: AnalysisFinding; byC
   );
 }
 
-function ValuesRead({ values }: { values: AnalysisValue[] }) {
+function ValuesRead({ values: all }: { values: AnalysisValue[] }) {
+  const values = all.filter((v) => !isOtherNumber(v));
+  const others = all.filter(isOtherNumber);
   return (
     <div>
       <h3 className="flex items-center gap-2 text-sm font-semibold"><Eye size={15} />Values our AI read</h3>
       <p className="mt-0.5 text-xs text-muted-foreground">Read by AI. Please check each value against your printed report.</p>
       <div className="mt-3 overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-border text-left mono-label text-muted-foreground"><th className="px-4 py-2.5 font-normal">Test</th><th className="px-3 py-2.5 font-normal">Value</th><th className="px-3 py-2.5 font-normal">Normal range</th><th className="px-4 py-2.5 font-normal">Status</th></tr></thead>
-          <tbody className="divide-y divide-border">
+        <table className="w-full text-sm max-lg:block">
+          <thead className="max-lg:hidden"><tr className="border-b border-border text-left mono-label text-muted-foreground"><th className="px-4 py-2.5 font-normal">Test</th><th className="px-3 py-2.5 font-normal">Value</th><th className="px-3 py-2.5 font-normal">Normal range</th><th className="px-4 py-2.5 font-normal">Status</th></tr></thead>
+          <tbody className="divide-y divide-border max-lg:block">
             {values.map((v, i) => {
               const state = VALUE_STATE[v.state] ?? { label: v.state, className: NEUTRAL_BADGE };
               const range = REFERENCE_STATUS[v.reference_status];
               return (
-                <tr key={`${v.analyte}-${i}`} data-testid={`ai-value-${i}`}>
-                  <td className="px-4 py-2.5 align-top">
+                <tr key={`${v.analyte}-${i}`} data-testid={`ai-value-${i}`} className="max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto] max-lg:gap-x-3 max-lg:gap-y-1.5 max-lg:p-4">
+                  <td className="px-4 py-2.5 align-top max-lg:col-span-2 max-lg:p-0">
                     <p className="font-medium">{v.label}</p>
                     {v.source_text && <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{v.page ? `Page ${v.page}: ` : ''}“{v.source_text}”</p>}
                     {v.note && <p className="mt-0.5 text-[11px] text-muted-foreground">{v.note}</p>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 align-top">{formatValue(v.value)} <span className="text-xs text-muted-foreground">{v.unit}</span></td>
-                  <td className="px-3 py-2.5 align-top text-xs text-muted-foreground">{v.reference_text || '—'}{range && v.state === 'USED' ? <span className="block">{range}</span> : null}</td>
-                  <td className="px-4 py-2.5 align-top"><div className="flex flex-wrap gap-1.5"><Badge className={`whitespace-nowrap ${state.className}`}>{state.label}</Badge>{v.critical ? <Badge className={`whitespace-nowrap ${CRITICAL_BADGE}`}>Critical</Badge> : null}</div></td>
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top max-lg:p-0">{formatValue(v.value)} <span className="text-xs text-muted-foreground">{v.unit}</span></td>
+                  <td className="px-3 py-2.5 align-top text-xs text-muted-foreground max-lg:col-start-1 max-lg:row-start-3 max-lg:p-0"><span className="lg:hidden">Normal range: </span>{v.reference_text || '—'}{range && v.state === 'USED' ? <span className="block">{range}</span> : null}</td>
+                  <td className="px-4 py-2.5 align-top max-lg:col-start-2 max-lg:row-span-2 max-lg:row-start-2 max-lg:p-0"><div className="flex flex-wrap gap-1.5 max-lg:justify-end"><Badge className={`whitespace-nowrap ${state.className}`}>{state.label}</Badge>{v.critical ? <Badge className={`whitespace-nowrap ${CRITICAL_BADGE}`}>Critical</Badge> : null}</div></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {others.length > 0 && (
+        <details className="mt-3 rounded-xl border border-border p-3" data-testid="ai-other-numbers">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Other numbers on the report that our AI did not use ({others.length})</summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Most of these are not test results, such as a registration number or a page number. A few may be tests our AI does not know yet, so please read your printed report too.</p>
+          <ul className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
+            {others.map((v, i) => <li key={i}>{v.page ? `Page ${v.page}: ` : ''}{v.source_text || v.label}</li>)}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
