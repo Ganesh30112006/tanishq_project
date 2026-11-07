@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
@@ -18,11 +19,13 @@ from apps.accounts.serializers import (
     UserSerializer,
 )
 from apps.accounts.services import AccountService, current_raw_token
+from apps.accounts.throttling import LoginAccountThrottle
 from apps.audit import services as audit
 from apps.audit.services import audit_service
 from apps.common.enums import AuditResult, Role
 from apps.common.errors import ValidationFailed
 from apps.patients.services import PatientService
+from apps.privacy.services import privacy_service
 
 account_service = AccountService()
 
@@ -55,6 +58,7 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes: list = []
     throttle_scope = "auth"
+    throttle_classes = [ScopedRateThrottle, LoginAccountThrottle]
 
     def post(self, request: Request) -> Response:
         data = LoginSerializer(data=request.data)
@@ -137,6 +141,24 @@ class RegisterView(APIView):
             patient.user = user
             patient.save(update_fields=["user", "updated_at"])
 
+            # What they ticked, against the wording in force, with the account:
+            # an account must never exist without the consent it was given on.
+            for purpose in data.validated_data["consents"]:
+                privacy_service.record_consent(
+                    patient=patient, purpose=purpose, granted=True,
+                    recorded_by=user, self_recorded=True,
+                )
+
+            # Inside the transaction: if the session cannot be issued, the
+            # account must not survive either, or the email is taken by an
+            # account nobody can reach and every retry is refused as a duplicate.
+            client = request.META.get("HTTP_USER_AGENT", "")[:100]
+            ip = request.META.get("REMOTE_ADDR")
+            issued = account_service.issue_local_token(user, client=client, ip=ip)
+            refresh = account_service.issue_refresh_token(
+                user, access_token=issued.record, client=client, ip=ip
+            )
+
         audit_service.record(
             audit.USER_CREATE, actor=user, resource=user, metadata={"self_registered": True}
         )
@@ -145,12 +167,6 @@ class RegisterView(APIView):
             actor=user,
             resource=patient,
             metadata={"self_registered": True},
-        )
-        client = request.META.get("HTTP_USER_AGENT", "")[:100]
-        ip = request.META.get("REMOTE_ADDR")
-        issued = account_service.issue_local_token(user, client=client, ip=ip)
-        refresh = account_service.issue_refresh_token(
-            user, access_token=issued.record, client=client, ip=ip
         )
         return Response(
             _session_payload(issued, refresh),

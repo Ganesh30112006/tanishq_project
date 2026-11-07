@@ -27,7 +27,7 @@ def _register(api_client, date_of_birth: str):
         {
             "email": email,
             "full_name": "Dob Check",
-            "password": "a-long-enough-passphrase",
+            "password": "a-long-enough-passphrase", "confirms_adult": True,
             "date_of_birth": date_of_birth,
         },
         format="json",
@@ -50,10 +50,37 @@ def test_self_registration_refuses_an_impossible_date_of_birth(api_client, date_
     assert not User.objects.filter(email=email).exists()
 
 
-def test_self_registration_accepts_a_birth_today(api_client):
-    resp, email = _register(api_client, timezone.localdate().isoformat())
+def _eighteen_years_before(day: dt.date) -> dt.date:
+    try:
+        return day.replace(year=day.year - 18)
+    except ValueError:  # 29 February
+        return day.replace(year=day.year - 18, day=28)
+
+
+def test_self_registration_accepts_an_eighteenth_birthday_today(api_client):
+    born = _eighteen_years_before(timezone.localdate())
+    resp, email = _register(api_client, born.isoformat())
     assert resp.status_code == 201, resp.data
-    assert Patient.objects.get(user__email=email).date_of_birth == timezone.localdate()
+    assert Patient.objects.get(user__email=email).date_of_birth == born
+
+
+def test_self_registration_refuses_anyone_under_eighteen(api_client):
+    born = _eighteen_years_before(timezone.localdate()) + dt.timedelta(days=1)
+    resp, email = _register(api_client, born.isoformat())
+    assert resp.status_code == 400
+    assert "date_of_birth" in resp.data["error"]["details"]["fields"]
+    assert not User.objects.filter(email=email).exists()
+
+
+def test_self_registration_needs_the_adult_confirmation(api_client):
+    resp = api_client.post(
+        "/api/v1/auth/register",
+        {"email": "no-confirm@example.test", "full_name": "No Confirm",
+         "password": "a-long-enough-passphrase", "confirms_adult": False},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert not User.objects.filter(email="no-confirm@example.test").exists()
 
 
 def test_staff_registration_refuses_a_future_date_of_birth(auth_client, make_doctor):

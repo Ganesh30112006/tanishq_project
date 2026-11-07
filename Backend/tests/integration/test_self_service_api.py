@@ -17,7 +17,7 @@ def _register(api_client, **overrides):
     payload = {
         "email": f"self-{uuid.uuid4().hex[:8]}@example.test",
         "full_name": "Alex Morgan",
-        "password": "a-long-enough-passphrase",
+        "password": "a-long-enough-passphrase", "confirms_adult": True,
         "date_of_birth": "1980-05-04",
         "sex": "FEMALE",
     }

@@ -6,8 +6,8 @@ Two token shapes are supported behind one DRF authenticator:
   Signature/issuer/audience/expiry verification is delegated to
   :func:`verify_oidc_token`, which must be wired to a real JWKS client before
   production use. It fails closed.
-* **Local opaque tokens** (prefix ``cst_``) - only accepted when
-  ``IDENTITY["LOCAL_DEV_TOKENS"]`` is true. Looked up by SHA-256 hash in
+* **Local opaque tokens** (prefix ``cst_``) - the password sign-in tokens, accepted when
+  ``IDENTITY["PASSWORD_SIGN_IN"]`` is true. Looked up by SHA-256 hash in
   :class:`~apps.accounts.models.AccessToken`; revoked or expired tokens are
   rejected immediately (spec section 7).
 """
@@ -67,7 +67,7 @@ class BearerTokenAuthentication(authentication.BaseAuthentication):
 
     # -- local opaque tokens -------------------------------------------------
     def _authenticate_local(self, raw_token: str):
-        if not settings.IDENTITY.get("LOCAL_DEV_TOKENS"):
+        if not settings.IDENTITY.get("PASSWORD_SIGN_IN"):
             raise exceptions.AuthenticationFailed("Local tokens are not accepted here.")
 
         from apps.accounts.models import AccessToken

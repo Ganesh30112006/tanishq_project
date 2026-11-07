@@ -7,10 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ApiError, getMe, login as apiLogin, logout as apiLogout, register as apiRegister, setAuthTokenGetter } from '@workspace/api-client-react';
-import type { Me, UserRole } from '@workspace/api-client-react';
+import { ApiError, getMe, login as apiLogin, logout as apiLogout, refreshSession, register as apiRegister, setAuthTokenGetter, setUnauthorizedHandler } from '@workspace/api-client-react';
+import type { ConsentPurposeCode, Me, TokenResponse, UserRole } from '@workspace/api-client-react';
 
 const TOKEN_STORAGE_KEY = 'caresense.access_token';
+/** Single-use: every redemption returns a new one, and presenting an old one
+ *  revokes the whole session (the backend's theft detection). */
+const REFRESH_STORAGE_KEY = 'caresense.refresh_token';
 
 /**
  * Canonical permission codes, mirroring the backend's registry
@@ -79,29 +82,47 @@ export interface RegisterDetails {
   /** Age is a model input; without it the risk engine blocks rather than guess. */
   dateOfBirth?: string;
   sex?: 'FEMALE' | 'MALE' | 'INTERSEX' | 'UNKNOWN';
+  /** Self-sign-up is for people aged 18 and over. */
+  confirmsAdult: boolean;
+  /** Consent purposes ticked, each against its published wording. */
+  consents: ConsentPurposeCode[];
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readStoredToken(): string | null {
+function readStored(key: string): string | null {
   try {
-    return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     // Private browsing / storage disabled: fall back to session-only auth.
     return null;
   }
 }
 
-function writeStoredToken(token: string | null): void {
+function writeStored(key: string, value: string | null): void {
   try {
-    if (token) {
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    if (value) {
+      window.localStorage.setItem(key, value);
     } else {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+      window.localStorage.removeItem(key);
     }
   } catch {
     // Ignore - the session still works for the current tab via memory state.
   }
+}
+
+const readStoredToken = () => readStored(TOKEN_STORAGE_KEY);
+
+function writeStoredSession(issued: TokenResponse | null): void {
+  writeStored(TOKEN_STORAGE_KEY, issued?.access_token ?? null);
+  writeStored(REFRESH_STORAGE_KEY, issued?.refresh_token ?? null);
+}
+
+/** Run `fn` while holding a lock shared by every tab of this app, where the
+ *  browser supports it, so two tabs never redeem one refresh token. */
+async function withSessionLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? locks.request('caresense.session-renewal', fn) : fn();
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -118,6 +139,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setAuthTokenGetter(() => token);
   }, [token]);
+
+  const adoptSession = useCallback((issued: TokenResponse) => {
+    writeStoredSession(issued);
+    // Update the getter synchronously: `setToken` only takes effect on the
+    // next render, and the request about to be retried must not race it.
+    setAuthTokenGetter(() => issued.access_token);
+    setToken(issued.access_token);
+  }, []);
+
+  // Access tokens last an hour. When one expires mid-session, renew it with
+  // the refresh token instead of signing the person out. Concurrent 401s share
+  // one renewal.
+  useEffect(() => {
+    let renewing: Promise<boolean> | null = null;
+    const expired = token;
+    setUnauthorizedHandler(() => {
+      renewing ??= withSessionLock(async () => {
+        // Another tab may have renewed while this one waited for the lock.
+        const stored = readStoredToken();
+        if (stored && stored !== expired) {
+          setAuthTokenGetter(() => stored);
+          setToken(stored);
+          return true;
+        }
+        const refresh = readStored(REFRESH_STORAGE_KEY);
+        if (!refresh) return false;
+        try {
+          adoptSession(await refreshSession({ refresh_token: refresh }));
+          return true;
+        } catch (err) {
+          if (err instanceof ApiError && err.status < 500) {
+            writeStoredSession(null);
+            setToken(null);
+            setUser(null);
+            setSessionEnded(true);
+          }
+          return false;
+        }
+      }).finally(() => {
+        renewing = null;
+      });
+      return renewing;
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [token, adoptSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // A stale/expired/revoked token fails closed: drop it and require a
           // fresh login rather than showing a half-authenticated app.
           setToken(null);
-          writeStoredToken(null);
+          writeStoredSession(null);
           setSessionEnded(true);
           setUnreachable(false);
         } else {
@@ -167,13 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setSessionEnded(false);
     try {
-      const issued = await apiLogin({ email, password });
-      writeStoredToken(issued.access_token);
-      // Update the getter synchronously: `setToken` below only takes effect
-      // on the next render, and the immediate `getMe()` call must not race
-      // it with the previous (absent) token.
-      setAuthTokenGetter(() => issued.access_token);
-      setToken(issued.access_token);
+      adoptSession(await apiLogin({ email, password }));
       const me = await getMe();
       setUser(me);
     } catch (err) {
@@ -186,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(message);
       throw err;
     }
-  }, []);
+  }, [adoptSession]);
 
   const register = useCallback(async (details: RegisterDetails) => {
     setError(null);
@@ -197,10 +257,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password: details.password,
         date_of_birth: details.dateOfBirth || null,
         sex: details.sex,
+        confirms_adult: details.confirmsAdult,
+        consents: details.consents,
       });
-      writeStoredToken(issued.access_token);
-      setAuthTokenGetter(() => issued.access_token);
-      setToken(issued.access_token);
+      adoptSession(issued);
       const me = await getMe();
       setUser(me);
     } catch (err) {
@@ -215,16 +275,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(message);
       throw err;
     }
-  }, []);
+  }, [adoptSession]);
 
   const logout = useCallback(async () => {
     try {
-      await apiLogout();
+      // Naming the refresh token ends this session only; without it the
+      // server signs the person out on every device.
+      const refresh = readStored(REFRESH_STORAGE_KEY);
+      await apiLogout(refresh ? { refresh_token: refresh } : undefined);
     } catch {
       // Revocation is best-effort from the client's point of view - the
       // local session ends either way.
     }
-    writeStoredToken(null);
+    writeStoredSession(null);
     setToken(null);
     setUser(null);
   }, []);

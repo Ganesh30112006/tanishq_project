@@ -72,8 +72,8 @@ class AccountService(BaseService):
         ip: str | None = None,
         ttl_seconds: int | None = None,
     ) -> IssuedToken:
-        if not settings.IDENTITY.get("LOCAL_DEV_TOKENS"):
-            raise ValidationFailed("Local token issuance is disabled in this environment.")
+        if not settings.IDENTITY.get("PASSWORD_SIGN_IN"):
+            raise ValidationFailed("Password sign-in is switched off in this environment.")
         ttl = ttl_seconds or settings.IDENTITY["ACCESS_TOKEN_TTL_SECONDS"]
         raw = LOCAL_TOKEN_PREFIX + secrets.token_urlsafe(32)
         record = AccessToken.objects.create(

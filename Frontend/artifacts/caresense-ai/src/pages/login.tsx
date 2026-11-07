@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, Clock3, Loader2, LockKeyhole } from 'lucide-react';
+import { useLocation } from 'wouter';
 import { AuthLayout } from '@/components/auth-layout';
 import { useAuth } from '@/lib/auth';
 
@@ -10,6 +11,7 @@ export default function Login({ onShowSignUp }: { onShowSignUp?: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [, navigate] = useLocation();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -44,6 +46,7 @@ export default function Login({ onShowSignUp }: { onShowSignUp?: () => void }) {
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-bold">Password</span>
           <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={FIELD} data-testid="input-password" />
+          <button type="button" onClick={() => navigate('/forgot-password')} className="mt-2 text-[13px] font-bold text-[hsl(var(--brand))] underline-offset-4 hover:underline" data-testid="link-forgot-password">Forgot your password?</button>
         </label>
 
         {error && (

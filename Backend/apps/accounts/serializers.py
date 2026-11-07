@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.accounts.permissions import PermissionResolver
 from apps.patients.validators import validate_date_of_birth
+from apps.privacy.models import ConsentPurpose
 
 
 class LoginSerializer(serializers.Serializer):
@@ -90,6 +92,49 @@ class SelfRegisterSerializer(serializers.Serializer):
     sex = serializers.ChoiceField(
         choices=["FEMALE", "MALE", "INTERSEX", "UNKNOWN"], required=False, default="UNKNOWN"
     )
+    #: Self-sign-up is for adults. Under India's DPDP Act a child's data needs
+    #: verifiable consent from a parent, and nothing here can verify a parent,
+    #: so a child is refused rather than signed up on their own say-so.
+    confirms_adult = serializers.BooleanField()
+    #: Consent purposes the person ticked, each against the wording published
+    #: for it (GET /privacy/consent/documents). Recorded with the account.
+    consents = serializers.ListField(
+        child=serializers.ChoiceField(choices=ConsentPurpose.choices),
+        required=False, default=list,
+    )
+
+    def validate_confirms_adult(self, value: bool) -> bool:
+        if not value:
+            raise serializers.ValidationError(
+                "CareSense is for people aged 18 and over."
+            )
+        return value
+
+    def validate_date_of_birth(self, value):
+        # Runs after the field's shared plausibility validator (the module-level
+        # function of the same name); this adds only the sign-up age floor.
+        if value is None:
+            return value
+        today = timezone.localdate()
+        age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
+        if age < 18:
+            raise serializers.ValidationError(
+                "CareSense is for people aged 18 and over. We cannot create an "
+                "account for anyone younger."
+            )
+        return value
+
+    def validate_consents(self, value: list[str]) -> list[str]:
+        from apps.privacy.services import privacy_service
+
+        chosen = list(dict.fromkeys(value))
+        for doc in privacy_service.published_documents():
+            if doc["is_essential"] and doc["purpose"] not in chosen:
+                raise serializers.ValidationError(
+                    f"Please agree to \"{doc['label']}\". We cannot keep your "
+                    f"reports without it."
+                )
+        return chosen
 
     def validate_password(self, value: str) -> str:
         from django.contrib.auth.password_validation import validate_password

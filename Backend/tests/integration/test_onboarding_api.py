@@ -27,7 +27,7 @@ def test_self_registration_creates_the_persons_own_record(api_client):
     email = _email()
     resp = api_client.post(
         "/api/v1/auth/register",
-        {"email": email, "full_name": "Sam Patient", "password": "a-long-enough-passphrase"},
+        {"email": email, "full_name": "Sam Patient", "password": "a-long-enough-passphrase", "confirms_adult": True},
         format="json",
     )
     assert resp.status_code == 201
@@ -48,7 +48,7 @@ def test_self_registration_cannot_claim_an_existing_patients_record(api_client, 
         {
             "email": _email(),
             "full_name": existing.full_name,
-            "password": "a-long-enough-passphrase",
+            "password": "a-long-enough-passphrase", "confirms_adult": True,
         },
         format="json",
     )
@@ -61,7 +61,7 @@ def test_duplicate_registration_does_not_confirm_the_address(api_client, make_us
     user = make_user(Role.PATIENT)
     resp = api_client.post(
         "/api/v1/auth/register",
-        {"email": user.email, "full_name": "Someone Else", "password": "a-long-enough-passphrase"},
+        {"email": user.email, "full_name": "Someone Else", "password": "a-long-enough-passphrase", "confirms_adult": True},
         format="json",
     )
     assert resp.status_code == 400
