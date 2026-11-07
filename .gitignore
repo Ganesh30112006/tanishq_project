@@ -4,3 +4,6 @@ deploy/caresense.env
 # Local tool output and machine settings.
 .playwright-mcp/
 .claude/settings.local.json
+# SQLite's journal files beside the local development database.
+*.sqlite3-shm
+*.sqlite3-wal

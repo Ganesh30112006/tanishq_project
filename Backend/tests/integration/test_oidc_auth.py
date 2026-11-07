@@ -75,7 +75,7 @@ def test_federated_login_maps_subject_to_local_account(rsa_key, monkeypatch, set
     auth = authentication.BearerTokenAuthentication()
 
     class _Req:
-        META = {"HTTP_AUTHORIZATION": f"Bearer {_token(rsa_key, sub='fed-sub-1')}"}
+        headers = {"authorization": f"Bearer {_token(rsa_key, sub='fed-sub-1')}"}
 
     resolved, claims = auth.authenticate(_Req())
     assert resolved.pk == user.pk

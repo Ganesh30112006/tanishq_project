@@ -9,11 +9,11 @@ requires-python = ">=3.11"
 dependencies = [
     # Primary application backend (Django owns identity + authorization + DB)
     "Django>=5.2,<5.3",           # 5.2 is LTS; 5.1 stopped receiving security fixes in Dec 2025
-    "djangorestframework>=3.15",
+    "djangorestframework>=3.18.2",
     "mysqlclient>=2.2",            # MySQL 8.x driver for the Django ORM
     "python-dotenv>=1.0",
-    "PyJWT[crypto]>=2.8",          # OIDC access-token validation
-    "pypdf>=4.0",                  # PDF text extraction for the report pipeline
+    "PyJWT[crypto]>=2.15",          # OIDC access-token validation
+    "pypdf>=6.21.4",                  # PDF text extraction for the report pipeline
     "drf-spectacular>=0.27",       # OpenAPI 3 schema + Swagger UI
     # Shared validation
     "pydantic>=2.7",
@@ -39,7 +39,7 @@ document = [
     # by pip. Without it, intelligence.document.ocr returns ENGINE_UNAVAILABLE
     # and scanned reports are routed to human review rather than guessed at.
     "pytesseract>=0.3.10",
-    "Pillow>=10.0",
+    "Pillow>=13.0",
     # Renders the pages of a scanned PDF to images for the OCR engine. Without
     # it a scanned PDF is UNREADABLE (never guessed at); photos are unaffected.
     "pypdfium2>=4.30",
