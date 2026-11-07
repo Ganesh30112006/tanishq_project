@@ -111,6 +111,8 @@ class ProvenanceOut(BaseModel):
     extractor_version: str
     ocr_confidence: float | None
     extraction_confidence: float
+    #: On a cumulative report, the dated column the value was read from.
+    column: str = ""
 
     @classmethod
     def of(cls, prov: Provenance) -> ProvenanceOut:
@@ -121,6 +123,7 @@ class ProvenanceOut(BaseModel):
             extractor=prov.extractor, extractor_version=prov.extractor_version,
             ocr_confidence=prov.ocr_confidence,
             extraction_confidence=prov.extraction_confidence,
+            column=prov.column,
         )
 
 
@@ -147,11 +150,17 @@ class ValueOut(BaseModel):
     #: getting that derivation wrong on one branch is how a value nobody
     #: trusted becomes a clinical record.
     persists_clinical_value: bool = False
+    #: Past a level that can be dangerous today (intelligence/knowledge/
+    #: critical_limits.py), whether or not the laboratory printed a critical
+    #: flag. Only ever adds urgency; it never withholds or releases a value.
+    beyond_critical_limit: bool = False
     issues: list[str] = []
     provenance: ProvenanceOut
 
     @classmethod
     def of(cls, value: ValidatedValue, prov: Provenance) -> ValueOut:
+        from intelligence.knowledge.critical_limits import beyond_critical_limit
+
         norm = None
         if value.normalized is not None:
             norm = NormalizedOut(
@@ -173,6 +182,11 @@ class ValueOut(BaseModel):
             printed_flag=value.printed_flag, status=value.status.value,
             reason=value.reason,
             persists_clinical_value=value.status.persists_clinical_value,
+            beyond_critical_limit=beyond_critical_limit(
+                value.analyte, value=value.value, unit=value.unit,
+                normalized_value=norm.value if norm and norm.convertible else None,
+                normalized_unit=norm.unit if norm and norm.convertible else "",
+            ),
             issues=list(value.issues), provenance=ProvenanceOut.of(prov),
         )
 
@@ -228,6 +242,8 @@ class ClassificationOut(BaseModel):
     detail: str = ""
     #: Machine-readable counterpart to ``detail``.
     reason: str = ""
+    #: The blood panels a MULTI_PANEL document names.
+    panels: list[str] = Field(default_factory=list)
 
 
 class CompletenessOut(BaseModel):
@@ -279,6 +295,7 @@ class DocumentProcessResponse(BaseModel):
                 type=c.report_type.value if c.report_type else None,
                 confidence=c.confidence, status=c.status.value,
                 signals=c.signals, detail=c.detail, reason=c.reason,
+                panels=[p.value for p in c.panels],
             )
         completeness = None
         if result.completeness is not None:

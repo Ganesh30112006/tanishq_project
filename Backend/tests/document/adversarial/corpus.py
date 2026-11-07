@@ -108,13 +108,18 @@ LOOKALIKES = [
 # --- a percentage is not an absolute count --------------------------
 DIFFERENTIAL = [
     _ok("Eosinophils 4.2 % 1 - 6", "eosinophils", 4.2),
-    Case("Absolute Eosinophil Count 0.45 10^9/L 0.02 - 0.5", "eosinophils",
+    # A label that says "absolute" is refused at the alias table. It once took
+    # the percentage's name and was refused by its unit, but then a report
+    # printing both - most Indian CBCs - read as one test with two values and
+    # the correct percentage was held as a conflict (sample reports, 2026-11-02).
+    _ambiguous("Absolute Eosinophil Count 0.45 10^9/L 0.02 - 0.5", None,
+               "a different measurement from the percentage"),
+    _ambiguous("AEC 450 /uL 40 - 440", None),
+    _ambiguous("Absolute Neutrophil Count 4.1 10^9/L", None),
+    # An absolute count under the bare name is still refused by its unit.
+    Case("Eosinophils 0.45 10^9/L 0.02 - 0.5", "eosinophils",
          frozenset({ValueStatus.AMBIGUOUS}), None,
          "no conversion rule exists for an absolute count on purpose"),
-    Case("AEC 450 /uL 40 - 440", "eosinophils",
-         frozenset({ValueStatus.AMBIGUOUS}), None),
-    Case("Absolute Neutrophil Count 4.1 10^9/L", "neutrophils",
-         frozenset({ValueStatus.AMBIGUOUS}), None),
     _ok("Neutrophils 58 % 40 - 75", "neutrophils", 58.0),
 ]
 

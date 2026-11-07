@@ -10,10 +10,17 @@ skipped, never half-guessed.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import date
+
+from intelligence.document.extraction import cumulative, value_first
+from intelligence.document.normalization.analytes import canonical_analyte
 
 EXTRACTOR = "regex-line"
-EXTRACTOR_VERSION = "1.1"
+#: 1.2: unit after the flag, "/c.mm"; 1.3: cumulative columns, "10~9/L";
+#: 1.4: wrapped date tables, where a name sits above its numbers;
+#: 1.5: result-first tables, and a name continued on the next line.
+EXTRACTOR_VERSION = "1.5"
 
 _NUMBER = r"\d[\d,]*(?:\.\d+)?"
 
@@ -68,7 +75,7 @@ _STOP_LABELS = (
 #: a per-volume form like ``/uL``, or an ordinary unit starting with a letter
 #: or ``%``. Never a bare number.
 _UNIT_RE = re.compile(
-    r"^(?:x?10[\^*]?\d+/[a-zµμ]+|/[a-zµμ]+|[%A-Za-zµμ][A-Za-z0-9/^%*·.µμ\-]*)$",
+    r"^(?:x?10[\^*~]?\d+/[a-zµμ]+|/[a-zµμ][a-zµμ.]*|[%A-Za-zµμ][A-Za-z0-9/^%*·.µμ\-]*)$",
     re.IGNORECASE,
 )
 
@@ -105,6 +112,8 @@ class RawExtraction:
     extractor: str = EXTRACTOR
     extractor_version: str = EXTRACTOR_VERSION
     issues: tuple[str, ...] = field(default_factory=tuple)
+    #: On a cumulative report, which dated column the value was read from.
+    column: str = ""
 
 
 def _looks_like_heading(line: str) -> bool:
@@ -149,6 +158,15 @@ def _split_rest(rest: str) -> tuple[str, str, str]:
     if idx < len(tokens) and tokens[idx].lower().strip("()") in _FLAGS:
         flag = _FLAGS[tokens[idx].lower().strip("()")]
         idx += 1
+        # Many Indian layouts print the flag beside the value and the unit in
+        # its own column after it: "10.2 L gm/dl". Without this the unit was
+        # swallowed into the reference text and the line read as unitless. A
+        # word wrongly taken as a unit here is not a unit the table knows, so
+        # the value is held as unconvertible - never misread.
+        if not unit and idx < len(tokens) and _UNIT_RE.match(tokens[idx]) \
+                and tokens[idx].lower() not in _FLAGS:
+            unit = tokens[idx]
+            idx += 1
 
     reference = " ".join(tokens[idx:]).strip()
     # A leading flag can also appear *after* the reference on some layouts.
@@ -160,18 +178,218 @@ def _split_rest(rest: str) -> tuple[str, str, str]:
     return unit, flag, reference
 
 
+_CUMULATIVE_ROW = re.compile(
+    r"^\s*"
+    r"(?P<label>[A-Za-z][A-Za-z0-9 ,()./%+\-]*?)"
+    + _SEPARATOR
+    + r"(?P<values>" + _NUMBER + r"(?:\s+" + _NUMBER + r")+)"
+    r"(?P<rest>\s+[^\n]*)$"
+)
+
+
+def _cumulative_row(line: str, columns: tuple[int, int, date]) -> RawExtraction | None:
+    """The newest column of a cumulative row - see :mod:`.cumulative`."""
+    index, count, dated = columns
+    match = _CUMULATIVE_ROW.match(line)
+    if match is None:
+        return None
+    values = match["values"].split()
+    if len(values) != count:
+        return None  # a blank cell: which column is missing cannot be told
+    label = match["label"].strip(" .:-…")
+    low = label.lower()
+    if len(label) < 2 or any(low == s or low.startswith(s + " ") for s in _STOP_LABELS):
+        return None
+    first = match["rest"].split()[0]
+    if not _UNIT_RE.match(first) or first.lower() in _FLAGS:
+        return None  # the unit must follow the last column directly
+    unit, flag, reference = _split_rest(match["rest"])
+    value_text = values[index]
+    return RawExtraction(
+        label=label, value_text=value_text, value=_parse_number(value_text),
+        unit=unit, reference_text=reference, printed_flag=flag, line=line,
+        page=1, char_span=(0, 0),
+        extraction_confidence=0.8 if reference else 0.75,
+        column=f"{dated.isoformat()} (column {index + 1} of {count})",
+    )
+
+
+#: The numbers of a wrapped table's row, and what follows them.
+_NUMBERS_ROW = re.compile(
+    r"^(?P<values>" + _NUMBER + r"(?:\s+" + _NUMBER + r")*)(?P<rest>\s+\S.*)$"
+)
+#: What a row of numbers can start with: a number, then another number, a
+#: range's dash or a unit. That excludes a name starting with a digit, such as
+#: "25 Hydroxy, Vitamin D".
+_NUMBER_START = re.compile(
+    r"^" + _NUMBER + r"(?:$|\s+(?:" + _NUMBER + r"(?:\s|$)|[-‐-―−<>≤≥]|[^\s,]+(?:\s|$)))"
+)
+#: A reference interval and nothing else. Words here mean the line is a sentence.
+_ONLY_INTERVAL = re.compile(r"^[\d\s.,:<>≤≥=\-‐-―−]*$")
+
+#: Name, a wrapped second line of the name, assay method.
+_MAX_LINES_ABOVE = 3
+
+#: Assay methods printed in capitals under a test's name. Only these, and only
+#: with a name waiting above: any other capitalised line is a heading.
+_CAPITALISED_METHODS = frozenset({"clia", "hplc"})
+
+
+def _name_above(above: list[str]) -> tuple[str, bool]:
+    """(label, may this row's value be read) for the lines above a row of numbers.
+
+    The name must start on the first line after the previous row, so a name can
+    never be picked out from further down. Any later line being a test name in
+    its own right means an empty result above: the numbers may belong to either,
+    so neither gets them.
+    """
+    first_two = " ".join(above[:2])
+    if canonical_analyte(above[0]) is not None:
+        label, others = above[0], above[1:]
+    elif len(above) > 1 and canonical_analyte(first_two) is not None:
+        label, others = first_two, above[2:]
+    else:
+        # No recognised name. It stays visible as an unrecognised test.
+        label, others = first_two, above
+    return label, not any(canonical_analyte(line) is not None for line in others)
+
+
+def _wrapped_row(
+    line: str, above: list[str], columns: tuple[int, int, date]
+) -> RawExtraction | None:
+    """A row of numbers in a wrapped table, or None if the line is not one."""
+    if not above or len(above) > _MAX_LINES_ABOVE or _NUMBER_START.match(line) is None:
+        return None
+    index, count, dated = columns
+    label, readable = _name_above(above)
+    refused = RawExtraction(
+        label=label, value_text="", value=None, unit="", reference_text="", printed_flag="",
+        line="\n".join([*above, line]), page=1, char_span=(0, 0), extraction_confidence=0.1,
+        issues=("the row does not fit its dated columns, so its result cannot be established",),
+    )
+    match = _NUMBERS_ROW.match(line)
+    if match is None or not readable:
+        return refused
+    values = match["values"].split()
+    rest = match["rest"].split()
+    if len(values) != count or not _UNIT_RE.match(rest[0]) or rest[0].lower() in _FLAGS:
+        return refused
+    reference = " ".join(rest[1:])
+    if not _ONLY_INTERVAL.match(reference):
+        return refused
+    return replace(
+        refused, value_text=values[index], value=_parse_number(values[index]), unit=rest[0],
+        reference_text=reference, extraction_confidence=0.8 if reference else 0.75,
+        column=f"{dated.isoformat()} (column {index + 1} of {count})", issues=(),
+    )
+
+
+def _value_first_row(row: value_first.Row, page_breaks: list[int]) -> RawExtraction | None:
+    """A closed result-first row. One left open is shown only if it names a known test."""
+    if not row.complete and canonical_analyte(row.name) is None:
+        return None
+    return RawExtraction(
+        label=row.name,
+        value_text=row.value_text if row.complete else "",
+        value=_parse_number(row.value_text) if row.complete else None,
+        unit=row.unit, reference_text=row.reference, printed_flag="", line=row.source,
+        page=_page_of(row.start, page_breaks), char_span=(row.start, row.end),
+        extraction_confidence=0.8 if row.complete else 0.1,
+        issues=() if row.complete else (
+            "no range and unit closed the row, so its result cannot be established",
+        ),
+    )
+
+
+def _continued_name(label: str, next_line: str) -> str | None:
+    """The whole name, where it runs onto the line after the result.
+
+    "Glycosylated 5.40 %" then "Haemoglobin(Hb A1c)". Only for a label that means
+    nothing alone and a whole that is a known test, so it can only ever name a
+    row that would otherwise be unrecognised.
+    """
+    if canonical_analyte(label) is not None or not next_line:
+        return None
+    whole = f"{label} {next_line}"
+    return whole if canonical_analyte(whole) is not None else None
+
+
 def extract_raw_values(
     text: str, *, page_breaks: list[int] | None = None
 ) -> list[RawExtraction]:
     page_breaks = page_breaks or []
     out: list[RawExtraction] = []
     offset = 0
-    for line in text.splitlines(keepends=True):
+    collected = cumulative.collection_date(text)
+    columns: tuple[int, int, date] | None = None  # the open cumulative header
+    wrapped = False  # was it a wrapped header, where a name sits above its numbers?
+    above: list[tuple[int, str]] = []  # the lines since the wrapped table's last row
+    header_end = -1
+    result_first: value_first.Table | None = None  # the open result-first table
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
         start = offset
         offset += len(line)
         stripped = line.strip()
-        if not stripped or _looks_like_heading(stripped):
+        if not stripped or index <= header_end:
             continue
+        if value_first.TABLE_HEADER.match(stripped):
+            if result_first is not None:
+                closed = result_first.flush()
+                out.extend(r for r in (_value_first_row(x, page_breaks) for x in closed) if r)
+            result_first = value_first.Table()
+            continue
+        if result_first is not None:
+            if cumulative.ends_context(stripped):
+                consumed, closed = False, result_first.flush()
+                result_first = None
+            else:
+                consumed, closed = result_first.feed(stripped, start + line.index(stripped))
+            out.extend(r for r in (_value_first_row(x, page_breaks) for x in closed) if r)
+            if consumed:
+                continue
+        opened = cumulative.wrapped_header(lines, index, collected)
+        if opened is not None:
+            header_end, columns = opened
+            wrapped, above = True, []
+            continue
+        header = cumulative.header_column(stripped, collected)
+        if header is not None:
+            columns, wrapped = header, False
+            continue
+        # A short test name in capitals ("MCHC") and the method under a name
+        # ("CLIA") are rows of the table, not headings.
+        heading = _looks_like_heading(stripped) and not (
+            wrapped and (
+                canonical_analyte(stripped) is not None
+                or (above and stripped.lower() in _CAPITALISED_METHODS)
+            )
+        )
+        if heading or cumulative.ends_context(stripped):
+            columns, wrapped, above = None, False, []
+        if heading:
+            continue
+
+        if wrapped and columns is not None:
+            row = _wrapped_row(stripped, [text for _, text in above], columns)
+            if row is not None:
+                span_start = above[0][0]
+                out.append(replace(
+                    row, page=_page_of(span_start, page_breaks),
+                    char_span=(span_start, start + line.index(stripped) + len(stripped)),
+                ))
+                above = []
+                continue
+
+        if columns is not None:
+            row = _cumulative_row(stripped, columns)
+            if row is not None:
+                span_start = start + line.index(stripped)
+                out.append(replace(
+                    row, page=_page_of(span_start, page_breaks),
+                    char_span=(span_start, span_start + len(stripped)),
+                ))
+                continue
 
         censored = _CENSORED.match(stripped)
         match = _LINE.match(stripped)
@@ -194,8 +412,11 @@ def extract_raw_values(
                 censored = None
 
         if not match and not censored:
+            if wrapped:
+                above.append((start + line.index(stripped), stripped))
             continue
 
+        above = []
         source = censored or match
         label = source["label"].strip(" .:-…")
         if not label or len(label) < 2:
@@ -252,6 +473,14 @@ def extract_raw_values(
             confidence -= 0.05
 
         span_start = start + line.index(stripped)
+        span_end = span_start + len(stripped)
+        source_line = stripped
+        following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        whole_name = _continued_name(label, following)
+        if whole_name is not None:
+            label = whole_name
+            source_line = f"{stripped}\n{following}"
+            span_end = offset + lines[index + 1].index(following) + len(following)
         out.append(
             RawExtraction(
                 label=label,
@@ -260,11 +489,14 @@ def extract_raw_values(
                 unit=unit,
                 reference_text=reference,
                 printed_flag=flag,
-                line=stripped,
+                line=source_line,
                 page=_page_of(span_start, page_breaks),
-                char_span=(span_start, span_start + len(stripped)),
+                char_span=(span_start, span_end),
                 extraction_confidence=round(max(confidence, 0.1), 3),
                 issues=tuple(issues),
             )
         )
+    if result_first is not None:
+        closed = result_first.flush()
+        out.extend(r for r in (_value_first_row(x, page_breaks) for x in closed) if r)
     return out

@@ -9,8 +9,11 @@ deployment, so availability is observable rather than assumed.
 """
 from __future__ import annotations
 
+import importlib.util
+
 from fastapi import APIRouter, Depends, HTTPException
 
+from intelligence.document.extraction import EXTRACTOR, EXTRACTOR_VERSION
 from intelligence.document.ocr import available_providers, default_provider
 from intelligence.document.pipeline import Disposition, process_document
 from intelligence.document.wire import (
@@ -42,11 +45,25 @@ def _capabilities() -> dict[str, CapabilityOut]:
     except Exception as error:  # noqa: BLE001 - a probe must never 500
         ocr_ok, ocr_detail = False, f"probe failed: {error}"
 
+    # A scanned PDF needs its pages rendered before the engine can read them.
+    renderer = importlib.util.find_spec("pypdfium2") is not None
+    scanned_detail = (
+        "pages rendered with pypdfium2, then OCR" if ocr_ok and renderer
+        else "no OCR engine" if not ocr_ok
+        else "pypdfium2 is not installed; a scanned PDF is UNREADABLE"
+    )
+
     return {
         "pdf_text_layer": CapabilityOut(available=True, detail="pypdf"),
         "ocr": CapabilityOut(available=ocr_ok, detail=ocr_detail),
-        "classification": CapabilityOut(available=True, detail="deterministic keyword vote"),
-        "extraction": CapabilityOut(available=True, detail="deterministic, regex-line 1.0"),
+        "scanned_pdf": CapabilityOut(available=ocr_ok and renderer, detail=scanned_detail),
+        "classification": CapabilityOut(
+            available=True,
+            detail="deterministic keyword vote; multi-panel reports read panel by panel",
+        ),
+        "extraction": CapabilityOut(
+            available=True, detail=f"deterministic, {EXTRACTOR} {EXTRACTOR_VERSION}",
+        ),
         "finding_detection": CapabilityOut(
             available=True,
             detail=(

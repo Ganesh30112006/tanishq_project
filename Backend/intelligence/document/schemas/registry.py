@@ -339,3 +339,16 @@ def get_schema(report_type: ReportType) -> ReportSchema | None:
 
 def known_schema_types() -> list[ReportType]:
     return sorted(_SCHEMAS, key=lambda rt: rt.value)
+
+
+def panel_of(analyte: str) -> ReportType | None:
+    """The one panel whose schema defines ``analyte``, or None.
+
+    Each analyte is defined by exactly one schema, so a test printed outside
+    its usual panel - a calcium on a kidney panel, a glucose on a health check
+    - still has one set of plausibility bounds that applies to it.
+    """
+    for report_type, schema in _SCHEMAS.items():
+        if schema.spec(analyte) is not None:
+            return report_type
+    return None

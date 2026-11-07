@@ -18,10 +18,17 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 from intelligence.document.classification import classify
+from intelligence.document.classification.panels import (
+    URINE_ANALYTES,
+    first_panel_offset,
+    headings,
+    in_non_blood_section,
+    multi_panel,
+)
 from intelligence.document.contracts import (
     ClassificationResult,
     ClassificationStatus,
@@ -128,6 +135,46 @@ class DocumentResult:
         return next(status for status in order if status in statuses)
 
 
+#: How sure OCR must be of the very number it read. The page's average does not
+#: answer this: a misread AST of 215 for 27.5 sat on a page averaging 0.85. Two
+#: misreads were seen on rendered reports, at 0.86 and 0.93 (an ALP of 147 as 447);
+#: this floor kept 108 of 114 correct numbers on low-quality scans. Two misreads
+#: are thin evidence and a digit can be misread confidently, so this is a guard,
+#: not a measurement of OCR accuracy: the screen also tells the patient to check a
+#: scan's numbers against the printed report. A gold corpus should re-set it.
+OCR_NUMBER_FLOOR = 0.94
+
+
+def _number_confidence(ocr: OcrResult, raw) -> float | None:
+    """OCR's confidence in this value's number. None if the engine gives no spans.
+
+    0.0 when it gives spans but none holds the number: the row was rebuilt from
+    words, so a number that cannot be found among them cannot be vouched for.
+    """
+    if not ocr.word_spans:
+        return None
+    start, end = raw.char_span
+    found = [
+        confidence
+        for word_start, word_end, confidence in ocr.word_spans
+        if start <= word_start < end and raw.value_text in ocr.text[word_start:word_end]
+    ]
+    return min(found, default=0.0)
+
+
+def _refuse(validated: ValidatedValue, reason: str, why: str) -> None:
+    """Withdraw a value's identity: what it measured is not what its name says.
+
+    The analyte is cleared as well as the status, so a urine creatinine cannot
+    go on to "conflict" with - and knock out - the serum creatinine that is
+    on the same report.
+    """
+    validated.issues.append(f"{validated.analyte or validated.printed_label} {why}")
+    validated.analyte = None
+    validated.status = ValueStatus.AMBIGUOUS
+    validated.reason = reason
+
+
 def _section_index(text: str) -> list[tuple[int, str]]:
     """(char offset, heading) for each heading line, in order."""
     marks: list[tuple[int, str]] = []
@@ -153,15 +200,15 @@ def _section_for(offset: int, marks: list[tuple[int, str]]) -> str:
 def _count_forgone(text: str, ocr_confidence: float | None) -> int:
     """Count the results an unclassified document appears to hold.
 
-    Extraction here is schema-driven: without a report type there is no schema,
-    so the document goes to a person and yields nothing. That is the safe
-    choice, and it has a price - a multi-panel report the classifier cannot
-    name may carry a dozen results that would have validated perfectly.
+    Without a report type, a document that is not a recognisable multi-panel
+    report goes to a person and yields nothing. That is the safe choice, and
+    it has a price - such a document may carry results that would have
+    validated perfectly.
 
     This counts them and throws them away. The number crosses the boundary;
-    the values do not. Knowing how often abstaining costs real evidence is
-    what would justify a second-stage strategy later, and guessing at that
-    prevalence is how unnecessary complexity gets built.
+    the values do not. It is how the multi-panel reading was justified: on the
+    laboratory sample reports measured on 2026-11-02, nine in thirteen were
+    health checks this count said were being lost.
     """
     try:
         return sum(
@@ -210,6 +257,14 @@ def process_document(
         result.issues.append(Issue("OCR_LOW_CONFIDENCE", "MEDIUM", ocr.detail))
 
     classification = classify(text)
+    marks = headings(text)
+    panels = multi_panel(text, classification, marks)
+    if panels:
+        classification = replace(
+            classification, status=ClassificationStatus.MULTI_PANEL,
+            report_type=None, reason="several_panels", panels=panels,
+            detail="several panels: " + ", ".join(p.value for p in panels),
+        )
     result.classification = classification
     if classification.status is ClassificationStatus.REVIEW_REQUIRED:
         result.issues.append(
@@ -223,20 +278,39 @@ def process_document(
 
     report_type = classification.report_type
     result.report_type = report_type
-    schema = get_schema(report_type)
+    schema = get_schema(report_type) if report_type else None
 
-    marks = _section_index(text)
+    sections = _section_index(text)
     page_breaks = _page_breaks(layer, ocr)
     raws = extract_raw_values(text, page_breaks=page_breaks)
+    # Nothing above a multi-panel report's first panel heading is read: that
+    # is the patient block, where the document has not yet said what follows.
+    first_panel = first_panel_offset(marks) if panels else None
 
     for raw in raws:
         validated = validate_value(
             raw, schema=schema,
             ocr_confidence=ocr.mean_confidence if ocr else None,
         )
+        at = raw.char_span[0]
+        if first_panel is not None and at < first_panel:
+            _refuse(validated, "outside_any_panel",
+                    "printed above the report's first panel heading")
+        elif validated.analyte and validated.analyte not in URINE_ANALYTES and (
+            in_non_blood_section(
+                at, marks, starts_non_blood=report_type is ReportType.URINALYSIS,
+            )
+        ):
+            _refuse(validated, "not_a_blood_sample",
+                    "printed under a heading that names a non-blood sample")
+        elif ocr is not None and validated.persists_clinical_value:
+            confidence = _number_confidence(ocr, raw)
+            if confidence is not None and confidence < OCR_NUMBER_FLOOR:
+                _refuse(validated, "ocr_number_uncertain",
+                        f"was read by OCR with only {confidence:.2f} confidence in the number")
         provenance = build_provenance(
             raw, source_sha256=sha256, text_source=source,
-            section=_section_for(raw.char_span[0], marks),
+            section=_section_for(at, sections),
             ocr_provider=ocr.provider if ocr else "",
             ocr_confidence=ocr.mean_confidence if ocr else None,
         )
@@ -283,10 +357,10 @@ def _get_text(
 
 
 def _page_breaks(layer: TextLayerResult | None, ocr: OcrResult | None) -> list[int]:
-    # Page mapping for OCR/text-layer output is refined in Phase 3+. For now a
-    # single page is assumed unless a provider gives us more; provenance still
-    # carries the token page from OCR where available.
-    return []
+    """Where pages two onward begin in the text the values were read from."""
+    source = ocr if ocr is not None and ocr.produced_text else layer
+    starts = source.page_starts if source is not None else ()
+    return list(starts[1:])
 
 
 def _ocr_issue_code(raw_code: str) -> str:
@@ -368,8 +442,22 @@ def _summarise(result: DocumentResult) -> None:
                 ),
             ))
 
+    multi = (
+        result.classification is not None
+        and result.classification.status is ClassificationStatus.MULTI_PANEL
+    )
+    if multi:
+        result.issues.append(Issue(
+            "MULTI_PANEL_REPORT", "LOW",
+            ", ".join(p.value for p in result.classification.panels),
+        ))
+
     high = any(i.severity == "HIGH" for i in result.issues)
-    if observed and not high and result.completeness is not None and (
+    if multi:
+        # Each value stands on its own checks; no schema says what the whole
+        # document should hold, so the document as a whole is never "complete".
+        result.disposition = Disposition.NEEDS_REVIEW
+    elif observed and not high and result.completeness is not None and (
         result.completeness.outcome is CompletenessOutcome.COMPLETE
     ):
         result.disposition = Disposition.EXTRACTED

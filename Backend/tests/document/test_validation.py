@@ -11,6 +11,8 @@ out-of-range value is not.
 """
 from __future__ import annotations
 
+import pytest
+
 from intelligence.document.contracts import ReferenceStatus, ReportType, ValueStatus
 from intelligence.document.extraction.analytes import RawExtraction
 from intelligence.document.schemas import get_schema
@@ -105,8 +107,17 @@ def test_validation_without_a_schema_still_computes_status_and_reference():
     result = validate_value(_raw("Hemoglobin", 14.0, "g/dL", "13.0 - 17.0"), schema=None)
     assert result.analyte == "hemoglobin"
     assert result.reference_status is ReferenceStatus.WITHIN
-    # No schema means no plausibility ceiling, so it cannot be INVALID here.
     assert result.status is ValueStatus.OBSERVED
+
+
+def test_a_test_outside_the_report_s_panel_is_held_to_its_own_panel_s_bounds():
+    """A creatinine on a CBC-typed report, or any value on a multi-panel one,
+    used to be checked against no plausibility bounds at all."""
+    for schema in (CBC, None):
+        result = validate_value(_raw("Creatinine", 85.0, "mg/dL", "0.6 - 1.2"), schema=schema)
+        assert result.analyte == "creatinine"
+        assert result.status is ValueStatus.INVALID
+        assert result.reason == "outside_plausibility_bounds"
 
 
 # --- the result and its range must be the same quantity -------------
@@ -215,21 +226,34 @@ class TestAPlateletCountIsNotGuessedFromItsAnalyte:
         assert result.status is ValueStatus.AMBIGUOUS
         assert result.reason == "no_unit"
 
-    def test_a_printed_scale_is_read_and_refused_for_the_honest_reason(self):
-        """"lakh/uL" is a unit, and this system does not have a rule for it.
-        Saying "no unit" would be untrue and would mislead whoever reviews the
-        refusal."""
+    def test_a_printed_lakh_scale_is_converted_by_its_rule(self):
+        """Reading lakh/uL was unpaused on 2026-10-21. A *printed* lakh unit is
+        converted by an explicit, versioned rule - that is reading the report,
+        not guessing the scale from the analyte (see the bare-number test)."""
         result = validate_value(
             _raw("Platelet Count", 2.3, "lakh/\u00b5L", "1.5 - 4.5 lakh/\u00b5L")
         )
         assert result.unit == "lakh/\u00b5L"
+        assert result.status is ValueStatus.OBSERVED
+        assert result.normalized.value == pytest.approx(230.0)
+        assert result.normalized.unit == "10^9/L"
+        assert result.normalized.rule_version  # the rule that did it is recorded
+        assert result.persists_clinical_value
+
+    def test_a_scale_with_no_rule_is_refused_for_the_honest_reason(self):
+        """A printed unit the table does not know is still a unit. Saying "no
+        unit" would be untrue and would mislead whoever reviews the refusal."""
+        result = validate_value(_raw("Platelet Count", 2.3, "crore/\u00b5L"))
+        assert result.unit == "crore/\u00b5L"
         assert result.status is ValueStatus.AMBIGUOUS
         assert result.reason == "unit_not_convertible_for_analyte"
         assert not result.persists_clinical_value
 
-    def test_neither_scale_is_silently_converted_into_the_other(self):
-        lakh = validate_value(_raw("Platelet Count", 2.3, "lakh/\u00b5L"))
-        assert lakh.normalized is None or not lakh.normalized.convertible
+    def test_lakh_is_a_platelet_scale_only(self):
+        """No other count in scope is printed in lakhs, so no other analyte
+        gets the rule: a lakh WBC is refused, not converted."""
+        wbc = validate_value(_raw("Total Leucocyte Count", 2.3, "lakh/\u00b5L"))
+        assert wbc.normalized is None or not wbc.normalized.convertible
 
     def test_the_conventional_units_are_read_normally(self):
         for unit, value in (("/\u00b5L", 230000), ("10^9/L", 240)):

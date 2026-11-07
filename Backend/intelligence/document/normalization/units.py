@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 #: Bump whenever a factor changes. Callers persist this next to the value.
-RULESET_VERSION = "document-units-2024.2"
+RULESET_VERSION = "document-units-2026.1"  # 2026.1: Indian count units (cumm, cu.mm, 10~9/L), lakhs, µ
 
 CANONICAL_UNIT: dict[str, str] = {
     # --- glycaemia. Three separate analytes on purpose: a fasting and a
@@ -107,6 +107,12 @@ _RULES: dict[tuple[str, str], tuple[float, float]] = {
     ("platelets", "10^9/l"): (1.0, 0.0),
     ("platelets", "10^3/ul"): (1.0, 0.0),
     ("platelets", "/ul"): (0.001, 0.0),
+    # Indian reports print platelets in lakhs: 2.45 lakhs/cumm is 245,000 per
+    # µL, which is 245 x10^9/L. Platelets only - no other count in scope is
+    # printed in lakhs, and a rule nobody prints is a rule nobody tested.
+    # NOT mirrored in apps.common.units: that table feeds the clinical record,
+    # and widening it would make the existing path read more, not less.
+    ("platelets", "10^5/ul"): (100.0, 0.0),
     ("fasting_glucose", "mg/dl"): (0.0555, 0.0),
     ("fasting_glucose", "mmol/l"): (1.0, 0.0),
     ("random_glucose", "mg/dl"): (0.0555, 0.0),
@@ -204,6 +210,29 @@ _UNIT_ALIASES = {
     "ng/ml": "ng/ml", "ng/mL": "ng/ml", "ug/l": "ng/ml",
     "µg/l": "ng/ml", "μg/l": "ng/ml",
 
+    # --- Indian count units. "cumm" and "cmm" are cubic millimetres, and one
+    # cubic millimetre is one microlitre, so these are the /µL forms by
+    # definition, not by approximation.
+    "/cumm": "/ul", "cells/cumm": "/ul", "/cmm": "/ul", "cells/cmm": "/ul",
+    "/mm3": "/ul", "/mm^3": "/ul", "cells/mm3": "/ul",
+    "10^3/cumm": "10^3/ul", "x10^3/cumm": "10^3/ul", "thou/cumm": "10^3/ul",
+    "10^3/cmm": "10^3/ul", "thou/ul": "10^3/ul",
+    "mill/cumm": "10^6/ul", "million/cumm": "10^6/ul", "mill/cmm": "10^6/ul",
+    "million/cmm": "10^6/ul", "10^6/cumm": "10^6/ul", "x10^6/cumm": "10^6/ul",
+    "mill/mm3": "10^6/ul",
+    "lakhs/cumm": "10^5/ul", "lakh/cumm": "10^5/ul", "lakhs/cmm": "10^5/ul",
+    "lakh/cmm": "10^5/ul", "lakhs/ul": "10^5/ul", "lakh/ul": "10^5/ul",
+    "lakhs/mm3": "10^5/ul", "10^5/ul": "10^5/ul", "x10^5/ul": "10^5/ul",
+    # The same cubic millimetre printed with a dot, as on real lab reports.
+    "/cu.mm": "/ul", "cells/cu.mm": "/ul", "/c.mm": "/ul", "cells/c.mm": "/ul",
+    "10^3/cu.mm": "10^3/ul", "thou/cu.mm": "10^3/ul",
+    "mill/cu.mm": "10^6/ul", "million/cu.mm": "10^6/ul",
+    "lakhs/cu.mm": "10^5/ul", "lakh/cu.mm": "10^5/ul",
+    # One laboratory's font maps the caret to a tilde: its "10~9/L" prints
+    # as 10^9/L on the page. Seen on downloaded sample reports, 2026-11-02.
+    "10~9/l": "10^9/l", "10~12/l": "10^12/l", "10~3/ul": "10^3/ul",
+    "10~6/ul": "10^6/ul",
+
     # --- counts and indices -----------------------------------------
     "l/l": "l/l",
     "10^12/l": "10^12/l", "x10^12/l": "10^12/l", "10*12/l": "10^12/l",
@@ -249,7 +278,13 @@ def normalize_unit_token(unit: str) -> str | None:
     if token in _UNIT_ALIASES:
         return _UNIT_ALIASES[token]
     lowered = token.lower()
-    return _UNIT_ALIASES.get(lowered)
+    if lowered in _UNIT_ALIASES:
+        return _UNIT_ALIASES[lowered]
+    # The micro prefix arrives as the micro sign (U+00B5), the Greek mu
+    # (U+03BC) or a plain "u" depending on the lab's software; all three mean
+    # the same prefix. Only the spellings the table already knows with "u"
+    # resolve, so this widens nothing but the character.
+    return _UNIT_ALIASES.get(lowered.replace("µ", "u").replace("μ", "u"))
 
 
 def normalize_value(

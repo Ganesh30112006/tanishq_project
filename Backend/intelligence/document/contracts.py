@@ -53,6 +53,10 @@ class OcrOutcome(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style 
 class ClassificationStatus(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
     CLASSIFIED = "CLASSIFIED"
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    #: No one type fits, and the document names two or more blood panels in
+    #: its own headings - a health-check package. Read panel by panel; see
+    #: :mod:`intelligence.document.classification.panels`.
+    MULTI_PANEL = "MULTI_PANEL"
 
 
 class CompletenessOutcome(str, Enum):  # noqa: UP042 - str mixin kept for JSON/DRF-style serialisation
@@ -201,6 +205,8 @@ class TextLayerResult:
     pages: int
     chars: int
     detail: str = ""
+    #: Offset into ``text`` at which each page begins, first page first.
+    page_starts: tuple[int, ...] = ()
 
     @property
     def usable(self) -> bool:
@@ -235,6 +241,11 @@ class OcrResult:
     text: str = ""
     mean_confidence: float | None = None
     detail: str = ""
+    #: Offset into ``text`` at which each page begins, first page first.
+    page_starts: tuple[int, ...] = ()
+    #: (start, end, confidence) of each word in ``text``, where the engine gives
+    #: one, so a single number's confidence can be asked for.
+    word_spans: tuple[tuple[int, int, float], ...] = ()
 
     @property
     def produced_text(self) -> bool:
@@ -252,3 +263,5 @@ class ClassificationResult:
     #: One short machine-readable token saying why the status is what it is,
     #: so a caller can route without parsing prose. Empty when CLASSIFIED.
     reason: str = ""
+    #: The blood panels a MULTI_PANEL document names. Empty otherwise.
+    panels: tuple[ReportType, ...] = ()

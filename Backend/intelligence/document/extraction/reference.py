@@ -44,6 +44,9 @@ _LOWER = re.compile(
     rf"(?P<unit>{_UNIT})?\s*$",
     re.I,
 )
+#: Two numbers with nothing between them. OCR regularly loses the thin dash of
+#: "12.0 - 15.0". Never on a text layer, where the dash would have survived.
+_DASH_LOST = re.compile(rf"^\s*(?P<low>{_NUMBER})\s+(?P<high>{_NUMBER})\s*$")
 _QUALITATIVE = {
     "negative", "positive", "nil", "absent", "not detected", "non-reactive",
     "reactive", "trace", "normal", "see comment", "see note",
@@ -73,10 +76,20 @@ def _number(token: str) -> float:
     return float(token.replace(",", ""))
 
 
-def parse_reference_range(text: str) -> ReferenceRange:
+def parse_reference_range(text: str, *, dash_may_be_lost: bool = False) -> ReferenceRange:
+    """``dash_may_be_lost``: the text came from OCR. Two numbers are then an
+    interval, but only rising: a dash lost from a range always leaves the low
+    end first, so any other order was not a range.
+    """
     raw = (text or "").strip().strip("()[]").strip()
     if not raw:
         return ReferenceRange(text="", kind="absent")
+    if dash_may_be_lost:
+        lost = _DASH_LOST.match(raw)
+        if lost and _number(lost["low"]) < _number(lost["high"]):
+            return ReferenceRange(
+                text=raw, low=_number(lost["low"]), high=_number(lost["high"]), kind="interval",
+            )
 
     cleaned = raw.replace("–", "-").replace("—", "-")
 

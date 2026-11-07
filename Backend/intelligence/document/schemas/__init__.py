@@ -20,13 +20,14 @@ from intelligence.document.schemas.completeness import (
     assess_completeness,
 )
 from intelligence.document.schemas.model import ReportFieldSpec, ReportSchema
-from intelligence.document.schemas.registry import get_schema, known_schema_types
+from intelligence.document.schemas.registry import get_schema, known_schema_types, panel_of
 
 __all__ = [
     "ReportFieldSpec",
     "ReportSchema",
     "get_schema",
     "known_schema_types",
+    "panel_of",
     "ExtractedValue",
     "FieldOutcome",
     "CompletenessReport",

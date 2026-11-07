@@ -29,6 +29,8 @@ class Provenance:
     extractor_version: str
     ocr_confidence: float | None
     extraction_confidence: float
+    #: On a cumulative report, the dated column the value was read from.
+    column: str = ""
 
 
 def build_provenance(
@@ -52,4 +54,5 @@ def build_provenance(
         extractor_version=raw.extractor_version,
         ocr_confidence=ocr_confidence if text_source is TextSource.OCR else None,
         extraction_confidence=raw.extraction_confidence,
+        column=raw.column,
     )

@@ -16,14 +16,38 @@ from intelligence.document.schemas.registry import get_schema, known_schema_type
 _EXTRA_ALIASES: dict[str, str] = {
     # --- full blood count -------------------------------------------
     "haemoglobin": "hemoglobin", "hb": "hemoglobin", "hgb": "hemoglobin",
+    # The abbreviation in brackets, as Indian reports print it. Listed one by
+    # one rather than by stripping brackets in general: "Glucose (Fasting)"
+    # and "Calcium (Ionised)" carry their meaning in the brackets.
+    "hemoglobin (hb)": "hemoglobin", "haemoglobin (hb)": "hemoglobin",
+    "hemoglobin (hgb)": "hemoglobin", "haemoglobin (hgb)": "hemoglobin",
+    "hb (hemoglobin)": "hemoglobin", "hb (haemoglobin)": "hemoglobin",
     "haematocrit": "hematocrit", "hct": "hematocrit", "pcv": "hematocrit",
     "packed cell volume": "hematocrit",
     "red blood cell count": "rbc", "red cell count": "rbc",
     "rbc count": "rbc", "erythrocyte count": "rbc", "total rbc": "rbc",
     "total leucocyte count": "wbc", "total leukocyte count": "wbc",
     "tlc": "wbc", "white blood cell count": "wbc", "white cell count": "wbc",
+    # Name and abbreviation together, as Max Lab prints them. Its IFCC HbA1c is
+    # left out on purpose: that one is in mmol/mol, not the percentage.
+    "total leucocyte count (tlc)": "wbc",
+    "glycosylated haemoglobin(hb a1c)": "hba1c",
+    "sgot- aspartate transaminase (ast)": "ast",
+    "sgpt- alanine transaminase (alt)": "alt",
+    "ggtp (gamma gt), serum": "ggt",
+    # As Dr Lal PathLabs prints them.
+    "urea nitrogen blood": "bun",
+    "alkaline phosphatase (alp)": "alp",
     "leucocyte count": "wbc", "wbc count": "wbc",
     "platelet count": "platelets", "plt": "platelets",
+    "total platelet count": "platelets", "platelets count": "platelets",
+    "wbc count (tlc)": "wbc", "total wbc count": "wbc", "total leucocytes count": "wbc",
+    "rbc count (red blood cells)": "rbc", "total rbc count": "rbc",
+    # The name and its abbreviation together, as real Indian reports print
+    # them - each one seen on a downloaded laboratory sample report.
+    "erythrocyte (rbc) count": "rbc", "total leucocytes (wbc) count": "wbc",
+    "pcv (packed cell volume)": "hematocrit", "mcv (mean corpuscular volume)": "mcv",
+    "mch (mean corpuscular hb)": "mch", "mchc (mean corpuscular hb concn.)": "mchc",
     "mean corpuscular volume": "mcv", "mean cell volume": "mcv",
     "mean corpuscular hemoglobin": "mch",
     "mean corpuscular haemoglobin": "mch", "mean cell hemoglobin": "mch",
@@ -33,16 +57,14 @@ _EXTRA_ALIASES: dict[str, str] = {
     "serum ferritin": "ferritin", "ferritin level": "ferritin",
     # The differential. Every one of these names the PERCENTAGE; an absolute
     # count carries a unit the rule table refuses to convert, so it is held for
-    # review rather than compared against a percentage interval.
+    # review rather than compared against a percentage interval. A label that
+    # says "absolute" is never resolved at all - see _NEVER_RESOLVE.
     "neutrophil": "neutrophils", "neutrophil count": "neutrophils",
     "polymorphs": "neutrophils", "polymorphonuclear cells": "neutrophils",
-    "segmented neutrophils": "neutrophils", "anc": "neutrophils",
-    "absolute neutrophil count": "neutrophils",
+    "segmented neutrophils": "neutrophils",
     "lymphocyte": "lymphocytes", "lymphocyte count": "lymphocytes",
-    "absolute lymphocyte count": "lymphocytes",
     "monocyte": "monocytes", "monocyte count": "monocytes",
     "eosinophil": "eosinophils", "eosinophil count": "eosinophils",
-    "absolute eosinophil count": "eosinophils", "aec": "eosinophils",
     "basophil": "basophils", "basophil count": "basophils",
 
     # --- lipids -----------------------------------------------------
@@ -50,6 +72,13 @@ _EXTRA_ALIASES: dict[str, str] = {
     "serum cholesterol": "cholesterol",
     "hdl cholesterol": "hdl", "hdl-c": "hdl", "hdl - c": "hdl",
     "ldl cholesterol": "ldl", "ldl-c": "ldl", "ldl - c": "ldl",
+    # Calculated (Friedewald) and directly measured LDL are both LDL
+    # cholesterol in the same unit, read against the same targets.
+    "ldl cholesterol (calculated)": "ldl", "ldl cholesterol calculated": "ldl",
+    "ldl (calculated)": "ldl", "ldl cholesterol (direct)": "ldl",
+    "ldl cholesterol direct": "ldl", "direct ldl": "ldl", "ldl direct": "ldl",
+    "hdl cholesterol (direct)": "hdl", "hdl cholesterol direct": "hdl",
+    "hdl direct": "hdl", "direct hdl": "hdl",
     "triglyceride": "triglycerides", "tg": "triglycerides", "trig": "triglycerides",
 
     # --- glycaemia. Which sample was taken changes the answer, so a label
@@ -59,6 +88,12 @@ _EXTRA_ALIASES: dict[str, str] = {
     "fasting plasma glucose": "fasting_glucose",
     "blood sugar fasting": "fasting_glucose", "fbs": "fasting_glucose",
     "fbg": "fasting_glucose", "glucose fasting": "fasting_glucose",
+    "glucose fasting (fbs)": "fasting_glucose", "glucose (fasting)": "fasting_glucose",
+    "fasting blood sugar (fbs)": "fasting_glucose", "blood sugar (fasting)": "fasting_glucose",
+    "plasma glucose fasting": "fasting_glucose", "glucose fasting plasma": "fasting_glucose",
+    "glucose post prandial (ppbs)": "random_glucose", "glucose post prandial": "random_glucose",
+    "glucose (post prandial)": "random_glucose", "post prandial blood sugar (ppbs)": "random_glucose",
+    "glucose random (rbs)": "random_glucose", "glucose (random)": "random_glucose",
     "random blood sugar": "random_glucose", "rbs": "random_glucose",
     "random glucose": "random_glucose", "glucose random": "random_glucose",
     "post prandial blood sugar": "random_glucose", "ppbs": "random_glucose",
@@ -115,6 +150,7 @@ _EXTRA_ALIASES: dict[str, str] = {
     "free t4": "free_t4", "ft4": "free_t4", "free thyroxine": "free_t4",
     "free t3": "free_t3", "ft3": "free_t3",
     "free triiodothyronine": "free_t3",
+    "free triiodothyronine (ft3)": "free_t3", "free thyroxine (ft4)": "free_t4",
 
     # --- electrolytes -----------------------------------------------
     "serum sodium": "sodium", "na": "sodium", "na+": "sodium",
@@ -144,6 +180,15 @@ _NEVER_RESOLVE: frozenset[str] = frozenset({
     "indirect bilirubin", "unconjugated bilirubin",
     # Globulin and the A/G ratio are derived from albumin and total protein.
     "globulin", "a g ratio", "albumin globulin ratio",
+    # An absolute differential count is a different measurement from the
+    # percentage. Resolved to the percentage's name, a report printing both -
+    # most Indian CBCs do - looked like one test reported twice with two
+    # values, and the correctly read percentage was held as a conflict.
+    "absolute neutrophil count", "absolute neutrophils count", "anc",
+    "absolute lymphocyte count", "absolute lymphocytes count",
+    "absolute monocyte count", "absolute monocytes count",
+    "absolute eosinophil count", "absolute eosinophils count", "aec",
+    "absolute basophil count", "absolute basophils count",
 })
 
 _PUNCT = re.compile(r"[^a-z0-9 ]+")

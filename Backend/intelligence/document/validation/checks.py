@@ -52,6 +52,7 @@ from intelligence.document.normalization.units import (
     normalize_value,
 )
 from intelligence.document.schemas.model import ReportSchema
+from intelligence.document.schemas.registry import get_schema, panel_of
 
 _FLAG_TO_STATUS = {
     "H": ReferenceStatus.ABOVE, "HH": ReferenceStatus.ABOVE,
@@ -185,7 +186,9 @@ def validate_value(
     if analyte is None:
         issues.append(f"unrecognised analyte {raw.label!r}")
 
-    reference = parse_reference_range(raw.reference_text)
+    reference = parse_reference_range(
+        raw.reference_text, dash_may_be_lost=ocr_confidence is not None,
+    )
     if raw.reference_text and reference.kind == "unparsed":
         issues.append(f"reference range {raw.reference_text!r} could not be parsed")
 
@@ -270,7 +273,13 @@ def _classify(
         return ValueStatus.AMBIGUOUS, "unit_not_convertible_for_analyte"
 
     # 3. The fact is established. Is the number one the assay can produce?
+    #    The bounds are the test's own panel's, wherever it is printed: a
+    #    creatinine on a CBC-typed report, or anything on a multi-panel one,
+    #    used to be checked against no bounds at all.
     spec = schema.spec(analyte) if schema else None
+    if spec is None:
+        owner = panel_of(analyte)
+        spec = get_schema(owner).spec(analyte) if owner else None
     if spec is not None:
         lo, hi = spec.min_value, spec.max_value
         value = normalized.value

@@ -120,7 +120,10 @@ def test_an_absolute_count_is_never_read_against_a_percentage_interval(case):
     result = _validate(case.line)
     assert result.status in case.allowed
     if case.must_not_persist:
-        assert result.reason == "unit_not_convertible_for_analyte"
+        # Refused by its name when it says "absolute", by its unit otherwise.
+        assert result.reason == (
+            "unit_not_convertible_for_analyte" if case.analyte else "unrecognised_analyte"
+        )
 
 
 # --- what OCR does to numbers ----------------------------------------
