@@ -7,7 +7,7 @@ consent screen that only staff can see is not consent.
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -37,6 +37,21 @@ def _own_patient(request: Request) -> Patient:
     if patient is None:
         raise ResourceNotFound("No patient record is linked to this account.")
     return patient
+
+
+class ConsentDocumentsView(APIView):
+    """The consent wording in force, for the sign-up page.
+
+    Public because it is shown before an account exists: agreement given at
+    sign-up has to be agreement to the exact text that is then recorded.
+    Contains no personal data.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request: Request) -> Response:
+        return Response({"documents": privacy_service.published_documents()})
 
 
 class MyConsentView(APIView):

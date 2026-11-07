@@ -125,6 +125,27 @@ class PrivacyService(BaseService):
             return
         self.require_consent(patient, purpose)
 
+    def permits(self, patient, purpose: str) -> bool:
+        """``enforce_if_published`` as a yes/no, for callers that hold back
+        rather than refuse: unpublished wording permits, published wording
+        needs an active grant."""
+        return self.current_document(purpose) is None or self.has_consent(patient, purpose)
+
+    def published_documents(self) -> list[dict]:
+        """The wording in force for every purpose that has any, verbatim."""
+        out = []
+        for purpose in ConsentPurpose.values:
+            document = self.current_document(purpose)
+            if document is not None:
+                out.append({
+                    "purpose": purpose,
+                    "label": ConsentPurpose(purpose).label,
+                    "version": document.version,
+                    "body": document.body,
+                    "is_essential": document.is_essential,
+                })
+        return out
+
     def unconfigured_purposes(self) -> list[str]:
         """Purposes with no published wording, and so no consent enforcement."""
         return [
@@ -150,6 +171,7 @@ class PrivacyService(BaseService):
                     "granted_at": grant.granted_at if grant else None,
                     "withdrawn_at": grant.withdrawn_at if grant else None,
                     "document_version": document.version if document else None,
+                    "body": document.body if document else "",
                     "is_essential": document.is_essential if document else False,
                 }
             )

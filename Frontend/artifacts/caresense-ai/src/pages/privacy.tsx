@@ -13,12 +13,14 @@ import { ArrowLeft, Ban, Eye, FileLock2, Server, UserCheck } from 'lucide-react'
 import { BrandMark } from '@/components/error-page';
 
 const POLICY = {
-  version: '1',
-  effective: '21 October 2026',
-  organisation: '',
-  contactEmail: '',
-  grievanceOfficer: '',
-  dataLocation: '',
+  version: '2',
+  effective: '8 November 2026',
+  // Set at build time; a production build refuses to run while any is empty
+  // (vite.config.ts), so the "to be published" placeholder never reaches users.
+  organisation: (import.meta.env.VITE_POLICY_ORGANISATION as string | undefined) ?? '',
+  contactEmail: (import.meta.env.VITE_POLICY_CONTACT_EMAIL as string | undefined) ?? '',
+  grievanceOfficer: (import.meta.env.VITE_POLICY_GRIEVANCE_OFFICER as string | undefined) ?? '',
+  dataLocation: (import.meta.env.VITE_POLICY_DATA_LOCATION as string | undefined) ?? '',
 };
 
 const PENDING = 'to be published before launch';
@@ -33,7 +35,7 @@ const SECTIONS: { id: string; title: string }[] = [
   { id: 'protect', title: 'How we protect it' },
   { id: 'rights', title: 'Your rights' },
   { id: 'children', title: 'Children' },
-  { id: 'medical', title: 'Not medical advice' },
+  { id: 'medical', title: 'Not medical advice, and our limits' },
   { id: 'changes', title: 'Changes to this policy' },
   { id: 'contact', title: 'Contact and complaints' },
 ];
@@ -142,15 +144,23 @@ export default function PrivacyPolicy({ standalone = false }: { standalone?: boo
               <><strong>Complain</strong> to our grievance officer, and if you are not satisfied, to the Data Protection Board of India.</>,
               <><strong>Nominate</strong> someone to act for you if you die or cannot act yourself.</>,
             ]} />
-            <p>To use any of these rights, write to us at <Fill value={POLICY.contactEmail} />. Controls for this inside the app are on the way.</p>
+            <p>You can withdraw consent and ask us to delete your data yourself, in <strong>Settings</strong>. For the other rights, write to us at <Fill value={POLICY.contactEmail} />.</p>
           </Part>
 
           <Part n={9} id="children" title="Children">
             <p>CareSense is meant for adults. If you are under 18, a parent or legal guardian must create and manage the account, and must agree to this policy for you.</p>
           </Part>
 
-          <Part n={10} id="medical" title="Not medical advice">
+          <Part n={10} id="medical" title="Not medical advice, and our limits">
             <p>CareSense explains reports. It does not diagnose, and it can be wrong. Always show your results to a doctor before you make any decision about your health. If you feel unwell, do not wait - contact a doctor or call 112.</p>
+            <p>You should also know what has not been proven about CareSense:</p>
+            <List items={[
+              <><strong>Reading your report.</strong> We have not yet measured how often our AI reads a report correctly. We have only tried it on a small number of sample reports. It reads some report layouts poorly or not at all, and it can miss results, even ones your lab marked high or low, so please read your full report too. Scans and photos are more likely to be misread, so please check each number against your printed report.</>,
+              <><strong>Possible conditions.</strong> Our checks are based on standard medical guidelines, but doctors have not yet tested them on real reports. We do not know how often they are right or how often they miss something. If nothing is flagged, it does not mean you are healthy.</>,
+              <><strong>Heart risk estimate.</strong> The model was built on people in the US and has not been tested on Indian people. Heart risk in South Asians is generally higher, so it may show your risk as lower than it really is.</>,
+              <><strong>No doctor checks your results.</strong> Nobody at CareSense reviews what our AI tells you before you see it.</>,
+              <><strong>Approval.</strong> CareSense has not been approved by any medical regulator.</>,
+            ]} />
           </Part>
 
           <Part n={11} id="changes" title="Changes to this policy">

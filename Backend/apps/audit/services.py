@@ -17,6 +17,8 @@ from apps.common.enums import AuditResult
 LOGIN = "auth.login"
 LOGIN_FAILED = "auth.login.failed"
 LOGOUT = "auth.logout"
+PASSWORD_RESET_REQUEST = "auth.password_reset.request"  # noqa: S105 - an audit action name
+PASSWORD_RESET = "auth.password_reset"  # noqa: S105 - an audit action name
 PATIENT_ACCESS = "patient.access"
 RECORD_MODIFY = "record.modify"
 REPORT_UPLOAD = "report.upload"

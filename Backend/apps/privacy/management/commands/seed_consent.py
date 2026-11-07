@@ -12,39 +12,49 @@ from django.core.management.base import BaseCommand
 
 from apps.privacy.models import ConsentDocument, ConsentPurpose
 
-VERSION = "1.0"
+#: 2.0: the 1.0 wording described doctors reading the record and checking the
+#: estimate. There is no doctor in this product, so people were agreeing to
+#: something that does not happen. Documents are append-only: 1.0 stays on
+#: record for anyone who agreed to it.
+#: 3.0: says what has not been proven: accuracy is unmeasured, and the heart model
+#: has not been tested on Indian people and may show too low a risk.
+VERSION = "3.0"
 
 DOCUMENTS: list[dict] = [
     {
         "purpose": ConsentPurpose.CARE,
         "is_essential": True,
         "body": (
-            "We keep a health record for you so that the doctors treating you "
-            "can see your history, your test results and your medicines. "
-            "Without this we cannot provide care, so this one cannot be turned "
-            "off while your record is open. If you no longer want us to hold "
-            "your record, you can ask us to erase it."
+            "We keep your account and the reports you upload, so that you can "
+            "see them and our AI can read them for you. Without this the app "
+            "cannot work, so this one cannot be turned off while you have an "
+            "account. If you no longer want us to keep your data, you can ask "
+            "us to delete it in Settings."
         ),
     },
     {
         "purpose": ConsentPurpose.RISK_ANALYSIS,
         "is_essential": False,
         "body": (
-            "We can use the readings already saved in your record to work out "
-            "an estimate of your heart risk. It is only an estimate from a "
-            "computer model, it is not a diagnosis, and a doctor still has to "
-            "look at it. You can turn this off at any time and it will not "
-            "affect your treatment."
+            "We can use the readings saved in your record to work out an "
+            "estimate of your heart risk. It is only an estimate from a "
+            "computer model. It is not a diagnosis, no doctor checks it, and "
+            "the model was built on people in the US and has not been tested on "
+            "Indian people, so it may show your risk as lower than it really is. "
+            "Please show it to a "
+            "doctor before you act on it. You can turn this off at any time."
         ),
     },
     {
         "purpose": ConsentPurpose.AI_ASSISTANCE,
         "is_essential": False,
         "body": (
-            "We can use a computer program to write a short summary of what is "
-            "already in your record, so that your doctor can read it quickly. "
-            "The program only reads your own record. It does not add anything "
-            "new and it does not make decisions about your care. You can turn "
+            "Our AI can read the reports you upload and explain in simple words "
+            "what they show, including possible conditions the results may "
+            "point to. It can be wrong, it never gives a diagnosis, and no "
+            "doctor checks what it says. We have not yet measured how accurate "
+            "it is. Your reports are read on our own "
+            "systems and are not sent to any outside AI company. You can turn "
             "this off at any time."
         ),
     },
@@ -52,21 +62,21 @@ DOCUMENTS: list[dict] = [
         "purpose": ConsentPurpose.RESEARCH,
         "is_essential": False,
         "body": (
-            "We can use your readings for research to improve care, after "
+            "We can use your readings for research to improve CareSense, after "
             "removing your name, your date of birth and anything else that "
             "could identify you. Nobody doing the research will know the "
-            "readings are yours. This is entirely your choice and saying no "
-            "will not affect your treatment in any way."
+            "readings are yours. This is entirely your choice, and saying no "
+            "changes nothing else in the app."
         ),
     },
     {
         "purpose": ConsentPurpose.COMMUNICATIONS,
         "is_essential": False,
         "body": (
-            "We can send you reminders and messages about your appointments, "
-            "your reports and anything your doctor wants you to know. You can "
-            "turn this off at any time. Urgent safety messages will still "
-            "reach you."
+            "We can send you messages about your reports, for example when our "
+            "AI has finished reading one. You can turn this off at any time. "
+            "Messages about your account's safety, such as a password reset you "
+            "asked for, will still reach you."
         ),
     },
 ]

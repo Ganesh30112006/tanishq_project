@@ -1,7 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, Loader2, UserPlus } from 'lucide-react';
+import { useGetConsentDocuments } from '@workspace/api-client-react';
+import type { ConsentPurposeCode } from '@workspace/api-client-react';
+import { AiLimitsNote } from '@/components/ai-limits-note';
 import { AuthLayout } from '@/components/auth-layout';
 import { useAuth } from '@/lib/auth';
+
+/** Whole years between a YYYY-MM-DD birth date and today. */
+function ageOn(dateOfBirth: string, today: string): number {
+  const [by, bm, bd] = dateOfBirth.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0);
+}
 
 /** Today's date as YYYY-MM-DD in the person's own time zone. */
 function todayIso(): string {
@@ -28,6 +38,16 @@ export default function SignUp({ onShowLogin }: { onShowLogin: () => void }) {
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [sex, setSex] = useState<'FEMALE' | 'MALE' | 'INTERSEX' | 'UNKNOWN'>('UNKNOWN');
   const [agreed, setAgreed] = useState(false);
+  // Optional purposes start unticked: agreement has to be a choice, not a default.
+  const [chosen, setChosen] = useState<Set<ConsentPurposeCode>>(new Set());
+  const documentsQuery = useGetConsentDocuments();
+  const documents = documentsQuery.data?.documents ?? [];
+  const toggle = (purpose: ConsentPurposeCode, on: boolean) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(purpose); else next.delete(purpose);
+      return next;
+    });
   const [localError, setLocalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -51,13 +71,22 @@ export default function SignUp({ onShowLogin }: { onShowLogin: () => void }) {
       setLocalError('Please check the year of birth.');
       return;
     }
+    if (dateOfBirth && ageOn(dateOfBirth, todayIso()) < 18) {
+      setLocalError('CareSense is for people aged 18 and over. We cannot create an account for anyone younger.');
+      return;
+    }
     if (!agreed) {
-      setLocalError('Please read the privacy policy and tick the box to continue.');
+      setLocalError('Please confirm you are 18 or older and have read the privacy policy.');
+      return;
+    }
+    const missing = documents.find((d) => d.is_essential && !chosen.has(d.purpose));
+    if (missing) {
+      setLocalError(`Please agree to "${missing.label}". We cannot keep your reports without it.`);
       return;
     }
     setSubmitting(true);
     try {
-      await register({ email, fullName, password, dateOfBirth, sex });
+      await register({ email, fullName, password, dateOfBirth, sex, confirmsAdult: agreed, consents: [...chosen] });
     } catch {
       // Surfaced via the shared `error` state from useAuth.
     } finally {
@@ -113,10 +142,28 @@ export default function SignUp({ onShowLogin }: { onShowLogin: () => void }) {
           <input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={FIELD} data-testid="input-signup-confirm" />
         </label>
 
+        <AiLimitsNote />
+
         <label className="flex items-start gap-3 rounded-lg bg-secondary/60 p-4 text-[14px] leading-relaxed">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 size-[18px] shrink-0 accent-[hsl(var(--brand))]" data-testid="checkbox-signup-privacy" />
-          <span>I have read the <a href="/privacy" target="_blank" rel="noreferrer" className="font-bold text-[hsl(var(--brand))] underline underline-offset-4">privacy policy</a>. I agree that CareSense may store the reports I upload and use its AI to analyse them for me.</span>
+          <span>I am 18 or older, and I have read the <a href="/privacy" target="_blank" rel="noreferrer" className="font-bold text-[hsl(var(--brand))] underline underline-offset-4">privacy policy</a>.</span>
         </label>
+
+        {documents.length > 0 && (
+          <fieldset className="space-y-3 rounded-lg border border-border p-4" data-testid="fieldset-signup-consents">
+            <legend className="px-1 text-[13px] font-bold">What you allow us to do</legend>
+            <p className="text-[13px] leading-relaxed text-muted-foreground">You can change any of these later in Settings.</p>
+            {documents.map((doc) => (
+              <label key={doc.purpose} className="flex items-start gap-3 text-[14px] leading-relaxed">
+                <input type="checkbox" checked={chosen.has(doc.purpose)} onChange={(e) => toggle(doc.purpose, e.target.checked)} className="mt-1 size-[18px] shrink-0 accent-[hsl(var(--brand))]" data-testid={`checkbox-consent-${doc.purpose}`} />
+                <span>
+                  <strong>{doc.label}</strong>{doc.is_essential ? <span className="text-muted-foreground"> (needed to use CareSense)</span> : <span className="text-muted-foreground"> (optional)</span>}
+                  <span className="mt-0.5 block whitespace-pre-line text-[13px] text-muted-foreground">{doc.body}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        )}
 
         {message && (
           <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.06)] px-3.5 py-3 text-sm text-[hsl(var(--destructive))]" role="alert" data-testid="text-signup-error">

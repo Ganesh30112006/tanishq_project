@@ -31,11 +31,11 @@ class ConsentPurpose(models.TextChoices):
     """Consent is per purpose. A single "I agree" covering everything is not
     informed agreement, and withdrawing from one use must not end the others."""
 
-    CARE = "CARE", "Providing care and holding my health record"
+    CARE = "CARE", "Keeping my account and my reports"
     RISK_ANALYSIS = "RISK_ANALYSIS", "Automated risk estimates from my record"
-    AI_ASSISTANCE = "AI_ASSISTANCE", "AI summaries of my record"
+    AI_ASSISTANCE = "AI_ASSISTANCE", "AI reading and explaining my reports"
     RESEARCH = "RESEARCH", "De-identified data used for research"
-    COMMUNICATIONS = "COMMUNICATIONS", "Reminders and messages about my care"
+    COMMUNICATIONS = "COMMUNICATIONS", "Messages about my reports"
 
 
 class ConsentDocument(AppendOnlyModel):

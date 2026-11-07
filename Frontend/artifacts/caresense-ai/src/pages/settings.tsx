@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ArrowRight, Fingerprint, LockKeyhole, LogOut, ShieldCheck, UserRound } from 'lucide-react';
+import { ConsentControls, ErasureControl } from '@/components/privacy-controls';
 import { PageHeading, shortDate } from '@/components/ui-kit';
 import { useAuth } from '@/lib/auth';
 import { initialsOf, primaryRole, ROLE_LABEL } from '@/lib/display';
@@ -13,7 +14,7 @@ const SECTIONS = [
 ];
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const role = user ? primaryRole(user.roles) : undefined;
   return (
     <div className="page-enter">
@@ -43,9 +44,15 @@ export default function Settings() {
             <ul className="space-y-3 text-[15px] leading-relaxed">
               <li className="flex gap-3"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand))]" />We keep your account details, the reports you upload, and what our AI found in them.</li>
               <li className="flex gap-3"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand))]" />We do not sell your data and we do not use it for advertising.</li>
-              <li className="flex gap-3"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand))]" />You can ask for a copy of your data, ask us to correct it, or ask us to delete it.</li>
+              <li className="flex gap-3"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-[hsl(var(--brand))]" />You can change what you allow below, or ask us to delete your data. For a copy or a correction, write to us at the address in the privacy policy.</li>
             </ul>
             <Link href="/privacy" className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl border border-input px-4 text-sm font-bold hover:bg-secondary" data-testid="link-settings-privacy">Read the full privacy policy<ArrowRight size={15} /></Link>
+            {hasRole('PATIENT') && (
+              <div className="mt-8 space-y-8 border-t border-border pt-8">
+                <ConsentControls />
+                <ErasureControl />
+              </div>
+            )}
           </Section>
 
           <Section id="security" title="Security" detail="How your record is protected.">

@@ -86,7 +86,9 @@ def test_consent_records_the_exact_wording_agreed_to(published, linked_patient):
     grant = service.record_consent(
         patient=linked_patient, purpose=ConsentPurpose.RESEARCH, granted=True
     )
-    assert grant.document.version == "1.0"
+    from apps.privacy.management.commands.seed_consent import VERSION
+
+    assert grant.document.version == VERSION
     assert grant.document.body
 
     # Proving consent means showing the text as it stood, so it cannot be edited.
@@ -327,3 +329,51 @@ def test_the_audit_log_outlives_the_record_it_describes():
     audit = RetentionPolicy.objects.get(category=RetentionCategory.AUDIT_LOG)
     clinical = RetentionPolicy.objects.get(category=RetentionCategory.CLINICAL_RECORD)
     assert audit.retain_days > clinical.retain_days
+
+
+# --- sign-up consent ----------------------------------------------------
+def _sign_up(api_client, **extra):
+    return api_client.post(
+        "/api/v1/auth/register",
+        {"email": "consent.check@example.test", "full_name": "Consent Check",
+         "password": "a-long-enough-passphrase", "confirms_adult": True, **extra},
+        format="json",
+    )
+
+
+def test_sign_up_page_can_read_the_published_wording_without_an_account(api_client, published):
+    docs = api_client.get("/api/v1/privacy/consent/documents").json()["documents"]
+    assert {d["purpose"] for d in docs} == set(ConsentPurpose.values)
+    assert all(d["body"] and d["version"] for d in docs)
+
+
+def test_sign_up_records_exactly_the_consent_given(api_client, published):
+    from apps.patients.models import Patient
+
+    resp = _sign_up(api_client, consents=["CARE", "AI_ASSISTANCE"])
+    assert resp.status_code == 201, resp.data
+    patient = Patient.objects.get(user__email="consent.check@example.test")
+    service = PrivacyService()
+    assert service.has_consent(patient, ConsentPurpose.CARE)
+    assert service.has_consent(patient, ConsentPurpose.AI_ASSISTANCE)
+    assert not service.has_consent(patient, ConsentPurpose.RISK_ANALYSIS)
+    assert not service.has_consent(patient, ConsentPurpose.RESEARCH)
+
+
+def test_sign_up_without_the_essential_consent_creates_nothing(api_client, published):
+    from apps.accounts.models import User
+
+    resp = _sign_up(api_client, consents=["AI_ASSISTANCE"])
+    assert resp.status_code == 400
+    assert not User.objects.filter(email="consent.check@example.test").exists()
+
+
+def test_report_analysis_waits_for_ai_consent(published, make_user, make_patient):
+    from apps.reports import analysis
+    from apps.reports.models import Report, ReportAnalysis
+
+    patient = make_patient(user=make_user(Role.PATIENT))
+    report = Report.objects.create(patient=patient, uploaded_by=patient.user)
+    result = analysis.analyse(report, client=object())  # never called
+    assert result.status == ReportAnalysis.Status.UNAVAILABLE
+    assert result.reason_code == "no_consent"
