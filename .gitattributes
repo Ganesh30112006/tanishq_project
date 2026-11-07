@@ -1,0 +1,2 @@
+# Server scripts and units run on Linux; keep LF whatever the checkout OS.
+deploy/** text eol=lf

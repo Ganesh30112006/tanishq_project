@@ -1,0 +1,6 @@
+# Server settings filled in by mistake inside the repo - never commit.
+deploy/caresense.env
+
+# Local tool output and machine settings.
+.playwright-mcp/
+.claude/settings.local.json
