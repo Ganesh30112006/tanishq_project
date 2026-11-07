@@ -44,6 +44,25 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+/**
+ * Called once when an authenticated request comes back 401. Resolves true if
+ * it obtained a fresh token (the request is then retried once with it), false
+ * if the session cannot be renewed. Concurrent callers should share one
+ * renewal - a refresh token is single-use, and redeeming it twice revokes the
+ * whole session.
+ */
+export type UnauthorizedHandler = () => Promise<boolean>;
+
+let _unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  _unauthorizedHandler = handler;
+}
+
+// Endpoints that issue or end a session: a 401 from these is the answer, not
+// an expired session, and retrying them could loop.
+const NO_RENEWAL_PATHS = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout", "/auth/password-reset"];
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
@@ -351,8 +370,9 @@ export async function customFetch<T = unknown>(
 
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
-  if (_authTokenGetter && !headers.has("authorization")) {
-    const token = await _authTokenGetter();
+  const usesGetter = Boolean(_authTokenGetter) && !headers.has("authorization");
+  if (usesGetter) {
+    const token = await _authTokenGetter!();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
@@ -360,7 +380,23 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  let response = await fetch(input, { ...init, method, headers });
+
+  // An expired access token: renew the session once and retry. Only for
+  // requests whose token came from the getter, so a caller that set its own
+  // Authorization header gets exactly the answer it asked for.
+  if (
+    response.status === 401 &&
+    usesGetter &&
+    headers.has("authorization") &&
+    _unauthorizedHandler &&
+    !NO_RENEWAL_PATHS.some((p) => requestInfo.url.includes(p)) &&
+    (await _unauthorizedHandler())
+  ) {
+    const token = await _authTokenGetter!();
+    if (token) headers.set("authorization", `Bearer ${token}`);
+    response = await fetch(input, { ...init, method, headers });
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

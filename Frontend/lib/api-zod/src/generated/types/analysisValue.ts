@@ -5,6 +5,7 @@
  * CareSense AI healthcare decision-support backend (Django REST API)
  * OpenAPI spec version: 1.0.0
  */
+import type { AnalysisValueCriticalSource } from './analysisValueCriticalSource';
 import type { AnalysisValueState } from './analysisValueState';
 
 export interface AnalysisValue {
@@ -16,6 +17,8 @@ export interface AnalysisValue {
   reference_status: string;
   printed_flag: string;
   critical: boolean;
+  /** Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today. */
+  critical_source?: AnalysisValueCriticalSource;
   page?: number | null;
   source_text: string;
   text_source?: string;

@@ -5,6 +5,7 @@
  * CareSense AI healthcare decision-support backend (Django REST API)
  * OpenAPI spec version: 1.0.0
  */
+import type { ConsentPurposeCode } from './consentPurposeCode';
 import type { PatientSex } from './patientSex';
 
 export interface RegisterRequest {
@@ -18,4 +19,8 @@ export interface RegisterRequest {
      */
   date_of_birth?: Date | null;
   sex?: PatientSex;
+  /** Self-sign-up is for people aged 18 and over; must be true. */
+  confirms_adult: boolean;
+  /** Purposes ticked, each against its published wording. Required to include every essential purpose. */
+  consents?: ConsentPurposeCode[];
 }

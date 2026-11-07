@@ -46,4 +46,3 @@ export type {
   TokenResponse,
   UserRole,
 } from "./generated/types";
-export * from './generated/types';

@@ -10,4 +10,7 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
   expires_at: Date;
+  /** Single-use. Redeem at /auth/refresh before it expires; a second use revokes the session. */
+  refresh_token: string;
+  refresh_expires_at: Date;
 }

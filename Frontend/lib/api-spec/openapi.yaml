@@ -58,10 +58,146 @@ paths:
     post:
       operationId: logout
       tags: [auth]
-      summary: Revoke the current bearer token
+      summary: Revoke the current bearer token, and the refresh token with it
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
       responses:
         "204":
           description: Revoked
+
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [auth]
+      summary: Exchange a single-use refresh token for a new session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New access and refresh tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+
+  /auth/password-reset:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      summary: Email a password-reset link (same answer whether or not the email has an account)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailMessage"
+
+  /auth/password-reset/confirm:
+    post:
+      operationId: confirmPasswordReset
+      tags: [auth]
+      summary: Set a new password from a reset link; ends every existing session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetConfirmRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailMessage"
+
+  /privacy/consent/documents:
+    get:
+      operationId: getConsentDocuments
+      tags: [privacy]
+      summary: The consent wording in force, for the sign-up page
+      security: []
+      responses:
+        "200":
+          description: Published wording
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentDocumentList"
+
+  /privacy/consent:
+    get:
+      operationId: getMyConsent
+      tags: [privacy]
+      summary: Every consent purpose and where the caller stands on it
+      responses:
+        "200":
+          description: Consent summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyConsent"
+    post:
+      operationId: changeMyConsent
+      tags: [privacy]
+      summary: Give or withdraw consent for one purpose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentChangeRequest"
+      responses:
+        "200":
+          description: Recorded
+
+  /privacy/erasure:
+    get:
+      operationId: getMyErasure
+      tags: [privacy]
+      summary: The caller's requests to be forgotten, and what happened
+      responses:
+        "200":
+          description: Erasure requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyErasure"
+    post:
+      operationId: requestMyErasure
+      tags: [privacy]
+      summary: Ask for the caller's identifying data to be erased
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErasureAsk"
+      responses:
+        "201":
+          description: Request recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErasureRequestRecord"
 
   /auth/me:
     get:
@@ -1425,7 +1561,7 @@ components:
 
     TokenResponse:
       type: object
-      required: [access_token, token_type, expires_at]
+      required: [access_token, token_type, expires_at, refresh_token, refresh_expires_at]
       properties:
         access_token:
           type: string
@@ -1434,6 +1570,170 @@ components:
         expires_at:
           type: string
           format: date-time
+        refresh_token:
+          type: string
+          description: Single-use. Redeem at /auth/refresh before it expires; a second use revokes the session.
+        refresh_expires_at:
+          type: string
+          format: date-time
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [uid, token, password]
+      properties:
+        uid:
+          type: string
+          description: The account's public id, from the reset link.
+        token:
+          type: string
+        password:
+          type: string
+          minLength: 12
+
+    DetailMessage:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    ConsentPurposeCode:
+      type: string
+      enum: [CARE, RISK_ANALYSIS, AI_ASSISTANCE, RESEARCH, COMMUNICATIONS]
+
+    ConsentDocument:
+      type: object
+      required: [purpose, label, version, body, is_essential]
+      properties:
+        purpose:
+          $ref: "#/components/schemas/ConsentPurposeCode"
+        label:
+          type: string
+        version:
+          type: string
+        body:
+          type: string
+        is_essential:
+          type: boolean
+
+    ConsentDocumentList:
+      type: object
+      required: [documents]
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsentDocument"
+
+    ConsentStatus:
+      type: object
+      required: [purpose, label, granted, answered, is_essential, body]
+      properties:
+        purpose:
+          $ref: "#/components/schemas/ConsentPurposeCode"
+        label:
+          type: string
+        granted:
+          type: boolean
+        answered:
+          type: boolean
+        granted_at:
+          type: ["string", "null"]
+          format: date-time
+        withdrawn_at:
+          type: ["string", "null"]
+          format: date-time
+        document_version:
+          type: ["string", "null"]
+        body:
+          type: string
+        is_essential:
+          type: boolean
+
+    MyConsent:
+      type: object
+      required: [purposes, note]
+      properties:
+        purposes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsentStatus"
+        note:
+          type: string
+
+    ConsentChangeRequest:
+      type: object
+      required: [purpose, granted]
+      properties:
+        purpose:
+          $ref: "#/components/schemas/ConsentPurposeCode"
+        granted:
+          type: boolean
+
+    ErasureRequestRecord:
+      type: object
+      required: [id, state, created_at]
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum: [REQUESTED, UNDER_REVIEW, COMPLETED, REFUSED, WITHDRAWN]
+        reason:
+          type: string
+        decision_note:
+          type: string
+        outcome_summary:
+          type: string
+        retained_until:
+          type: ["string", "null"]
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: ["string", "null"]
+          format: date-time
+        executed_at:
+          type: ["string", "null"]
+          format: date-time
+
+    MyErasure:
+      type: object
+      required: [results, what_this_means]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErasureRequestRecord"
+        what_this_means:
+          type: string
+
+    ErasureAsk:
+      type: object
+      properties:
+        reason:
+          type: string
 
     UserRole:
       type: string
@@ -1837,6 +2137,10 @@ components:
           type: string
         critical:
           type: boolean
+        critical_source:
+          type: string
+          enum: [LAB_FLAG, DANGER_LIMIT, ""]
+          description: Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today.
         page:
           type: number
           nullable: true
@@ -2593,7 +2897,7 @@ components:
 
     RegisterRequest:
       type: object
-      required: [email, full_name, password]
+      required: [email, full_name, password, confirms_adult]
       properties:
         email:
           type: string
@@ -2610,6 +2914,14 @@ components:
             rather than assume a value.
         sex:
           $ref: "#/components/schemas/PatientSex"
+        confirms_adult:
+          type: boolean
+          description: Self-sign-up is for people aged 18 and over; must be true.
+        consents:
+          type: array
+          description: Purposes ticked, each against its published wording. Required to include every essential purpose.
+          items:
+            $ref: "#/components/schemas/ConsentPurposeCode"
 
     PatientAccountLinkRequest:
       type: object
@@ -3382,6 +3694,9 @@ components:
           $ref: "#/components/schemas/EvidenceGrade"
         reliability_note:
           type: string
+        population_note:
+          type: string
+          description: Who the model was built on and whether it has been checked on people in India, in plain words.
         next_steps:
           type: array
           items:

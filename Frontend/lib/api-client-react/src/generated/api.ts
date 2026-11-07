@@ -35,10 +35,15 @@ import type {
   AvailabilitySlot,
   ClinicalNote,
   ClinicalNoteCreateRequest,
+  ConsentChangeRequest,
+  ConsentDocumentList,
   DashboardSummary,
+  DetailMessage,
   Doctor,
   DoctorCreateRequest,
   DoctorDirectoryList,
+  ErasureAsk,
+  ErasureRequestRecord,
   GetDashboardSummaryParams,
   GetPatientTimelineParams,
   LabOrder,
@@ -68,10 +73,13 @@ import type {
   ListRiskAssessmentsParams,
   ListUsersParams,
   LoginRequest,
+  LogoutRequest,
   Me,
   MedicalReport,
   Medication,
   MedicationCreateRequest,
+  MyConsent,
+  MyErasure,
   Notification,
   PaginatedAdminUserList,
   PaginatedAlertList,
@@ -91,10 +99,13 @@ import type {
   PaginatedPatientList,
   PaginatedReconciliationEventList,
   PaginatedRiskAssessmentList,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
   Patient,
   PatientAccountLinkRequest,
   PatientProfile,
   PatientRegisterRequest,
+  RefreshRequest,
   RegisterRequest,
   ReportAnalysis,
   ReportQuality,
@@ -215,16 +226,16 @@ export const getLogoutUrl = () => {
 }
 
 /**
- * @summary Revoke the current bearer token
+ * @summary Revoke the current bearer token, and the refresh token with it
  */
-export const logout = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const logout = async (logoutRequest?: LogoutRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
   return customFetch<void>(getLogoutUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(logoutRequest)
   }
 );}
 
@@ -233,8 +244,8 @@ export const logout = async ( options?: Parameters<typeof customFetch>[1]): Prom
 
 
 export const getLogoutMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,{data?: BodyType<LogoutRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,{data?: BodyType<LogoutRequest>}, TContext> => {
 
 const mutationKey = ['logout'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -246,10 +257,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, {data?: BodyType<LogoutRequest>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  logout(requestOptions)
+          return  logout(data,requestOptions)
         }
 
 
@@ -260,21 +271,607 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
-
+    export type LogoutMutationBody = BodyType<LogoutRequest> | undefined
     export type LogoutMutationError = ErrorType<unknown>
 
     /**
- * @summary Revoke the current bearer token
+ * @summary Revoke the current bearer token, and the refresh token with it
  */
 export const useLogout = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,{data?: BodyType<LogoutRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof logout>>,
         TError,
-        void,
+        {data?: BodyType<LogoutRequest>},
         TContext
       > => {
       return useMutation(getLogoutMutationOptions(options));
+    }
+
+export const getRefreshSessionUrl = () => {
+
+
+
+
+  return `/api/v1/auth/refresh`
+}
+
+/**
+ * @summary Exchange a single-use refresh token for a new session
+ */
+export const refreshSession = async (refreshRequest: RefreshRequest, options?: Parameters<typeof customFetch>[1]): Promise<TokenResponse> => {
+
+  return customFetch<TokenResponse>(getRefreshSessionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(refreshRequest)
+  }
+);}
+
+
+
+
+
+export const getRefreshSessionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSession>>, TError,{data: BodyType<RefreshRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshSession>>, TError,{data: BodyType<RefreshRequest>}, TContext> => {
+
+const mutationKey = ['refreshSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshSession>>, {data: BodyType<RefreshRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  refreshSession(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshSessionMutationResult = NonNullable<Awaited<ReturnType<typeof refreshSession>>>
+    export type RefreshSessionMutationBody = BodyType<RefreshRequest>
+    export type RefreshSessionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Exchange a single-use refresh token for a new session
+ */
+export const useRefreshSession = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSession>>, TError,{data: BodyType<RefreshRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshSession>>,
+        TError,
+        {data: BodyType<RefreshRequest>},
+        TContext
+      > => {
+      return useMutation(getRefreshSessionMutationOptions(options));
+    }
+
+export const getRequestPasswordResetUrl = () => {
+
+
+
+
+  return `/api/v1/auth/password-reset`
+}
+
+/**
+ * @summary Email a password-reset link (same answer whether or not the email has an account)
+ */
+export const requestPasswordReset = async (passwordResetRequest: PasswordResetRequest, options?: Parameters<typeof customFetch>[1]): Promise<DetailMessage> => {
+
+  return customFetch<DetailMessage>(getRequestPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(passwordResetRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestPasswordResetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext> => {
+
+const mutationKey = ['requestPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, {data: BodyType<PasswordResetRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>
+    export type RequestPasswordResetMutationBody = BodyType<PasswordResetRequest>
+    export type RequestPasswordResetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Email a password-reset link (same answer whether or not the email has an account)
+ */
+export const useRequestPasswordReset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestPasswordResetMutationOptions(options));
+    }
+
+export const getConfirmPasswordResetUrl = () => {
+
+
+
+
+  return `/api/v1/auth/password-reset/confirm`
+}
+
+/**
+ * @summary Set a new password from a reset link; ends every existing session
+ */
+export const confirmPasswordReset = async (passwordResetConfirmRequest: PasswordResetConfirmRequest, options?: Parameters<typeof customFetch>[1]): Promise<DetailMessage> => {
+
+  return customFetch<DetailMessage>(getConfirmPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(passwordResetConfirmRequest)
+  }
+);}
+
+
+
+
+
+export const getConfirmPasswordResetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError,{data: BodyType<PasswordResetConfirmRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError,{data: BodyType<PasswordResetConfirmRequest>}, TContext> => {
+
+const mutationKey = ['confirmPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmPasswordReset>>, {data: BodyType<PasswordResetConfirmRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof confirmPasswordReset>>>
+    export type ConfirmPasswordResetMutationBody = BodyType<PasswordResetConfirmRequest>
+    export type ConfirmPasswordResetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set a new password from a reset link; ends every existing session
+ */
+export const useConfirmPasswordReset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPasswordReset>>, TError,{data: BodyType<PasswordResetConfirmRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetConfirmRequest>},
+        TContext
+      > => {
+      return useMutation(getConfirmPasswordResetMutationOptions(options));
+    }
+
+export const getGetConsentDocumentsUrl = () => {
+
+
+
+
+  return `/api/v1/privacy/consent/documents`
+}
+
+/**
+ * @summary The consent wording in force, for the sign-up page
+ */
+export const getConsentDocuments = async ( options?: Parameters<typeof customFetch>[1]): Promise<ConsentDocumentList> => {
+
+  return customFetch<ConsentDocumentList>(getGetConsentDocumentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConsentDocumentsQueryKey = () => {
+    return [
+    `/api/v1/privacy/consent/documents`
+    ] as const;
+    }
+
+
+export const getGetConsentDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof getConsentDocuments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConsentDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConsentDocumentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConsentDocuments>>> = ({ signal }) => getConsentDocuments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConsentDocuments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetConsentDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof getConsentDocuments>>>
+export type GetConsentDocumentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The consent wording in force, for the sign-up page
+ */
+
+export function useGetConsentDocuments<TData = Awaited<ReturnType<typeof getConsentDocuments>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConsentDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetConsentDocumentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMyConsentUrl = () => {
+
+
+
+
+  return `/api/v1/privacy/consent`
+}
+
+/**
+ * @summary Every consent purpose and where the caller stands on it
+ */
+export const getMyConsent = async ( options?: Parameters<typeof customFetch>[1]): Promise<MyConsent> => {
+
+  return customFetch<MyConsent>(getGetMyConsentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyConsentQueryKey = () => {
+    return [
+    `/api/v1/privacy/consent`
+    ] as const;
+    }
+
+
+export const getGetMyConsentQueryOptions = <TData = Awaited<ReturnType<typeof getMyConsent>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyConsent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyConsentQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyConsent>>> = ({ signal }) => getMyConsent({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyConsent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyConsentQueryResult = NonNullable<Awaited<ReturnType<typeof getMyConsent>>>
+export type GetMyConsentQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Every consent purpose and where the caller stands on it
+ */
+
+export function useGetMyConsent<TData = Awaited<ReturnType<typeof getMyConsent>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyConsent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyConsentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getChangeMyConsentUrl = () => {
+
+
+
+
+  return `/api/v1/privacy/consent`
+}
+
+/**
+ * @summary Give or withdraw consent for one purpose
+ */
+export const changeMyConsent = async (consentChangeRequest: ConsentChangeRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getChangeMyConsentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(consentChangeRequest)
+  }
+);}
+
+
+
+
+
+export const getChangeMyConsentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMyConsent>>, TError,{data: BodyType<ConsentChangeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeMyConsent>>, TError,{data: BodyType<ConsentChangeRequest>}, TContext> => {
+
+const mutationKey = ['changeMyConsent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeMyConsent>>, {data: BodyType<ConsentChangeRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  changeMyConsent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeMyConsentMutationResult = NonNullable<Awaited<ReturnType<typeof changeMyConsent>>>
+    export type ChangeMyConsentMutationBody = BodyType<ConsentChangeRequest>
+    export type ChangeMyConsentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Give or withdraw consent for one purpose
+ */
+export const useChangeMyConsent = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMyConsent>>, TError,{data: BodyType<ConsentChangeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeMyConsent>>,
+        TError,
+        {data: BodyType<ConsentChangeRequest>},
+        TContext
+      > => {
+      return useMutation(getChangeMyConsentMutationOptions(options));
+    }
+
+export const getGetMyErasureUrl = () => {
+
+
+
+
+  return `/api/v1/privacy/erasure`
+}
+
+/**
+ * @summary The caller's requests to be forgotten, and what happened
+ */
+export const getMyErasure = async ( options?: Parameters<typeof customFetch>[1]): Promise<MyErasure> => {
+
+  return customFetch<MyErasure>(getGetMyErasureUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyErasureQueryKey = () => {
+    return [
+    `/api/v1/privacy/erasure`
+    ] as const;
+    }
+
+
+export const getGetMyErasureQueryOptions = <TData = Awaited<ReturnType<typeof getMyErasure>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyErasure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyErasureQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyErasure>>> = ({ signal }) => getMyErasure({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyErasure>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyErasureQueryResult = NonNullable<Awaited<ReturnType<typeof getMyErasure>>>
+export type GetMyErasureQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The caller's requests to be forgotten, and what happened
+ */
+
+export function useGetMyErasure<TData = Awaited<ReturnType<typeof getMyErasure>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyErasure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyErasureQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestMyErasureUrl = () => {
+
+
+
+
+  return `/api/v1/privacy/erasure`
+}
+
+/**
+ * @summary Ask for the caller's identifying data to be erased
+ */
+export const requestMyErasure = async (erasureAsk?: ErasureAsk, options?: Parameters<typeof customFetch>[1]): Promise<ErasureRequestRecord> => {
+
+  return customFetch<ErasureRequestRecord>(getRequestMyErasureUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erasureAsk)
+  }
+);}
+
+
+
+
+
+export const getRequestMyErasureMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestMyErasure>>, TError,{data?: BodyType<ErasureAsk>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestMyErasure>>, TError,{data?: BodyType<ErasureAsk>}, TContext> => {
+
+const mutationKey = ['requestMyErasure'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestMyErasure>>, {data?: BodyType<ErasureAsk>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestMyErasure(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestMyErasureMutationResult = NonNullable<Awaited<ReturnType<typeof requestMyErasure>>>
+    export type RequestMyErasureMutationBody = BodyType<ErasureAsk> | undefined
+    export type RequestMyErasureMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Ask for the caller's identifying data to be erased
+ */
+export const useRequestMyErasure = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestMyErasure>>, TError,{data?: BodyType<ErasureAsk>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestMyErasure>>,
+        TError,
+        {data?: BodyType<ErasureAsk>},
+        TContext
+      > => {
+      return useMutation(getRequestMyErasureMutationOptions(options));
     }
 
 export const getGetMeUrl = () => {

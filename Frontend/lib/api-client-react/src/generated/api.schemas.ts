@@ -14,6 +14,116 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
   expires_at: string;
+  /** Single-use. Redeem at /auth/refresh before it expires; a second use revokes the session. */
+  refresh_token: string;
+  refresh_expires_at: string;
+}
+
+export interface RefreshRequest {
+  refresh_token: string;
+}
+
+export interface LogoutRequest {
+  refresh_token?: string;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface PasswordResetConfirmRequest {
+  /** The account's public id, from the reset link. */
+  uid: string;
+  token: string;
+  /** @minLength 12 */
+  password: string;
+}
+
+export interface DetailMessage {
+  detail: string;
+}
+
+export type ConsentPurposeCode = typeof ConsentPurposeCode[keyof typeof ConsentPurposeCode];
+
+
+export const ConsentPurposeCode = {
+  CARE: 'CARE',
+  RISK_ANALYSIS: 'RISK_ANALYSIS',
+  AI_ASSISTANCE: 'AI_ASSISTANCE',
+  RESEARCH: 'RESEARCH',
+  COMMUNICATIONS: 'COMMUNICATIONS',
+} as const;
+
+export interface ConsentDocument {
+  purpose: ConsentPurposeCode;
+  label: string;
+  version: string;
+  body: string;
+  is_essential: boolean;
+}
+
+export interface ConsentDocumentList {
+  documents: ConsentDocument[];
+}
+
+export interface ConsentStatus {
+  purpose: ConsentPurposeCode;
+  label: string;
+  granted: boolean;
+  answered: boolean;
+  /** @nullable */
+  granted_at?: string | null;
+  /** @nullable */
+  withdrawn_at?: string | null;
+  /** @nullable */
+  document_version?: string | null;
+  body: string;
+  is_essential: boolean;
+}
+
+export interface MyConsent {
+  purposes: ConsentStatus[];
+  note: string;
+}
+
+export interface ConsentChangeRequest {
+  purpose: ConsentPurposeCode;
+  granted: boolean;
+}
+
+export type ErasureRequestRecordState = typeof ErasureRequestRecordState[keyof typeof ErasureRequestRecordState];
+
+
+export const ErasureRequestRecordState = {
+  REQUESTED: 'REQUESTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  COMPLETED: 'COMPLETED',
+  REFUSED: 'REFUSED',
+  WITHDRAWN: 'WITHDRAWN',
+} as const;
+
+export interface ErasureRequestRecord {
+  id: string;
+  state: ErasureRequestRecordState;
+  reason?: string;
+  decision_note?: string;
+  outcome_summary?: string;
+  /** @nullable */
+  retained_until?: string | null;
+  created_at: string;
+  /** @nullable */
+  decided_at?: string | null;
+  /** @nullable */
+  executed_at?: string | null;
+}
+
+export interface MyErasure {
+  results: ErasureRequestRecord[];
+  what_this_means: string;
+}
+
+export interface ErasureAsk {
+  reason?: string;
 }
 
 export type UserRole = typeof UserRole[keyof typeof UserRole];
@@ -295,6 +405,18 @@ export interface ReportQuality {
   note: string;
 }
 
+/**
+ * Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today.
+ */
+export type AnalysisValueCriticalSource = typeof AnalysisValueCriticalSource[keyof typeof AnalysisValueCriticalSource];
+
+
+export const AnalysisValueCriticalSource = {
+  LAB_FLAG: 'LAB_FLAG',
+  DANGER_LIMIT: 'DANGER_LIMIT',
+  '': '',
+} as const;
+
 export type AnalysisValueState = typeof AnalysisValueState[keyof typeof AnalysisValueState];
 
 
@@ -313,6 +435,8 @@ export interface AnalysisValue {
   reference_status: string;
   printed_flag: string;
   critical: boolean;
+  /** Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today. */
+  critical_source?: AnalysisValueCriticalSource;
   page?: number | null;
   source_text: string;
   text_source?: string;
@@ -554,6 +678,8 @@ export interface RiskInterpretation {
   score_withheld_reason?: string;
   evidence_grade: EvidenceGrade;
   reliability_note?: string;
+  /** Who the model was built on and whether it has been checked on people in India, in plain words. */
+  population_note?: string;
   next_steps: NextStep[];
 }
 
@@ -916,6 +1042,10 @@ export interface RegisterRequest {
      */
   date_of_birth?: string | null;
   sex?: PatientSex;
+  /** Self-sign-up is for people aged 18 and over; must be true. */
+  confirms_adult: boolean;
+  /** Purposes ticked, each against its published wording. Required to include every essential purpose. */
+  consents?: ConsentPurposeCode[];
 }
 
 export interface PatientAccountLinkRequest {

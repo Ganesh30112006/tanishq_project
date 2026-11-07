@@ -25,5 +25,7 @@ export interface RiskInterpretation {
   score_withheld_reason?: string;
   evidence_grade: EvidenceGrade;
   reliability_note?: string;
+  /** Who the model was built on and whether it has been checked on people in India, in plain words. */
+  population_note?: string;
   next_steps: NextStep[];
 }

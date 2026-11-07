@@ -19,14 +19,149 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "access_token": zod.string(),
   "token_type": zod.string(),
-  "expires_at": zod.coerce.date()
+  "expires_at": zod.coerce.date(),
+  "refresh_token": zod.string().describe('Single-use. Redeem at \/auth\/refresh before it expires; a second use revokes the session.'),
+  "refresh_expires_at": zod.coerce.date()
 })
 
 
 /**
- * @summary Revoke the current bearer token
+ * @summary Revoke the current bearer token, and the refresh token with it
  */
+export const LogoutBody = zod.object({
+  "refresh_token": zod.string().optional()
+})
+
 export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Exchange a single-use refresh token for a new session
+ */
+export const RefreshSessionBody = zod.object({
+  "refresh_token": zod.string()
+})
+
+export const RefreshSessionResponse = zod.object({
+  "access_token": zod.string(),
+  "token_type": zod.string(),
+  "expires_at": zod.coerce.date(),
+  "refresh_token": zod.string().describe('Single-use. Redeem at \/auth\/refresh before it expires; a second use revokes the session.'),
+  "refresh_expires_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Email a password-reset link (same answer whether or not the email has an account)
+ */
+export const RequestPasswordResetBody = zod.object({
+  "email": zod.string()
+})
+
+export const RequestPasswordResetResponse = zod.object({
+  "detail": zod.string()
+})
+
+
+/**
+ * @summary Set a new password from a reset link; ends every existing session
+ */
+export const confirmPasswordResetBodyPasswordMin = 12;
+
+
+
+export const ConfirmPasswordResetBody = zod.object({
+  "uid": zod.string().describe('The account\'s public id, from the reset link.'),
+  "token": zod.string(),
+  "password": zod.string().min(confirmPasswordResetBodyPasswordMin)
+})
+
+export const ConfirmPasswordResetResponse = zod.object({
+  "detail": zod.string()
+})
+
+
+/**
+ * @summary The consent wording in force, for the sign-up page
+ */
+export const GetConsentDocumentsResponse = zod.object({
+  "documents": zod.array(zod.object({
+  "purpose": zod.enum(['CARE', 'RISK_ANALYSIS', 'AI_ASSISTANCE', 'RESEARCH', 'COMMUNICATIONS']),
+  "label": zod.string(),
+  "version": zod.string(),
+  "body": zod.string(),
+  "is_essential": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Every consent purpose and where the caller stands on it
+ */
+export const GetMyConsentResponse = zod.object({
+  "purposes": zod.array(zod.object({
+  "purpose": zod.enum(['CARE', 'RISK_ANALYSIS', 'AI_ASSISTANCE', 'RESEARCH', 'COMMUNICATIONS']),
+  "label": zod.string(),
+  "granted": zod.boolean(),
+  "answered": zod.boolean(),
+  "granted_at": zod.coerce.date().nullish(),
+  "withdrawn_at": zod.coerce.date().nullish(),
+  "document_version": zod.string().nullish(),
+  "body": zod.string(),
+  "is_essential": zod.boolean()
+})),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Give or withdraw consent for one purpose
+ */
+export const ChangeMyConsentBody = zod.object({
+  "purpose": zod.enum(['CARE', 'RISK_ANALYSIS', 'AI_ASSISTANCE', 'RESEARCH', 'COMMUNICATIONS']),
+  "granted": zod.boolean()
+})
+
+export const ChangeMyConsentResponse = zod.unknown()
+
+
+/**
+ * @summary The caller's requests to be forgotten, and what happened
+ */
+export const GetMyErasureResponse = zod.object({
+  "results": zod.array(zod.object({
+  "id": zod.string(),
+  "state": zod.enum(['REQUESTED', 'UNDER_REVIEW', 'COMPLETED', 'REFUSED', 'WITHDRAWN']),
+  "reason": zod.string().optional(),
+  "decision_note": zod.string().optional(),
+  "outcome_summary": zod.string().optional(),
+  "retained_until": zod.coerce.date().nullish(),
+  "created_at": zod.coerce.date(),
+  "decided_at": zod.coerce.date().nullish(),
+  "executed_at": zod.coerce.date().nullish()
+})),
+  "what_this_means": zod.string()
+})
+
+
+/**
+ * @summary Ask for the caller's identifying data to be erased
+ */
+export const RequestMyErasureBody = zod.object({
+  "reason": zod.string().optional()
+})
+
+export const RequestMyErasureResponse = zod.object({
+  "id": zod.string(),
+  "state": zod.enum(['REQUESTED', 'UNDER_REVIEW', 'COMPLETED', 'REFUSED', 'WITHDRAWN']),
+  "reason": zod.string().optional(),
+  "decision_note": zod.string().optional(),
+  "outcome_summary": zod.string().optional(),
+  "retained_until": zod.coerce.date().nullish(),
+  "created_at": zod.coerce.date(),
+  "decided_at": zod.coerce.date().nullish(),
+  "executed_at": zod.coerce.date().nullish()
+})
 
 
 /**
@@ -476,6 +611,7 @@ export const GetReportAnalysisResponse = zod.object({
   "reference_status": zod.string(),
   "printed_flag": zod.string(),
   "critical": zod.boolean(),
+  "critical_source": zod.enum(['LAB_FLAG', 'DANGER_LIMIT', '']).optional().describe('Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today.'),
   "page": zod.number().nullish(),
   "source_text": zod.string(),
   "text_source": zod.string().optional(),
@@ -540,6 +676,7 @@ export const RetryReportAnalysisResponse = zod.object({
   "reference_status": zod.string(),
   "printed_flag": zod.string(),
   "critical": zod.boolean(),
+  "critical_source": zod.enum(['LAB_FLAG', 'DANGER_LIMIT', '']).optional().describe('Why the value is critical - the laboratory printed a critical flag, or it is past a level that can be dangerous today.'),
   "page": zod.number().nullish(),
   "source_text": zod.string(),
   "text_source": zod.string().optional(),
@@ -957,6 +1094,7 @@ export const ListRiskAssessmentsResponse = zod.object({
   "detail": zod.string()
 }),
   "reliability_note": zod.string().optional(),
+  "population_note": zod.string().optional().describe('Who the model was built on and whether it has been checked on people in India, in plain words.'),
   "next_steps": zod.array(zod.object({
   "action": zod.enum(['SEE_A_DOCTOR', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
   "label": zod.string(),
@@ -1047,6 +1185,7 @@ export const RequestRiskAnalysisResponse = zod.object({
   "detail": zod.string()
 }),
   "reliability_note": zod.string().optional(),
+  "population_note": zod.string().optional().describe('Who the model was built on and whether it has been checked on people in India, in plain words.'),
   "next_steps": zod.array(zod.object({
   "action": zod.enum(['SEE_A_DOCTOR', 'ADD_RESULTS', 'KEEP_MONITORING', 'DISCUSS_SYMPTOMS']),
   "label": zod.string(),
@@ -1168,13 +1307,17 @@ export const RegisterBody = zod.object({
   "full_name": zod.string(),
   "password": zod.string().min(registerBodyPasswordMin),
   "date_of_birth": zod.coerce.date().nullish().describe('Age is a required model input; without it the risk engine blocks rather than assume a value.'),
-  "sex": zod.enum(['FEMALE', 'MALE', 'INTERSEX', 'UNKNOWN']).optional()
+  "sex": zod.enum(['FEMALE', 'MALE', 'INTERSEX', 'UNKNOWN']).optional(),
+  "confirms_adult": zod.boolean().describe('Self-sign-up is for people aged 18 and over; must be true.'),
+  "consents": zod.array(zod.enum(['CARE', 'RISK_ANALYSIS', 'AI_ASSISTANCE', 'RESEARCH', 'COMMUNICATIONS'])).optional().describe('Purposes ticked, each against its published wording. Required to include every essential purpose.')
 })
 
 export const RegisterResponse = zod.object({
   "access_token": zod.string(),
   "token_type": zod.string(),
-  "expires_at": zod.coerce.date()
+  "expires_at": zod.coerce.date(),
+  "refresh_token": zod.string().describe('Single-use. Redeem at \/auth\/refresh before it expires; a second use revokes the session.'),
+  "refresh_expires_at": zod.coerce.date()
 })
 
 
