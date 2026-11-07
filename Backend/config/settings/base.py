@@ -211,9 +211,17 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "auth": "10/min",
+        # Login attempts on one email from anywhere; see apps/accounts/throttling.py.
+        "auth_account": "20/hour",
         "ai": "30/min",
         "risk": "60/min",
     },
+    # How many reverse proxies in front of Django append to X-Forwarded-For.
+    # 0 means the header is ignored and the connection address is the client.
+    # Left unset, DRF keys rate limits on the raw header, which the client
+    # writes - a fresh value per request and the login limit never triggers.
+    # Behind one load balancer, set this to 1.
+    "NUM_PROXIES": int(env("DJANGO_TRUSTED_PROXY_COUNT", "0") or "0"),
     "UNAUTHENTICATED_USER": None,
 }
 
@@ -278,12 +286,35 @@ IDENTITY = {
     "OIDC_ISSUER": env("OIDC_ISSUER", ""),
     "OIDC_AUDIENCE": env("OIDC_AUDIENCE", "caresense-api"),
     "OIDC_JWKS_URL": env("OIDC_JWKS_URL", ""),
-    # Local opaque dev tokens are only honoured when explicitly enabled.
-    "LOCAL_DEV_TOKENS": env_bool("LOCAL_DEV_TOKENS", False),
+    # Email-and-password sign-in with this backend's own opaque tokens
+    # (hashed at rest, expiring, revocable, refresh single-use). It is how
+    # patients sign up and sign in, so it is on by default; a deployment that
+    # moves every login to an external IdP turns it off. LOCAL_DEV_TOKENS is
+    # the variable's old name and is still read so existing .env files work.
+    "PASSWORD_SIGN_IN": env_bool("PASSWORD_SIGN_IN", env_bool("LOCAL_DEV_TOKENS", True)),
     "ACCESS_TOKEN_TTL_SECONDS": int(env("ACCESS_TOKEN_TTL_SECONDS", "3600") or "3600"),
     # Long-lived but single-use and rotating; see accounts.models.RefreshToken.
     "REFRESH_TOKEN_TTL_SECONDS": int(env("REFRESH_TOKEN_TTL_SECONDS", "1209600") or "1209600"),
 }
+
+# --------------------------------------------------------------------------
+# Email (password reset) and the address links in emails point at
+# --------------------------------------------------------------------------
+# Any SMTP provider. Without one, a person who forgets their password loses
+# their account, so production refuses to start without it.
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = int(env("EMAIL_PORT", "587") or "587")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "CareSense <no-reply@localhost>")
+#: The patient-facing app's origin, e.g. https://app.example.in
+FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", "http://127.0.0.1:5173")
+PASSWORD_RESET_TIMEOUT = 60 * 60  # one hour, as the email says
+
+# Developer conveniences; prod.py turns both off unless asked.
+EXPOSE_DJANGO_ADMIN = True
+EXPOSE_API_DOCS = True
 
 # --------------------------------------------------------------------------
 # Django <-> FastAPI intelligence service boundary (section 52)

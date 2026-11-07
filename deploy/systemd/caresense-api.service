@@ -1,0 +1,24 @@
+[Unit]
+Description=CareSense Django API (gunicorn)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+User=caresense
+Group=caresense
+WorkingDirectory=/srv/caresense/app/Backend
+EnvironmentFile=/etc/caresense/caresense.env
+ExecStart=/srv/caresense/venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8000 --workers 3 --timeout 60 --access-logfile -
+Restart=always
+RestartSec=3
+
+# Least privilege: the API writes only uploaded reports.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/caresense/app/Backend/media
+
+[Install]
+WantedBy=multi-user.target

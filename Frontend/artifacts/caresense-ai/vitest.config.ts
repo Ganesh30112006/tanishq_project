@@ -2,10 +2,9 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
-// Deliberately separate from vite.config.ts. That config throws unless PORT and
-// BASE_PATH are set, which is correct for a dev server and wrong for a test
-// run - tests should not need a port to be told about. This config carries only
-// what the tests need: the '@' alias and a DOM.
+// Deliberately separate from vite.config.ts, which carries dev-server and
+// production-build checks a test run should not depend on. This config carries
+// only what the tests need: the '@' alias and a DOM.
 export default defineConfig({
   plugins: [react()],
   resolve: {

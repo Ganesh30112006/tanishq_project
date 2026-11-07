@@ -1,0 +1,46 @@
+# CareSense on one server. deploy.sh copies this to /etc/caddy/Caddyfile with
+# the domain filled in. Caddy obtains and renews the HTTPS certificate itself.
+#
+# The API and the app share one origin, so the browser makes no cross-origin
+# calls and the Content-Security-Policy below can allow 'self' and nothing else.
+CARESENSE_DOMAIN {
+	encode gzip
+
+	# Uploaded reports can be up to 25 MiB; refuse anything far larger here.
+	request_body {
+		max_size 30MB
+	}
+
+	@backend path /api/* /healthz /readyz
+	handle @backend {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		root * /srv/caresense/web
+
+		# The access token lives in browser storage, so injected script is the
+		# main way it could be stolen. Inline script is forbidden outright;
+		# styles allow inline because the UI library positions popovers with
+		# style attributes.
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "same-origin"
+			X-Frame-Options "DENY"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			-Server
+		}
+
+		# Fingerprinted build output never changes; everything else is
+		# re-checked so a release reaches people at once.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@app not path /assets/*
+		header @app Cache-Control "no-cache"
+
+		# Client-side routes (/reports/..., /reset-password) all load the app.
+		try_files {path} /index.html
+		file_server
+	}
+}

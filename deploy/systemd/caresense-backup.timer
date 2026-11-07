@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the CareSense backup every night
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+# If the server was off at 02:30, run as soon as it is back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

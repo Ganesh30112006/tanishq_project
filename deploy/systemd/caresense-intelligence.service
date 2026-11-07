@@ -1,0 +1,22 @@
+[Unit]
+Description=CareSense intelligence service (document reading and risk model)
+After=network.target
+
+[Service]
+User=caresense
+Group=caresense
+WorkingDirectory=/srv/caresense/app/Backend
+EnvironmentFile=/etc/caresense/caresense.env
+# Listens on localhost only: Django is its one caller.
+ExecStart=/srv/caresense/venv/bin/uvicorn intelligence.main:app --host 127.0.0.1 --port 9001
+Restart=always
+RestartSec=3
+
+# It reads trained models and documents it is sent; it writes nothing.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

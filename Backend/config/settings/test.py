@@ -11,7 +11,7 @@ import os
 
 os.environ.setdefault("DJANGO_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key")
-os.environ.setdefault("LOCAL_DEV_TOKENS", "true")
+os.environ.setdefault("PASSWORD_SIGN_IN", "true")
 os.environ.setdefault("INTELLIGENCE_SERVICE_TOKEN", "test-service-token")
 
 from .base import *  # noqa: E402,F401,F403
@@ -27,7 +27,7 @@ DATABASES = {
     }
 }
 
-IDENTITY["LOCAL_DEV_TOKENS"] = True
+IDENTITY["PASSWORD_SIGN_IN"] = True
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
@@ -41,7 +41,7 @@ INTELLIGENCE["BASE_URL"] = "http://intelligence.invalid"  # noqa: F405
 # asserts the *configuration* instead; see tests/unit/test_throttling.py.
 REST_FRAMEWORK = {  # noqa: F405
     **REST_FRAMEWORK,  # noqa: F405
-    "DEFAULT_THROTTLE_RATES": {"auth": None, "ai": None, "risk": None},
+    "DEFAULT_THROTTLE_RATES": {"auth": None, "auth_account": None, "ai": None, "risk": None},
 }
 
 # The second reader is OFF for the suite regardless of what the developer has

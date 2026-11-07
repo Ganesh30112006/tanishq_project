@@ -10,13 +10,13 @@ import os
 
 os.environ.setdefault("DJANGO_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_DEBUG", "true")
-os.environ.setdefault("LOCAL_DEV_TOKENS", "true")
+os.environ.setdefault("PASSWORD_SIGN_IN", "true")
 
 from .base import *  # noqa: E402,F401,F403
 from .base import IDENTITY  # noqa: E402
 
 DEBUG = True
-IDENTITY["LOCAL_DEV_TOKENS"] = True
+IDENTITY["PASSWORD_SIGN_IN"] = True
 
 # Console email + relaxed cookie flags for plain-HTTP local work only.
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

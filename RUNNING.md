@@ -19,7 +19,7 @@ cd Backend
 #   DJANGO_SETTINGS_MODULE=config.settings.dev
 #   DJANGO_SECRET_KEY=<anything for local dev>
 #   DJANGO_DB_BACKEND=sqlite
-#   LOCAL_DEV_TOKENS=true
+#   PASSWORD_SIGN_IN=true
 #   CORS_ALLOWED_ORIGINS=http://127.0.0.1:5173,http://localhost:5173
 python manage.py migrate
 python manage.py seed_demo           # optional: demo users + patients + a real risk assessment

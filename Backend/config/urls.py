@@ -5,6 +5,7 @@ owns its own router; this module only mounts them.
 """
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
@@ -41,6 +42,24 @@ def readyz(_request) -> JsonResponse:
         checks["database"] = {"status": "ok"}
     except Exception as exc:  # noqa: BLE001 - report, never leak the connection string
         checks["database"] = {"status": "down", "detail": type(exc).__name__}
+        ok = False
+
+    # Rate limits live in the cache. A missing cache table (production uses the
+    # database cache) makes every throttled request - login included - fail.
+    try:
+        from django.core.cache import cache
+
+        cache.set("readyz-probe", "1", 10)
+        if cache.get("readyz-probe") != "1":
+            raise RuntimeError("cache did not return what was stored")
+        checks["cache"] = {"status": "ok"}
+    except Exception as exc:  # noqa: BLE001
+        checks["cache"] = {
+            "status": "down",
+            "detail": type(exc).__name__,
+            "problems": ["Rate-limit cache unusable; logins will fail. "
+                         "Run: manage.py createcachetable"],
+        }
         ok = False
 
     try:
@@ -81,8 +100,13 @@ api_v1 = [
 urlpatterns = [
     path("healthz", healthz, name="healthz"),
     path("readyz", readyz, name="readyz"),
-    path("admin/", admin.site.urls),
     path("api/v1/", include((api_v1, "api-v1"))),
-    path("api/schema", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]
+
+if settings.EXPOSE_DJANGO_ADMIN:
+    urlpatterns.append(path("admin/", admin.site.urls))
+if settings.EXPOSE_API_DOCS:
+    urlpatterns += [
+        path("api/schema", SpectacularAPIView.as_view(), name="schema"),
+        path("api/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    ]

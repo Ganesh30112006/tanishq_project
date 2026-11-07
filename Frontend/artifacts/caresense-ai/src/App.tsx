@@ -3,7 +3,7 @@
  * signed-in frame in components/app-shell.
  */
 import { QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,14 +14,19 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/query-client';
 import Login from '@/pages/login';
 import SignUp from '@/pages/signup';
-import AdminConsole from '@/pages/admin';
-import Dashboard from '@/pages/dashboard';
-import Reports from '@/pages/reports';
-import ReportDetailPage from '@/pages/report-detail';
-import Alerts from '@/pages/alerts';
-import Settings from '@/pages/settings';
-import PrivacyPolicy from '@/pages/privacy';
-import { PatientProfilePage, Patients } from '@/pages/record';
+import { ForgotPassword, ResetPassword } from '@/pages/password-reset';
+
+// Signed-in pages load on first visit, so the sign-in screen - the first
+// thing anyone sees, often on mobile data - does not wait for all of them.
+const AdminConsole = lazy(() => import('@/pages/admin'));
+const Dashboard = lazy(() => import('@/pages/dashboard'));
+const Reports = lazy(() => import('@/pages/reports'));
+const ReportDetailPage = lazy(() => import('@/pages/report-detail'));
+const Alerts = lazy(() => import('@/pages/alerts'));
+const Settings = lazy(() => import('@/pages/settings'));
+const PrivacyPolicy = lazy(() => import('@/pages/privacy'));
+const Patients = lazy(() => import('@/pages/record').then((m) => ({ default: m.Patients })));
+const PatientProfilePage = lazy(() => import('@/pages/record').then((m) => ({ default: m.PatientProfilePage })));
 
 
 function AuthenticatedRouter() {
@@ -29,6 +34,7 @@ function AuthenticatedRouter() {
   return (
     <ErrorBoundary resetKey={location}>
       <AppShell>
+        <Suspense fallback={<PageLoading />}>
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/patients" component={Patients} />
@@ -41,9 +47,14 @@ function AuthenticatedRouter() {
           <Route path="/privacy">{() => <PrivacyPolicy />}</Route>
           <Route>{() => <NotFoundPage />}</Route>
         </Switch>
+        </Suspense>
       </AppShell>
     </ErrorBoundary>
   );
+}
+
+function PageLoading() {
+  return <div className="grid min-h-[40vh] place-items-center text-sm text-muted-foreground">Loading…</div>;
 }
 
 function FullPageLoading() {
@@ -63,7 +74,12 @@ function Gate() {
   const [showSignUp, setShowSignUp] = useState(false);
   // The privacy policy is public: someone deciding whether to sign up must be
   // able to read it first.
-  if (location === '/privacy' && !user && !isLoading) return <PrivacyPolicy standalone />;
+  if (location === '/privacy' && !user && !isLoading) {
+    return <Suspense fallback={<FullPageLoading />}><PrivacyPolicy standalone /></Suspense>;
+  }
+  // Reset links arrive by email and work whether or not someone is signed in.
+  if (location === '/reset-password') return <ResetPassword />;
+  if (location === '/forgot-password' && !user && !isLoading) return <ForgotPassword />;
   if (isLoading) return <FullPageLoading />;
   if (unreachable && !user) return <UnreachablePage onRetry={retryConnection} />;
   if (!user) {

@@ -18,6 +18,108 @@ The worker is dangerous precisely because its failure is silent — the queue is
 a database table, so nothing raises when nobody is draining it. That is what
 `/readyz` exists for.
 
+## Deploying
+
+One Ubuntu server (22.04 or 24.04), no containers. The three backend processes
+run as systemd services that restart on a crash, Caddy serves the built app and
+passes `/api` to Django on the same origin (so the browser's
+Content-Security-Policy can stay at `'self'`), and a timer takes the nightly
+backup. Everything lives in `deploy/`.
+
+| Unit | Runs | Listens on |
+|---|---|---|
+| `caresense-api` | gunicorn, Django | 127.0.0.1:8000 |
+| `caresense-worker` | `manage.py run_worker` | - |
+| `caresense-intelligence` | uvicorn, the intelligence service | 127.0.0.1:9001 |
+| `caresense-backup.timer` | `deploy/backup.sh`, nightly at 02:30 | - |
+| Caddy | HTTPS, the app's files, `/api` to Django | 443 |
+
+Only Caddy is reachable from outside. Each service runs as the `caresense`
+user with a read-only view of the system; the API and the worker may write only
+`Backend/media`, where uploaded reports are kept.
+
+### One-time server setup
+
+```bash
+# Software. Node 20 and Caddy come from their own apt repositories:
+#   https://github.com/nodesource/distributions  https://caddyserver.com/docs/install
+sudo apt install python3 python3-venv python3-dev build-essential pkg-config \
+    default-libmysqlclient-dev mysql-server tesseract-ocr clamav-daemon rsync curl git
+sudo corepack enable    # provides pnpm
+
+# The user the app runs as, and its folders.
+sudo useradd --system --create-home --home-dir /srv/caresense caresense
+sudo -u caresense git clone <repository> /srv/caresense/app
+sudo -u caresense mkdir -p /srv/caresense/app/Backend/media
+sudo install -d -o caresense -g caresense -m 700 /var/backups/caresense
+sudo install -d -m 750 -g caresense /etc/caresense
+
+# The database and its user.
+sudo mysql -e "CREATE DATABASE caresense CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  CREATE USER 'caresense_app'@'localhost' IDENTIFIED BY '<password>';
+  GRANT ALL ON caresense.* TO 'caresense_app'@'localhost';"
+
+# Settings: fill in every value. The services and deploy.sh read this file.
+sudo install -m 640 -g caresense /srv/caresense/app/deploy/caresense.env.example /etc/caresense/caresense.env
+sudo nano /etc/caresense/caresense.env
+```
+
+Point the domain's DNS at the server and open ports 80 and 443 (Caddy needs 80
+once to prove the domain and get the certificate). ClamAV needs no change:
+the adapter uses its local socket, `CLAMD_SOCKET=/var/run/clamav/clamd.ctl`.
+
+**Trained models** are not in git. Build them with the model pipeline
+(`docs/model-training.md`) into `Backend/intelligence/_artifacts`, then
+`register_model` and `govern_model`.
+
+### Every release
+
+```bash
+cd /srv/caresense/app && sudo -u caresense git pull && sudo bash deploy/deploy.sh
+```
+
+`deploy.sh` installs backend dependencies, runs migrations and
+`createcachetable` (rate limits are counted in the database cache, so every
+gunicorn worker shares one count; `/readyz` reports the cache as down if that
+table is missing, because then every login fails), builds the frontend into
+`/srv/caresense/web`, installs and restarts the services, renders the Caddyfile
+with your domain, and waits for `/readyz`. It stops at the first failure.
+
+After the first release, once the consent wording has been reviewed, publish
+it. `deploy/manage.sh` runs any `manage.py` command as the app user with the
+settings loaded:
+
+```bash
+sudo bash /srv/caresense/app/deploy/manage.sh seed_consent
+sudo bash /srv/caresense/app/deploy/manage.sh check_privacy
+```
+
+Logs: `journalctl -u caresense-api -u caresense-worker -u caresense-intelligence -f`.
+
+### What refuses to start, and why
+
+| Missing | Why it stops |
+|---|---|
+| `DJANGO_SECRET_KEY` | Sessions and reset links would be forgeable |
+| `REPORT_UPLOAD_SCANNER` | Uploads are public input. Use `apps.reports.clamav:scan`; it refuses uploads while ClamAV is down |
+| `INTELLIGENCE_SERVICE_TOKEN` | The intelligence service would accept anyone |
+| `EMAIL_HOST` | Password reset is the only way back into a forgotten account |
+| `FRONTEND_BASE_URL` (https) | Reset links point at it |
+| any `VITE_` setting | The frontend build: the API address must be https, and the privacy policy must name the organisation, contact email, grievance officer and data location |
+
+### Backups
+
+`caresense-backup.timer` writes the database and every uploaded report to
+`/var/backups/caresense` each night and keeps 14 days; restore steps are at the
+top of `deploy/backup.sh`. That folder is on the same disk as the data. Copy it
+off the server too (for example a nightly `rclone` or `rsync` to another
+machine) - a backup that dies with the disk is not a backup.
+
+The Django admin site and the API explorer (`/admin/`, `/api/docs`) are off in
+production unless `DJANGO_EXPOSE_ADMIN` / `DJANGO_EXPOSE_API_DOCS` are set. The
+product has its own admin area; these are only a login form and an API map
+exposed to the internet.
+
 ## Health endpoints
 
 | Endpoint | Question | Use it for |
@@ -76,6 +178,26 @@ tell the thief from the victim, so the whole rotation family is revoked and
 both must sign in again. A forced re-login is a much better outcome than a
 silently shared session.
 
+The frontend renews the access token itself when it expires, under a lock
+shared by every open tab, so two tabs never redeem one refresh token (which
+would look like theft and sign the person out everywhere).
+
+**Sign-in is email and password, on in every environment** (`PASSWORD_SIGN_IN`).
+It used to be forced off in production, which made every production login and
+sign-up return 400. Login attempts are limited per client address and, since
+addresses are cheap, per account (20 an hour), so one account cannot be
+guessed at from many addresses. Set `DJANGO_TRUSTED_PROXY_COUNT` to the number
+of proxies in front of Django; left at 0 the forwarded-for header is ignored,
+because the client writes it.
+
+**Forgotten passwords** are reset by email (`/auth/password-reset`). The answer
+is the same whether or not the email has an account, the link expires after an
+hour and works once, and a reset ends every session the account had.
+
+Self-sign-up is for adults: it needs an "I am 18 or older" confirmation and
+refuses a date of birth under 18, because the DPDP Act requires verifiable
+parental consent for a child and nothing here can verify a parent.
+
 Signing out revokes the refresh token too — otherwise "sign out" leaves a
 credential that mints a new session.
 
@@ -90,6 +212,14 @@ would block every deployment on day one, and never enforcing would make consent
 decorative, so publishing is the deliberate act — and `check_privacy` reports
 any purpose still unpublished so the gap is visible rather than silent.
 Absence of a grant is never treated as consent.
+
+**Consent is given at sign-up, against the published wording.** The sign-up
+page reads it from `/privacy/consent/documents` and records exactly what was
+ticked with the account; essential purposes must be ticked, optional ones start
+unticked. People change any of it, and ask for erasure, in Settings. The
+report AI analysis respects `AI_ASSISTANCE` like the risk estimate and AI chat
+do: without it the analysis waits ("not allowed yet"), and asking again after
+consenting reads the report.
 
 **Erasure is de-identification, not deletion**, and the system says so in those
 words. Clinical history is append-only and separately subject to a retention
@@ -111,6 +241,24 @@ which obligation required eight years.
 The default periods are starting points that a compliance owner must review
 against the obligations that actually bind the deployment. They are not legal
 advice.
+
+## Urgent warnings
+
+"Please see a doctor today" is shown when a value is critical, and a value is
+critical for either of two reasons, recorded on it as `critical_source`:
+
+* `LAB_FLAG` - the laboratory printed a critical flag (HH, LL, CRITICAL).
+* `DANGER_LIMIT` - the value is past a wide danger limit in
+  `intelligence/knowledge/critical_limits.py`, whatever the report printed.
+  Many reports print a plain H or L beside a potassium of 7.0, and there is no
+  doctor in this product to notice.
+
+The limits only ever add urgency, never withhold or release a value. They are
+literature-derived and `NOT_VALIDATED`, set wide on purpose; a misread value can
+trip one, which is a false alarm in the safe direction. **A clinical
+pathologist should review them** against the critical-value policies of the
+laboratories whose reports come in. The patient is told which reason applied -
+never that their laboratory said something it did not.
 
 ## Model governance
 
@@ -269,7 +417,8 @@ availability is observable rather than assumed.
 |---|---|---|
 | PDF text-layer extraction | `pypdf` (always installed) | a scanned PDF yields no text and routes to review; it never fails the request |
 | OCR (photos, scans) | `pytesseract` + the Tesseract **engine** (system package) | result is `OCR_UNAVAILABLE` / `UNREADABLE`, no tokens, no clinical rows — the report is held for human review, never guessed |
-| Classification | in-repo, deterministic | always available |
+| Scanned PDFs | the OCR row above, plus `pypdfium2` to render each page | a scanned PDF is `UNREADABLE` (photos are unaffected); reported as `scanned_pdf` in the capabilities block |
+| Classification | in-repo, deterministic | always available. A health-check package that names two or more blood panels in its own headings is `MULTI_PANEL` and read panel by panel; values under a urine/stool/fluid heading are never read as blood tests |
 | Extraction / normalisation / validation | in-repo, deterministic | always available |
 | LLM narrative | not implemented | fails closed — capability reports `available: false` |
 | RAG / knowledge retrieval | not implemented | fails closed |
@@ -277,7 +426,7 @@ availability is observable rather than assumed.
 To enable OCR in a deployment:
 
 ```
-pip install -e ".[document]"        # pytesseract + Pillow
+pip install -e ".[document]"        # pytesseract + Pillow + pypdfium2
 apt-get install tesseract-ocr       # Debian/Ubuntu
 # or: brew install tesseract         # macOS
 ```

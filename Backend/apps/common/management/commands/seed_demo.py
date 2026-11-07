@@ -107,9 +107,9 @@ class Command(BaseCommand):
         # re-synced; without this a freshly added permission silently never
         # lands on the role that is supposed to hold it.
         account_service.sync_rbac_catalog()
-        if not settings.IDENTITY.get("LOCAL_DEV_TOKENS"):
+        if not settings.IDENTITY.get("PASSWORD_SIGN_IN"):
             self.stdout.write(self.style.WARNING(
-                "LOCAL_DEV_TOKENS is disabled - the seeded accounts can still be listed "
+                "PASSWORD_SIGN_IN is disabled - the seeded accounts can still be listed "
                 "here but the frontend's local login form will not be able to sign in."
             ))
 

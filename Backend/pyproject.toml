@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 # Runtime deps are grouped by the service that needs them.
 dependencies = [
     # Primary application backend (Django owns identity + authorization + DB)
-    "Django>=5.1,<5.2",
+    "Django>=5.2,<5.3",           # 5.2 is LTS; 5.1 stopped receiving security fixes in Dec 2025
     "djangorestframework>=3.15",
     "mysqlclient>=2.2",            # MySQL 8.x driver for the Django ORM
     "python-dotenv>=1.0",
@@ -40,6 +40,13 @@ document = [
     # and scanned reports are routed to human review rather than guessed at.
     "pytesseract>=0.3.10",
     "Pillow>=10.0",
+    # Renders the pages of a scanned PDF to images for the OCR engine. Without
+    # it a scanned PDF is UNREADABLE (never guessed at); photos are unaffected.
+    "pypdfium2>=4.30",
+]
+server = [
+    # The production WSGI server; `manage.py runserver` is for development only.
+    "gunicorn>=22.0",
 ]
 observability = [
     "opentelemetry-sdk>=1.25",

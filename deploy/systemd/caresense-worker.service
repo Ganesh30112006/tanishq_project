@@ -1,0 +1,24 @@
+[Unit]
+Description=CareSense job worker (reads uploaded reports)
+# Without this process nothing visibly fails: uploads still succeed and then
+# never finish. Restart=always and /readyz exist because of that.
+After=network.target mysql.service caresense-intelligence.service
+Wants=mysql.service
+
+[Service]
+User=caresense
+Group=caresense
+WorkingDirectory=/srv/caresense/app/Backend
+EnvironmentFile=/etc/caresense/caresense.env
+ExecStart=/srv/caresense/venv/bin/python manage.py run_worker
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/caresense/app/Backend/media
+
+[Install]
+WantedBy=multi-user.target

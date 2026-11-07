@@ -1,0 +1,10 @@
+[Unit]
+Description=CareSense nightly backup (database and uploaded reports)
+After=mysql.service
+
+[Service]
+Type=oneshot
+User=caresense
+Group=caresense
+EnvironmentFile=/etc/caresense/caresense.env
+ExecStart=/bin/bash /srv/caresense/app/deploy/backup.sh
