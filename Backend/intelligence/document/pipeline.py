@@ -37,12 +37,14 @@ from intelligence.document.contracts import (
     FileValidation,
     OcrOutcome,
     OcrResult,
+    ReferenceStatus,
     ReportType,
     TextLayerResult,
     TextSource,
     ValueStatus,
 )
 from intelligence.document.extraction import extract_raw_values
+from intelligence.document.extraction.analytes import RawExtraction
 from intelligence.document.ingestion import extract_text_layer, validate_file
 from intelligence.document.ocr import default_provider
 from intelligence.document.ocr.provider import OcrRequest
@@ -143,6 +145,28 @@ class DocumentResult:
 #: not a measurement of OCR accuracy: the screen also tells the patient to check a
 #: scan's numbers against the printed report. A gold corpus should re-set it.
 OCR_NUMBER_FLOOR = 0.94
+#: When two different readings of the page give the same number and the same place
+#: against the range, the number needs only this. Two independent readings making the
+#: same mistake is far less likely than one reading being confidently wrong.
+OCR_AGREED_FLOOR = 0.60
+#: Tests whose true result can be exactly 0. For any other test a 0 from a picture is
+#: a covered digit: a watermark over "30.0" read as 0.0 in both readings.
+CAN_BE_ZERO = frozenset({"basophils", "eosinophils", "monocytes", "bilirubin_direct"})
+_OUTSIDE_RANGE = (ReferenceStatus.ABOVE, ReferenceStatus.BELOW)
+#: On a picture, a result this many times beyond its printed range is held. A flag
+#: printed against the number turns "48 ↑" into 481 in every reading, so agreement
+#: cannot catch it. A true result this extreme is still named in the warning, and a
+#: dangerous one still gets the urgent message.
+OCR_FAR_OUTSIDE = 8.0
+
+
+def _far_outside(validated: ValidatedValue) -> bool:
+    value, ref = validated.value, validated.reference
+    if value is None or not ref.is_numeric or not validated.unit_relation.comparable:
+        return False
+    if ref.high is not None and ref.high > 0 and value > OCR_FAR_OUTSIDE * ref.high:
+        return True
+    return ref.low is not None and ref.low > 0 and value < ref.low / OCR_FAR_OUTSIDE
 
 
 def _number_confidence(ocr: OcrResult, raw) -> float | None:
@@ -160,6 +184,73 @@ def _number_confidence(ocr: OcrResult, raw) -> float | None:
         if start <= word_start < end and raw.value_text in ocr.text[word_start:word_end]
     ]
     return min(found, default=0.0)
+
+
+def _placement_refusal(
+    validated: ValidatedValue, at: int, marks, first_panel: int | None, report_type,
+) -> tuple[str, str] | None:
+    """(reason, why) if where the value is printed means it cannot be used."""
+    if first_panel is not None and at < first_panel:
+        return "outside_any_panel", "printed above the report's first panel heading"
+    if validated.analyte and validated.analyte not in URINE_ANALYTES and in_non_blood_section(
+        at, marks, starts_non_blood=report_type is ReportType.URINALYSIS,
+    ):
+        return "not_a_blood_sample", "printed under a heading that names a non-blood sample"
+    return None
+
+
+def _second_reading_values(
+    second: OcrResult, *, schema, panels, report_type,
+) -> list[tuple[RawExtraction, ValidatedValue]]:
+    """The values the second reading of the page stands behind."""
+    marks = headings(second.text)
+    first_panel = first_panel_offset(marks) if panels else None
+    out = []
+    for raw in extract_raw_values(second.text, page_breaks=_page_breaks(None, second)):
+        validated = validate_value(raw, schema=schema, ocr_confidence=second.mean_confidence)
+        if not validated.persists_clinical_value or not validated.analyte:
+            continue
+        if _placement_refusal(validated, raw.char_span[0], marks, first_panel, report_type) is None:
+            out.append((raw, validated))
+    return out
+
+
+def _check_ocr_number(
+    validated: ValidatedValue, ocr: OcrResult, raw, second_values, stamp_free_values,
+) -> tuple[str, str] | None:
+    """(reason, why) if this OCR value cannot be trusted, else None.
+
+    With a second reading of the same test, agreement decides. It covers the range
+    too: a range read as 45-55 for 4.5-5.5 calls a normal value low. The colour-free
+    reading can agree, but disagreeing with it means nothing.
+    """
+    if validated.value == 0 and validated.analyte not in CAN_BE_ZERO:
+        return "ocr_number_uncertain", "was read from a picture as exactly 0, which usually means a covered digit"
+    confidence = _number_confidence(ocr, raw)
+    analyte = validated.analyte
+    others = [v for _, v in second_values if v.analyte == analyte]
+    same = [
+        v for _, v in [*second_values, *stamp_free_values]
+        if v.analyte == analyte and v.value == validated.value
+    ]
+    if not same:
+        if others:
+            return "ocr_readings_disagree", "was read as a different number by the second reading of the page"
+        if _far_outside(validated):
+            return "ocr_number_uncertain", "is so far outside its range that, on a picture, it is more likely misread"
+        if confidence is not None and confidence < OCR_NUMBER_FLOOR:
+            return "ocr_number_uncertain", f"was read by OCR with only {confidence:.2f} confidence in the number"
+        if ocr.second is not None and validated.reference_status in _OUTSIDE_RANGE:
+            # The patient is still told, by the warning on values not used.
+            return "ocr_number_uncertain", "looks abnormal, but only one reading of the page saw this number"
+        return None
+    if all(v.reference_status is not validated.reference_status for v in same):
+        return "ocr_readings_disagree", "was placed differently against its range by the second reading of the page"
+    if _far_outside(validated):
+        return "ocr_number_uncertain", "is so far outside its range that, on a picture, it is more likely misread"
+    if confidence is not None and confidence < OCR_AGREED_FLOOR:
+        return "ocr_number_uncertain", f"was read by OCR with only {confidence:.2f} confidence in the number"
+    return None
 
 
 def _refuse(validated: ValidatedValue, reason: str, why: str) -> None:
@@ -287,27 +378,33 @@ def process_document(
     # is the patient block, where the document has not yet said what follows.
     first_panel = first_panel_offset(marks) if panels else None
 
+    second = ocr.second if ocr is not None else None
+    second_values = _second_reading_values(
+        second, schema=schema, panels=panels, report_type=report_type,
+    ) if second is not None else []
+    stamp_free = ocr.stamp_free if ocr is not None else None
+    stamp_free_values = _second_reading_values(
+        stamp_free, schema=schema, panels=panels, report_type=report_type,
+    ) if stamp_free is not None else []
+    numbers_read: dict[str, set[float]] = {}
+    disputed: set[str] = set()
+
     for raw in raws:
         validated = validate_value(
             raw, schema=schema,
             ocr_confidence=ocr.mean_confidence if ocr else None,
         )
         at = raw.char_span[0]
-        if first_panel is not None and at < first_panel:
-            _refuse(validated, "outside_any_panel",
-                    "printed above the report's first panel heading")
-        elif validated.analyte and validated.analyte not in URINE_ANALYTES and (
-            in_non_blood_section(
-                at, marks, starts_non_blood=report_type is ReportType.URINALYSIS,
-            )
-        ):
-            _refuse(validated, "not_a_blood_sample",
-                    "printed under a heading that names a non-blood sample")
-        elif ocr is not None and validated.persists_clinical_value:
-            confidence = _number_confidence(ocr, raw)
-            if confidence is not None and confidence < OCR_NUMBER_FLOOR:
-                _refuse(validated, "ocr_number_uncertain",
-                        f"was read by OCR with only {confidence:.2f} confidence in the number")
+        analyte = validated.analyte
+        if analyte and validated.value is not None:
+            numbers_read.setdefault(analyte, set()).add(validated.value)
+        refusal = _placement_refusal(validated, at, marks, first_panel, report_type)
+        if refusal is None and ocr is not None and validated.persists_clinical_value:
+            refusal = _check_ocr_number(validated, ocr, raw, second_values, stamp_free_values)
+        if refusal is not None:
+            if refusal[0] == "ocr_readings_disagree":
+                disputed.add(analyte)
+            _refuse(validated, *refusal)
         provenance = build_provenance(
             raw, source_sha256=sha256, text_source=source,
             section=_section_for(at, sections),
@@ -315,6 +412,13 @@ def process_document(
             ocr_confidence=ocr.mean_confidence if ocr else None,
         )
         result.values.append(ExtractedValueRecord(validated, provenance))
+
+    for other, other_values in ((second, second_values), (stamp_free, stamp_free_values)):
+        if other is not None:
+            _add_from_second_reading(
+                result, other, other_values, numbers_read, disputed,
+                sha256=sha256, source=source, provider=ocr.provider,
+            )
 
     _mark_conflicts(result)
 
@@ -338,6 +442,66 @@ def process_document(
 
     _summarise(result)
     return result
+
+
+def _add_from_second_reading(
+    result: DocumentResult, second: OcrResult, second_values, numbers_read, disputed,
+    *, sha256: str, source, provider: str,
+) -> None:
+    """Tests only the second reading could use: the first lost a unit, say, or a row.
+
+    If the first reading saw a number for the test it must be this same number. If it
+    saw none, this reading has to be sure of the number on its own.
+    """
+    used = {r.value.analyte for r in result.values if r.value.persists_clinical_value}
+    added: set[tuple[str, float | None]] = set()
+    sections = _section_index(second.text)
+    shift = len(result.text) + 1
+    for raw, validated in second_values:
+        analyte = validated.analyte
+        pair = (analyte, validated.value)
+        if analyte in used or analyte in disputed or pair in added:
+            continue
+        first = numbers_read.get(analyte, set())
+        if first and validated.value not in first:
+            continue
+        if validated.value == 0 and analyte not in CAN_BE_ZERO:
+            continue
+        if _far_outside(validated):
+            added.add(pair)
+            _refuse(validated, "ocr_number_uncertain",
+                    "is so far outside its range that, on a picture, it is more likely misread")
+            result.values.append(ExtractedValueRecord(validated, build_provenance(
+                replace(raw, char_span=(raw.char_span[0] + shift, raw.char_span[1] + shift)),
+                source_sha256=sha256, text_source=source, section=_section_for(raw.char_span[0], sections),
+                ocr_provider=provider, ocr_confidence=second.mean_confidence,
+            )))
+            continue
+        confidence = _number_confidence(second, raw)
+        floor = OCR_AGREED_FLOOR if first else OCR_NUMBER_FLOOR
+        if confidence is not None and confidence < floor:
+            continue
+        added.add(pair)
+        if not first and validated.reference_status in _OUTSIDE_RANGE:
+            # Seen by this reading alone: held back, but the warning still names it.
+            _refuse(validated, "ocr_number_uncertain",
+                    "looks abnormal, but only one reading of the page saw this number")
+        # The first reading's row for this test could not be used, and this one
+        # replaces it. Left in, its unconverted number would "conflict" with this.
+        result.values = [
+            r for r in result.values
+            if r.value.analyte != analyte or r.value.persists_clinical_value
+        ]
+        provenance = build_provenance(
+            replace(raw, char_span=(raw.char_span[0] + shift, raw.char_span[1] + shift)),
+            source_sha256=sha256, text_source=source,
+            section=_section_for(raw.char_span[0], sections),
+            ocr_provider=provider, ocr_confidence=second.mean_confidence,
+        )
+        result.values.append(ExtractedValueRecord(validated, provenance))
+    if added:
+        # So that a value's offsets point at the words it came from.
+        result.text = f"{result.text}\n{second.text}"
 
 
 def _get_text(

@@ -68,6 +68,11 @@ Point the domain's DNS at the server and open ports 80 and 443 (Caddy needs 80
 once to prove the domain and get the certificate). ClamAV needs no change:
 the adapter uses its local socket, `CLAMD_SOCKET=/var/run/clamav/clamd.ctl`.
 
+**The OCR model** is not in git either. Copy `eng.traineddata` from the machine it was trained on into
+`Backend/intelligence/_artifacts/ocr/` (or rebuild it with `tools/ocr/train_tesseract.py`). Without it
+scans are read with the engine's own model, which reads fewer values and misread more in testing.
+Reading a scan takes minutes, so `INTELLIGENCE_DOCUMENT_TIMEOUT_SECONDS` defaults to 1800.
+
 **Trained models** are not in git. Build them with the model pipeline
 (`docs/model-training.md`) into `Backend/intelligence/_artifacts`, then
 `register_model` and `govern_model`.

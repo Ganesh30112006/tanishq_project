@@ -78,7 +78,7 @@ asserts the OpenAPI schema has no `path` / `patient_id` / `content_reference`.
 |---|---|---|
 | File validation | `ingestion/file_validation.py` | Type read from the leading bytes. An executable renamed `report.pdf` is rejected with a specific reason. |
 | Text layer | `ingestion/text_layer.py` | `pypdf`; a PDF with almost no extractable text is treated as a scan and routed to OCR. A corrupt PDF is a "no", not a crash. Layout mode keeps a table row on one line, and is used only when it loses no printable character of the plain extraction (it ignores text inside form XObjects). Records where each page starts. |
-| OCR accuracy guards | `ocr/local.py`, `pipeline.py` | Sparse-text page mode, with lines rebuilt from each word's vertical position. Two numbers in a range column count as an interval on OCR text only, and only if rising, because OCR drops thin dashes. A number below `OCR_NUMBER_FLOOR` (0.94, its own word's confidence, not the page's) is refused as `ocr_number_uncertain`. These reduce misreads and do not end them: on deliberately degraded test scans a digit was misread at 0.93, so the patient screen tells the reader of any scan to check its numbers against the printed report. |
+| OCR accuracy guards | `ocr/preprocess.py`, `ocr/local.py`, `pipeline.py` | Each page is enlarged, evenly lit, quietened and straightened, and turned upright by counting words a report prints. It is read twice, in uniform-block and sparse-text modes, and a third time with coloured print removed when there is colour. A number is used when two readings agree on it and on its place against the range (`OCR_AGREED_FLOOR` 0.60), or when one reading is sure of it alone (`OCR_NUMBER_FLOOR` 0.94). The colour-free reading can add or agree, never overrule, because it removes results printed in red. Held whatever the readings say: a 0 for a test that cannot be 0 (a covered digit), a result more than `OCR_FAR_OUTSIDE` (8) times beyond its range (a flag such as "48 ↑" read as 481), and an abnormal result only one reading saw. A held value is still named in the patient's warning. These reduce misreads and do not end them: two readings of one picture share its flaws. |
 | OCR | `ocr/` | `OCRProvider` protocol + `LocalTesseractProvider` + registry. Tokens carry `text`, `page`, `BoundingBox` (0..1), `confidence`. No `pytesseract`/engine → `ENGINE_UNAVAILABLE`, no tokens, report held for review. A scanned PDF's pages are rendered with `pypdfium2` (300 dpi, at most 30 pages) one at a time; without it, `ENGINE_UNAVAILABLE`. |
 | Classification | `classification/keyword.py` | Deterministic weighted keyword vote; all inputs visible in `signals`; winner must beat runner-up 2× or `REVIEW_REQUIRED`. `classification/panels.py`: an abstaining document that names two or more blood panels in its own headings, and scores as no narrative type, is `MULTI_PANEL` - read panel by panel, nothing above its first panel heading, each value held to its own panel's bounds. On every report, a value under a urine/stool/fluid heading loses its blood-analyte identity (`not_a_blood_sample`). |
 | Report schemas | `schemas/` | Per type: fields, required flags, aliases, accepted units, plausibility bounds. Eight panels: CBC, glucose, HbA1c, lipids, renal, liver, thyroid, electrolytes, urinalysis. `assess_completeness()` → COMPLETE / INCOMPLETE / AMBIGUOUS / INVALID / CONFLICTING, same precedence as `apps.reports.schema_engine`; `required_any` covers a report defined by a family of fields rather than one named field. Narrative types have **no** schema. |
@@ -254,3 +254,20 @@ confidence is not, and is invisible downstream.
 
 It found the `HbA1c 6.2 %` bug by exercising the implementation rather than by
 reading the rules, after that bug had been live for three commits.
+
+
+## OCR: what was measured (2026-11-08)
+
+Images were made from report PDFs in 16 ways (clean, low resolution, tilted, turned, blurred, noisy, shadowed, faint, angled, colour, phone-like) and scored against the same PDF's text layer with `tools/ocr/stress_test.py`. These are simulated pictures, not real phone photos, and no doctor-checked corpus exists, so these are measurements of this pipeline on these files, not an accuracy claim.
+
+| Reports | Values recovered | Wrong values |
+|---|---|---|
+| Tuning reports, before this work | 25% | 1 |
+| Held-back reports (9), stock model | 81.2% | 0 |
+| Held-back reports (9), fine-tuned model | 83.7% (94.8% without a watermarked sample) | 0 |
+| Fresh vendor pages (6), stock model | 35.3% | 5 |
+| Fresh vendor pages (6), fine-tuned model | 39.9% | 0 |
+
+The fresh pages are web pages printed to PDF, with small print among other content; on them noisy and phone-like images give 16%. A layout the reader has not seen reads poorly from a picture. The five wrong values were flags printed against the number and read as a digit, which the far-outside guard now holds.
+
+The model is Tesseract's `eng` best model fine-tuned for 1,400 iterations on generated lab-report lines in eight fonts (`tools/ocr/train_tesseract.py`, CPU only: Tesseract's trainer has no GPU support). On lines in two unseen fonts its character error fell from 1.78% to 0.40%. It is about three times slower.

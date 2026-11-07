@@ -246,6 +246,12 @@ class OcrResult:
     #: (start, end, confidence) of each word in ``text``, where the engine gives
     #: one, so a single number's confidence can be asked for.
     word_spans: tuple[tuple[int, int, float], ...] = ()
+    #: The same pages read a second way. A number is trusted when the two agree.
+    second: OcrResult | None = None
+    #: The pages read with coloured print removed, to see past a stamp or watermark.
+    #: It may add or support a value, never overrule one: it thins printed text, and
+    #: it removes results that are printed in red.
+    stamp_free: OcrResult | None = None
 
     @property
     def produced_text(self) -> bool:
