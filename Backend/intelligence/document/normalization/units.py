@@ -13,7 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 #: Bump whenever a factor changes. Callers persist this next to the value.
-RULESET_VERSION = "document-units-2026.1"  # 2026.1: Indian count units (cumm, cu.mm, 10~9/L), lakhs, µ
+#: 2026.1: Indian count units (cumm, cu.mm, 10~9/L), lakhs, µ;
+#: 2026.2: gm%, bare cumm, U/I, and MCHC in %.
+RULESET_VERSION = "document-units-2026.2"
 
 CANONICAL_UNIT: dict[str, str] = {
     # --- glycaemia. Three separate analytes on purpose: a fasting and a
@@ -127,6 +129,8 @@ _RULES: dict[tuple[str, str], tuple[float, float]] = {
     ("mch", "pg"): (1.0, 0.0),
     ("mchc", "g/dl"): (10.0, 0.0),
     ("mchc", "g/l"): (1.0, 0.0),
+    # Some Indian reports print MCHC in %, meaning grams per 100 mL: the g/dL number.
+    ("mchc", "%"): (10.0, 0.0),
     # RDW-CV, a percentage. RDW-SD is reported in fL and is a different
     # quantity, so it has no rule and is left uncompared rather than checked
     # against the CV interval.
@@ -197,8 +201,13 @@ _RULES: dict[tuple[str, str], tuple[float, float]] = {
 
 _UNIT_ALIASES = {
     "mg/dl": "mg/dl", "mg/dL": "mg/dl", "milligram/decilitre": "mg/dl",
+    # A final l misread as I or 1 by OCR.
+    "mg/di": "mg/dl", "mg/d1": "mg/dl", "g/di": "g/dl", "g/d1": "g/dl", "gm/di": "g/dl", "gm/d1": "g/dl",
     "mmol/l": "mmol/l", "mmol/L": "mmol/l",
     "g/dl": "g/dl", "g/dL": "g/dl", "gm/dl": "g/dl",
+    # Grams per 100 mL, as many Indian reports print it. Each analyte still needs
+    # its own g/dL rule, so a count or an enzyme in gm% stays unconverted.
+    "gm%": "g/dl", "g%": "g/dl",
     "g/l": "g/l", "g/L": "g/l",
     "%": "%",
     "mmol/mol": "mmol/mol",
@@ -214,6 +223,8 @@ _UNIT_ALIASES = {
     # cubic millimetre is one microlitre, so these are the /µL forms by
     # definition, not by approximation.
     "/cumm": "/ul", "cells/cumm": "/ul", "/cmm": "/ul", "cells/cmm": "/ul",
+    # Printed without the slash on some reports, meaning the same thing.
+    "cumm": "/ul", "cmm": "/ul",
     "/mm3": "/ul", "/mm^3": "/ul", "cells/mm3": "/ul",
     "10^3/cumm": "10^3/ul", "x10^3/cumm": "10^3/ul", "thou/cumm": "10^3/ul",
     "10^3/cmm": "10^3/ul", "thou/ul": "10^3/ul",
@@ -243,12 +254,16 @@ _UNIT_ALIASES = {
 
     # --- enzymes and chemistry --------------------------------------
     "u/l": "u/l", "iu/l": "u/l", "units/l": "u/l",
+    # A capital I where the l should be, seen on a printed sample report.
+    "u/i": "u/l",
     "umol/l": "umol/l", "µmol/l": "umol/l", "μmol/l": "umol/l",
     "meq/l": "meq/l", "mequiv/l": "meq/l",
 
     # --- thyroid ----------------------------------------------------
     "miu/l": "miu/l", "uiu/ml": "miu/l", "µiu/ml": "miu/l", "μiu/ml": "miu/l",
-    "miu/ml": "miu/l", "mciu/ml": "miu/l",
+    "miu/ml": "miu/l", "mciu/ml": "miu/l", "mu/l": "miu/l",
+    # The same unit as OCR misreads its first letters. None of these means anything else.
+    "uiu/ml.": "miu/l", "ulu/ml": "miu/l", "yiu/ml": "miu/l", "piu/ml": "miu/l", "ylu/ml": "miu/l",
     "pmol/l": "pmol/l",
     "ng/dl": "ng/dl", "pg/ml": "pg/ml",
 

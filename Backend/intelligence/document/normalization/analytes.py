@@ -37,7 +37,16 @@ _EXTRA_ALIASES: dict[str, str] = {
     "ggtp (gamma gt), serum": "ggt",
     # As Dr Lal PathLabs prints them.
     "urea nitrogen blood": "bun",
+    # Cut short by the width of its column on the printed page.
+    "alkaline phosphatase (a": "alp", "bilirubin dir": "bilirubin_direct",
     "alkaline phosphatase (alp)": "alp",
+    # As Labsmart, Drlogy and Flabs reports print them.
+    "hematocrit value, hct": "hematocrit", "packed cell volume (pcv)": "hematocrit",
+    "mean corpuscular volume, mcv": "mcv", "mean corpuscular volume (mcv)": "mcv",
+    "mean cell haemoglobin, mch": "mch", "mean cell haemoglobin con, mchc": "mchc",
+    "serum bilirubin (direct)": "bilirubin_direct", "serum protein": "total_protein",
+    "gamma glutamyl transferase (ggt)": "ggt",
+    "triglycerides level": "triglycerides", "thyroid stimulating hormone (tsh)": "tsh",
     "leucocyte count": "wbc", "wbc count": "wbc",
     "platelet count": "platelets", "plt": "platelets",
     "total platelet count": "platelets", "platelets count": "platelets",
@@ -97,6 +106,8 @@ _EXTRA_ALIASES: dict[str, str] = {
     "random blood sugar": "random_glucose", "rbs": "random_glucose",
     "random glucose": "random_glucose", "glucose random": "random_glucose",
     "post prandial blood sugar": "random_glucose", "ppbs": "random_glucose",
+    "post lunch blood sugar": "random_glucose", "post lunch blood sugar (plbs)": "random_glucose",
+    "plbs": "random_glucose",
     "postprandial blood sugar": "random_glucose",
     "post prandial glucose": "random_glucose",
     "plasma glucose": "glucose", "blood glucose": "glucose",

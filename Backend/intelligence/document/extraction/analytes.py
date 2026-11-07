@@ -15,12 +15,14 @@ from datetime import date
 
 from intelligence.document.extraction import cumulative, value_first
 from intelligence.document.normalization.analytes import canonical_analyte
+from intelligence.document.normalization.units import normalize_unit_token
 
 EXTRACTOR = "regex-line"
 #: 1.2: unit after the flag, "/c.mm"; 1.3: cumulative columns, "10~9/L";
 #: 1.4: wrapped date tables, where a name sits above its numbers;
-#: 1.5: result-first tables, and a name continued on the next line.
-EXTRACTOR_VERSION = "1.5"
+#: 1.5: result-first tables, and a name continued on the next line;
+#: 1.6: range before unit, a flag beside the name, unit-first rows.
+EXTRACTOR_VERSION = "1.6"
 
 _NUMBER = r"\d[\d,]*(?:\.\d+)?"
 
@@ -58,7 +60,12 @@ _FLAGS = {
     "l": "L", "ll": "LL", "lo": "L", "low": "L",
     "a": "A", "abn": "A", "*": "*", "↑": "H", "↓": "L",
     "cl": "CRITICAL_LOW", "ch": "CRITICAL_HIGH",
+    # A remark, not a direction: it never disagrees with the range.
+    "borderline": "BORDERLINE",
 }
+
+#: Flags a laboratory prints between the test's name and its result.
+_FLAGS_BESIDE_NAME = frozenset({"h", "hh", "high", "l", "ll", "low"})
 
 #: Labels that are never analytes - metadata lines that happen to contain a
 #: number. Matched case-insensitively against the start of the label.
@@ -94,6 +101,31 @@ _SECOND_NUMBER = re.compile(r"^[\s/,;|]*" + _NUMBER + r"(?:\s|$|[^\w%/^*])")
 #: and whose reference range is printed beside it in a column of its own.
 _TRAILING_INTERVAL = re.compile(
     r"^[\s(\[]*" + _NUMBER + r"\s*[-‐-―−]\s*" + _NUMBER + r"\s*[)\]]*\s*$"
+)
+
+#: A dash and a number straight after the first number: that number began a range.
+_DASH_THEN_NUMBER = re.compile(r"^\s*[-‐-―−]\s*\d")
+
+#: A range written as a dashed interval or a one-sided limit. A bare second
+#: number is never a range: that is the OCR split the guard above refuses.
+_RANGE = (
+    r"(?:" + _NUMBER + r"\s*[-‐-―−]\s*" + _NUMBER + r"|[<>≤≥]\s*" + _NUMBER + r")"
+)
+
+#: What follows the result on many Indian layouts: an optional flag, the range,
+#: then the unit in the last column. "15 11.5 - 18.0 gm%", "8.5 H 6.2 - 8.0 gm/dL".
+_RANGE_THEN_UNIT = re.compile(
+    r"^\s*(?:(?P<flag>[A-Za-z]+)\s+)?(?P<range>" + _RANGE + r")\s+(?P<unit>\S+)\s*$"
+)
+
+#: Some PDFs store a row with the result last, and the method touching the range:
+#: "Hemoglobin g/dL 13.0 - 16.5Colorimetric 14.5". The method has to be there. With
+#: nothing between them, the range and the result could be split in more than one way.
+_UNIT_FIRST_ROW = re.compile(
+    r"^(?P<label>[A-Za-z][A-Za-z0-9 ,()./%+\-]*?)"
+    r"(?:\s+(?P<flag>[HL]))?"
+    r"\s+(?P<unit>\S+)\s+(?P<range>" + _RANGE + r")"
+    r"[A-Za-z][A-Za-z .,()/\-]*\s+(?P<value>" + _NUMBER + r")$"
 )
 
 
@@ -176,6 +208,54 @@ def _split_rest(rest: str) -> tuple[str, str, str]:
             flag = _FLAGS[parts[-1].lower().strip("()")]
             reference = " ".join(parts[:-1]).strip()
     return unit, flag, reference
+
+
+def _range_then_unit(rest: str) -> tuple[str, str, str] | None:
+    """(unit, flag, reference) where the range comes before the unit, else None."""
+    match = _RANGE_THEN_UNIT.match(rest)
+    if match is None or not _UNIT_RE.match(match["unit"]):
+        return None
+    if match["unit"].lower() in _FLAGS:
+        return None
+    word = (match["flag"] or "").lower()
+    if word and word not in _FLAGS:
+        return None
+    return match["unit"], _FLAGS.get(word, ""), " ".join(match["range"].split())
+
+
+def _flag_beside_name(label: str) -> tuple[str, str]:
+    """(label, flag) for "LYMPHOCYTE L", where the flag sits before the result.
+
+    Without this the row's name is unknown, so exactly the rows a laboratory
+    marked abnormal are lost while the normal rows around them are read. Only
+    when the whole label is unknown and the name without the flag is a known test.
+    """
+    head, _, last = label.rpartition(" ")
+    if (
+        head
+        and last.lower() in _FLAGS_BESIDE_NAME
+        and canonical_analyte(label) is None
+        and canonical_analyte(head) is not None
+    ):
+        return head, _FLAGS[last.lower()]
+    return label, ""
+
+
+def _unit_first_row(line: str) -> RawExtraction | None:
+    """A row printed as name, unit, range and method, then result. Known tests only."""
+    match = _UNIT_FIRST_ROW.match(line)
+    if match is None:
+        return None
+    label = match["label"].strip(" .:-…")
+    if canonical_analyte(label) is None or normalize_unit_token(match["unit"]) is None:
+        return None
+    flag = match["flag"] or ""
+    return RawExtraction(
+        label=label, value_text=match["value"], value=_parse_number(match["value"]),
+        unit=match["unit"], reference_text=" ".join(match["range"].split()),
+        printed_flag=_FLAGS[flag.lower()] if flag else "", line=line,
+        page=1, char_span=(0, 0), extraction_confidence=0.8,
+    )
 
 
 _CUMULATIVE_ROW = re.compile(
@@ -391,6 +471,16 @@ def extract_raw_values(
                 ))
                 continue
 
+        row = _unit_first_row(stripped)
+        if row is not None:
+            above = []
+            span_start = start + line.index(stripped)
+            out.append(replace(
+                row, page=_page_of(span_start, page_breaks),
+                char_span=(span_start, span_start + len(stripped)),
+            ))
+            continue
+
         censored = _CENSORED.match(stripped)
         match = _LINE.match(stripped)
 
@@ -445,7 +535,15 @@ def extract_raw_values(
         else:
             value_text = match["value"]
             value = _parse_number(value_text)
-            unit, flag, reference = _split_rest(match["rest"])
+            unit, flag, reference = _range_then_unit(match["rest"]) or _split_rest(match["rest"])
+
+            if _DASH_THEN_NUMBER.match(match["rest"]):
+                # "Serum Sodium 136-146 mmol/L": a range with no result, usually
+                # in the notes under the table. Its low end is not a result, and
+                # counted as one it conflicts with the real result above.
+                issues.append("the line gives a range and no result")
+                value = None
+                confidence -= 0.5
 
             if (
                 not unit
@@ -471,6 +569,9 @@ def extract_raw_values(
             confidence -= 0.15
         if not reference:
             confidence -= 0.05
+
+        label, flag_by_name = _flag_beside_name(label)
+        flag = flag or flag_by_name
 
         span_start = start + line.index(stripped)
         span_end = span_start + len(stripped)

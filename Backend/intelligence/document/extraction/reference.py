@@ -76,6 +76,9 @@ def _number(token: str) -> float:
     return float(token.replace(",", ""))
 
 
+_BAND_NAME = re.compile(r"\s+(?:desirable|optimal|normal|acceptable)\s*$", re.IGNORECASE)
+
+
 def parse_reference_range(text: str, *, dash_may_be_lost: bool = False) -> ReferenceRange:
     """``dash_may_be_lost``: the text came from OCR. Two numbers are then an
     interval, but only rising: a dash lost from a range always leaves the low
@@ -84,6 +87,8 @@ def parse_reference_range(text: str, *, dash_may_be_lost: bool = False) -> Refer
     raw = (text or "").strip().strip("()[]").strip()
     if not raw:
         return ReferenceRange(text="", kind="absent")
+    # "< 200 Desirable": the word names the band, and would otherwise read as a unit.
+    raw = _BAND_NAME.sub("", raw)
     if dash_may_be_lost:
         lost = _DASH_LOST.match(raw)
         if lost and _number(lost["low"]) < _number(lost["high"]):
