@@ -72,6 +72,7 @@ export function RiskCard({ patient, assessment }: { patient: PatientProfile; ass
       <div>
         <p className="text-sm font-bold" data-testid="text-evidence-grade">{reading.evidence_grade.label}</p>
         <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{reading.evidence_grade.detail}</p>
+        {reading.population_note && <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground" data-testid="text-population-note">{reading.population_note}</p>}
       </div>
     </div>}
 
@@ -106,7 +107,7 @@ export function RiskCard({ patient, assessment }: { patient: PatientProfile; ass
 
     {assessment.reviews && assessment.reviews.length > 0
       ? <div className="mt-4 space-y-2">{assessment.reviews.map((review) => <div key={review.id} className="rounded-xl bg-secondary/60 p-3 text-[13px] leading-relaxed"><span className="font-bold">{titleCase(review.decision)}</span> by {review.reviewer} · {shortDate(review.created_at)}{review.rationale ? <p className="mt-1 text-muted-foreground">{review.rationale}</p> : null}</div>)}</div>
-      : <p className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground"><AlertCircle size={14} className="mt-0.5 shrink-0" />This is only a help for you and your doctor. No doctor has checked this estimate, and it is not a diagnosis.</p>}
+      : <p className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground"><AlertCircle size={14} className="mt-0.5 shrink-0" />This is only a help for you and your doctor. No doctor has checked this estimate, and it is not a diagnosis. The tool was built on people in the US and has not been tested on Indian people, so it may show your risk as lower than it really is.</p>}
 
     <p className="mono-label mt-5 border-t border-border pt-4 !normal-case !tracking-normal text-muted-foreground">{assessment.model ? `Model ${assessment.model}` : 'Model unavailable'} · Assessed {relativeTime(assessment.created_at)}</p>
   </div>;

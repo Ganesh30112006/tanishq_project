@@ -3,6 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.common.enums import ReportClass
+from apps.reports.analysis import AI_ONLY_TYPES
 from apps.reports.models import (
     Report,
     ReportAnalysis,
@@ -120,6 +121,8 @@ class ReportSerializer(serializers.ModelSerializer):
         code = obj.report_class
         if not code or code == ReportClass.OTHER:
             code = self.get_ai_report_class(obj) or code
+        if code in AI_ONLY_TYPES:
+            return f"{AI_ONLY_TYPES[code]} report"
         label = ReportClass(code).label if code else "Unclassified"
         return f"{label} report"
 

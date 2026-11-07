@@ -268,3 +268,18 @@ def test_the_timeline_does_not_restate_a_withheld_score(
     resp = auth_client(doctor.user).get(f"/api/v1/patients/{patient.public_id}/timeline/")
     details = " ".join(event["detail"] for event in resp.data)
     assert "88/100" in details
+
+
+def test_the_patient_is_told_who_the_model_was_built_on():
+    card = _Card(internal="v1", external="ext-1")
+    card.model_id = "cvd-nhanes-logreg"
+    reading = interpret(_result(model_version=card), for_clinician=False)
+    assert "United States" in reading["population_note"]
+    assert "not yet been checked on people in India" in reading["population_note"]
+
+
+def test_a_model_with_no_population_note_gets_the_cautious_default():
+    card = _Card(internal="v1", external="ext-1")
+    card.model_id = "some-future-model"
+    reading = interpret(_result(model_version=card), for_clinician=False)
+    assert "not yet been checked on people in India" in reading["population_note"]

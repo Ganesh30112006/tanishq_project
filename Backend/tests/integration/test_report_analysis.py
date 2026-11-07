@@ -165,6 +165,17 @@ def test_value_the_ai_is_not_sure_of_is_not_used(report):
     assert result.reason_code == "nothing_certain"
 
 
+def test_a_number_ocr_was_unsure_of_is_explained_in_plain_words(report):
+    client = _FakeClient(_FakeResult(
+        values=[_value("ast", 215, "U/L", persists=False, reason="ocr_number_uncertain")],
+    ))
+    result = analysis.analyse(report, client=client)
+
+    assert result.values[0]["state"] == analysis.NOT_SURE
+    assert "could not read this number clearly" in result.values[0]["note"]
+    assert "ocr" not in result.values[0]["note"].lower()
+
+
 # --- holding back on disagreement -------------------------------------
 def test_value_the_pipeline_read_differently_is_held_back_with_what_stood_on_it(report):
     ReportPipeline().run(report)  # the existing reader: glucose 5.4 mmol/L
@@ -213,6 +224,23 @@ def test_a_critical_flag_is_urgent_even_on_a_held_back_value(report):
     result = analysis.analyse(report, client=client)
     assert result.values[0]["state"] == analysis.READERS_DISAGREE
     assert result.urgent is True
+
+
+def test_a_dangerous_value_is_urgent_when_the_lab_printed_only_h(report):
+    ReportPipeline().run(report)
+    value = {**_value("potassium", 7.0, "mmol/L", flag="H"), "beyond_critical_limit": True}
+    result = analysis.analyse(report, client=_FakeClient(_FakeResult(values=[value])))
+    assert result.urgent is True
+    assert result.values[0]["critical"] is True
+    assert result.values[0]["critical_source"] == "DANGER_LIMIT"
+
+
+def test_a_merely_abnormal_value_is_not_urgent(report):
+    ReportPipeline().run(report)
+    value = {**_value("potassium", 5.4, "mmol/L", flag="H"), "beyond_critical_limit": False}
+    result = analysis.analyse(report, client=_FakeClient(_FakeResult(values=[value])))
+    assert result.urgent is False
+    assert result.values[0]["critical_source"] == ""
 
 
 # --- never a clinical record ------------------------------------------

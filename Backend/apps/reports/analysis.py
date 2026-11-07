@@ -46,10 +46,15 @@ logger = logging.getLogger("caresense.reports.analysis")
 
 #: Stamped on every analysis. Bump it when what is held back, or why, changes,
 #: so an old analysis is never re-read as if the new rules had produced it.
-POLICY_VERSION = "patient-analysis-1"
+POLICY_VERSION = "patient-analysis-2"  # 2: danger limits as well as printed flags
 
 #: Dispositions meaning the service recovered nothing it could read from.
 _UNREADABLE = frozenset({"UNREADABLE", "REJECTED_FILE"})
+
+#: Report types the document service can name that the report model has no
+#: class for. Shown to the patient as the kind of report; never used to choose
+#: a schema, because there is no one schema for them.
+AI_ONLY_TYPES = {"MULTI_PANEL": "Health check"}
 
 #: Kinds of disagreement that withhold a value. Both mean the two readers put
 #: different numbers on the same line; which one is wrong is a question for a
@@ -61,7 +66,10 @@ _DISPUTED_KINDS = frozenset({
 
 #: Abnormal flags a laboratory prints when a result needs attention now. HH and
 #: LL are HL7's "outside panic limits". This is the laboratory's own judgement,
-#: read off the report - the AI does not decide what is critical.
+#: read off the report. Many reports print only H or L, so the service also
+#: marks a value past a wide danger limit (``beyond_critical_limit``, see
+#: intelligence/knowledge/critical_limits.py); either one makes a value
+#: critical. Both only ever add urgency.
 _CRITICAL_FLAGS = frozenset({"CRITICAL_HIGH", "CRITICAL_LOW", "HH", "LL"})
 
 # Value states shown to the patient.
@@ -72,6 +80,10 @@ READERS_DISAGREE = "READERS_DISAGREE"
 # Patient-facing reasons. Simple Indian English, no jargon.
 _REASONS = {
     "disabled": "AI analysis is switched off right now.",
+    "no_consent": (
+        "You have not allowed our AI to read your reports. You can turn this "
+        "on in Settings, then ask again."
+    ),
     "no_file": "We could not find the file for this report.",
     "service_unavailable": (
         "Our AI could not look at this report right now. We will try again."
@@ -102,6 +114,15 @@ def analyse(report: Report, *, client=None) -> ReportAnalysis:
     """
     if not enabled():
         return _save(report, ReportAnalysis.Status.UNAVAILABLE, "disabled")
+
+    # The same consent the AI chat and the risk estimate require. Stored as
+    # UNAVAILABLE - the AI has not looked - so that once the person turns it on
+    # in Settings, asking again reads the report.
+    from apps.privacy.models import ConsentPurpose
+    from apps.privacy.services import privacy_service
+
+    if not privacy_service.permits(report.patient, ConsentPurpose.AI_ASSISTANCE):
+        return _save(report, ReportAnalysis.Status.UNAVAILABLE, "no_consent")
 
     from apps.reports.ocr import read_report_bytes
 
@@ -171,6 +192,8 @@ def classified_type(result) -> str:
     response that predates these fields simply names no type.
     """
     classification = getattr(result, "classification", None) or {}
+    if classification.get("status") == "MULTI_PANEL":
+        return "MULTI_PANEL"  # a health check: several panels, read one by one
     if classification.get("status") != "CLASSIFIED":
         return ""
     value = getattr(result, "report_type", None) or classification.get("type") or ""
@@ -232,6 +255,12 @@ def _value_row(value: dict, disputed: set[str]) -> dict:
     else:
         state, note = USED, ""
     flag = (value.get("printed_flag") or "").upper()
+    if flag in _CRITICAL_FLAGS:
+        critical_source = "LAB_FLAG"
+    elif value.get("beyond_critical_limit"):
+        critical_source = "DANGER_LIMIT"
+    else:
+        critical_source = ""
     return {
         "analyte": analyte,
         "label": value.get("printed_label") or analyte,
@@ -240,7 +269,8 @@ def _value_row(value: dict, disputed: set[str]) -> dict:
         "reference_text": ref.get("text") or "",
         "reference_status": value.get("reference_status") or "",
         "printed_flag": flag,
-        "critical": flag in _CRITICAL_FLAGS,
+        "critical": bool(critical_source),
+        "critical_source": critical_source,
         "page": prov.get("page"),
         "source_text": prov.get("source_text") or "",
         "text_source": prov.get("text_source") or "",
@@ -281,6 +311,11 @@ def _finding_row(finding: dict, *, withheld: bool, reason: str) -> dict:
 
 
 def _not_sure_note(reason: str) -> str:
+    if reason == "ocr_number_uncertain":
+        return (
+            "Our AI could not read this number clearly on the scan, so it has not "
+            "used it. Please check it on your printed report."
+        )
     if reason:
         return f"Our AI was not sure about this value ({reason.replace('_', ' ').lower()}), so it has not used it."
     return "Our AI was not sure about this value, so it has not used it."

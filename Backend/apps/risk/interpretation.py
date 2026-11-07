@@ -236,6 +236,30 @@ def next_steps(band: str, *, has_gaps: bool) -> list[dict[str, str]]:
     return steps
 
 
+#: Who each model was built on, said so a patient can weigh it. Display copy,
+#: kept here rather than on the model version because an approved version is
+#: immutable and its record has no structured population field. A model with
+#: no entry gets the cautious default - say it has not been checked here,
+#: rather than say nothing - so a new model must earn a different sentence.
+_POPULATION_NOTES: dict[str, str] = {
+    "cvd-nhanes-logreg": (
+        "This tool was built using health records of people in the United "
+        "States. It has not yet been checked on people in India. Heart risk in "
+        "South Asian people is often higher than tools like this estimate, so "
+        "please do not take a low result as an all-clear."
+    ),
+}
+_POPULATION_NOTE_DEFAULT = (
+    "This tool has not yet been checked on people in India, so treat its "
+    "result as a rough guide only."
+)
+
+
+def population_note(model_version) -> str:
+    model_id = getattr(model_version, "model_id", "") or ""
+    return _POPULATION_NOTES.get(model_id, _POPULATION_NOTE_DEFAULT)
+
+
 def interpret(assessment, *, for_clinician: bool = False) -> dict | None:
     """Compose the patient-facing reading of a completed assessment.
 
@@ -289,6 +313,7 @@ def interpret(assessment, *, for_clinician: bool = False) -> dict | None:
             )
         ),
         "evidence_grade": grade,
+        "population_note": population_note(model_version),
         "reliability_note": _RELIABILITY_NOTES.get(reliability, ""),
         "next_steps": next_steps(band, has_gaps=bool(assessment.missing_features)),
     }

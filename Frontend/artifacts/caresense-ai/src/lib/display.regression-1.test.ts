@@ -23,6 +23,12 @@ describe('reportType', () => {
     expect(reportType({ report_class: 'GLUCOSE', ai_report_class: null })).toEqual({ label: 'Blood sugar', byAi: false });
   });
 
+  it('names a health check, which has no single report class', () => {
+    expect(reportType({ report_class: 'OTHER', ai_report_class: 'MULTI_PANEL' })).toEqual({
+      label: 'Health check (several tests)', byAi: true,
+    });
+  });
+
   it('says "Other" or the fallback when nobody could tell', () => {
     expect(reportTypeLabel({ report_class: 'OTHER', ai_report_class: null })).toBe('Other');
     expect(reportTypeLabel({ report_class: '' })).toBe('Unclassified');

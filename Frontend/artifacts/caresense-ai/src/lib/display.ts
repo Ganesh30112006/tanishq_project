@@ -104,6 +104,12 @@ export const REPORT_CLASS_LABEL: Record<ReportClass, string> = {
   OTHER: 'Other',
 };
 
+// Types only the AI reader names: a health-check package has no single report
+// class, so it is never a schema, only a name for the patient.
+const AI_ONLY_LABEL: Record<string, string> = {
+  MULTI_PANEL: 'Health check (several tests)',
+};
+
 type Typed = { report_class?: string | null; ai_report_class?: string | null };
 
 /**
@@ -115,7 +121,7 @@ export function reportType(report: Typed): { label: string; byAi: boolean } | nu
   const own = report.report_class && report.report_class !== 'OTHER' ? report.report_class : '';
   const code = own || report.ai_report_class || report.report_class || '';
   if (!code) return null;
-  const label = REPORT_CLASS_LABEL[code as ReportClass] ?? titleCase(code);
+  const label = REPORT_CLASS_LABEL[code as ReportClass] ?? AI_ONLY_LABEL[code] ?? titleCase(code);
   return { label, byAi: !own && Boolean(report.ai_report_class) };
 }
 

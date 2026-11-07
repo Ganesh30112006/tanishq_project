@@ -117,3 +117,22 @@ def test_an_analysis_of_an_older_version_is_not_shown(make_user, make_patient, a
 
     assert _listed(auth_client(user), report)["ai_report_class"] is None
 
+
+
+def test_a_health_check_is_named_as_one(make_user, make_patient, auth_client):
+    """A multi-panel package has no single report class. It was shown as
+    "Other" - which, on the laboratory sample reports downloaded on
+    2026-11-02, would have been nine reports in thirteen."""
+    user = make_user(Role.PATIENT)
+    report = _untyped_report(make_patient(user=user), user)
+    Report.objects.filter(pk=report.pk).update(original_filename="")
+
+    stored = analysis.analyse(
+        report, client=_FakeClient(_classified("", status="MULTI_PANEL"))
+    )
+
+    assert stored.report_type == "MULTI_PANEL"
+    row = _listed(auth_client(user), report)
+    assert row["report_class"] == ReportClass.OTHER  # still picks no schema
+    assert row["ai_report_class"] == "MULTI_PANEL"
+    assert row["title"] == "Health check report"

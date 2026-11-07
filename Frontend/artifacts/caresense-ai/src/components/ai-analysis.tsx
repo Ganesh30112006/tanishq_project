@@ -9,6 +9,7 @@ import {
   type ReportAnalysis,
 } from '@workspace/api-client-react';
 import { AlertTriangle, Eye, EyeOff, HelpCircle, Loader2, RefreshCw, Sparkles, Stethoscope } from 'lucide-react';
+import { AiLimitsNote } from './ai-limits-note';
 import { ATTENTION_BADGE, Badge, CRITICAL_BADGE, InlineUnavailable, NEUTRAL_BADGE, POSITIVE_BADGE, Skeleton, formatValue, titleCase } from './ui-kit';
 
 // The AI's analysis of one report, as the patient sees it.
@@ -81,6 +82,7 @@ export function AiAnalysisSection({ reportId }: { reportId: string }) {
           This is not a diagnosis. Our AI can be wrong. Please show these results to a doctor before you make any decision about your health.
         </p>
       </div>
+      <div className="border-b border-border px-5 py-3 sm:px-6"><AiLimitsNote /></div>
       <div className="p-5 sm:p-6">
         {query.isLoading ? <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
           : query.isError || !analysis ? <InlineUnavailable label="The AI analysis could not be loaded." />
@@ -94,6 +96,18 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
   const values = analysis.values ?? [];
   const findings = analysis.findings ?? [];
   const criticals = values.filter((v) => v.critical);
+
+  // Say who judged it critical: the laboratory, or our danger limits. A
+  // patient must never be told their lab said something it did not.
+  function urgentReason(rows: typeof criticals): string {
+    const names = (list: typeof criticals) => list.map((v) => v.label).join(', ');
+    const byLab = rows.filter((v) => v.critical_source !== 'DANGER_LIMIT');
+    const byLimit = rows.filter((v) => v.critical_source === 'DANGER_LIMIT');
+    const parts: string[] = [];
+    if (byLab.length) parts.push(`Your laboratory marked ${byLab.length === 1 ? 'a result' : 'some results'} on this report as critical: ${names(byLab)}.`);
+    if (byLimit.length) parts.push(`${byLimit.length === 1 ? 'A result' : 'Some results'} on this report ${byLimit.length === 1 ? 'is' : 'are'} at a level that can be dangerous: ${names(byLimit)}.`);
+    return parts.join(' ') || 'A result on this report needs a doctor to look at it soon.';
+  }
 
   if (analysis.status === 'PENDING') {
     return <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-ai-pending"><Loader2 size={15} className="animate-spin" />Our AI is reading this report. This usually takes under a minute.</p>;
@@ -124,7 +138,7 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[hsl(var(--destructive))]" />
           <div>
             <p className="text-sm font-semibold text-[hsl(var(--destructive))]">Please see a doctor today</p>
-            <p className="mt-1 text-sm leading-relaxed">Your laboratory marked {criticals.length === 1 ? 'a result' : 'some results'} on this report as critical{criticals.length ? `: ${criticals.map((v) => v.label).join(', ')}` : ''}. If you feel unwell, go to the nearest emergency department.</p>
+            <p className="mt-1 text-sm leading-relaxed">{urgentReason(criticals)} If you feel unwell, go to the nearest emergency department or call 112.</p>
           </div>
         </div>
       )}
@@ -138,6 +152,13 @@ function AnalysisBody({ analysis, retrying, onRetry }: { analysis: ReportAnalysi
 
       {analysis.status === 'READY' && analysis.reason && (
         <p className="flex items-start gap-2 text-sm text-muted-foreground"><EyeOff size={15} className="mt-0.5 shrink-0" />{analysis.reason}</p>
+      )}
+
+      {analysis.status === 'READY' && analysis.text_source === 'OCR' && (
+        <div className="flex items-start gap-3 rounded-xl bg-secondary/60 p-4" data-testid="text-ai-scanned-report">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-muted-foreground" />
+          <p className="text-sm leading-relaxed">This report is a scan or a photo, so our AI read the numbers from a picture. It can sometimes misread a digit. Please check each number below against your printed report before you rely on it.</p>
+        </div>
       )}
 
       {conditions.length > 0 && (
