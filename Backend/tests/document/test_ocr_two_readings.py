@@ -225,3 +225,36 @@ def test_a_far_outside_result_on_a_typed_pdf_is_not_affected():
 
     [raw] = extract_raw_values("Blood Urea 481 mg/dL 10 - 40")
     assert validate_value(raw).status is ValueStatus.OBSERVED
+
+
+# --- a row is judged by its own words, not the page's average -------------------
+
+class Cluttered(Reader):
+    """A page whose average is pulled down, or up, by what is printed around the table."""
+
+    def __init__(self, first: str, spans, page_mean: float):
+        super().__init__(first, None, spans=spans)
+        self.page_mean = page_mean
+
+    def run(self, request: OcrRequest) -> OcrResult:
+        done = super().run(request)
+        return OcrResult(
+            outcome=OcrOutcome.LOW_CONFIDENCE if self.page_mean < 0.55 else OcrOutcome.OK,
+            provider="fake", text=done.text, mean_confidence=self.page_mean, word_spans=done.word_spans,
+        )
+
+
+def test_a_clean_row_on_a_cluttered_page_is_used():
+    # Found on 2026-11-08: a QR code and a web page around a clean table gave a page
+    # mean of 0.39, and every result on it was refused.
+    sure = [(w, 0.97) for w in ("Haemoglobin", "13.4", "g/dL", "12.0", "15.0")]
+    result = read(Cluttered(LINE, sure, page_mean=0.39))
+    assert observed(result) == {"hemoglobin": 13.4}
+    assert any(i.code == "OCR_LOW_CONFIDENCE" for i in result.issues)
+
+
+def test_a_garbled_row_on_a_clean_page_is_not_used():
+    shaky = [("Haemoglobin", 0.31), ("13.4", 0.96), ("g/dL", 0.22), ("12.0", 0.40), ("15.0", 0.35)]
+    result = read(Cluttered(LINE, shaky, page_mean=0.92))
+    assert observed(result) == {}
+    assert "ocr_below_confidence_floor" in reasons(result)

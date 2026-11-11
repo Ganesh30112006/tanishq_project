@@ -186,6 +186,22 @@ def _number_confidence(ocr: OcrResult, raw) -> float | None:
     return min(found, default=0.0)
 
 
+def _row_confidence(ocr: OcrResult | None, raw) -> float | None:
+    """OCR's mean confidence in the words of this value's own row.
+
+    The page's mean is the wrong measure: a QR code or a busy letterhead pulls a
+    clean table below the floor, and one clean page average lets a garbled row
+    through. The page mean is the fallback when the engine gives no word spans.
+    """
+    if ocr is None:
+        return None
+    if not ocr.word_spans:
+        return ocr.mean_confidence
+    start, end = raw.char_span
+    found = [confidence for word_start, _, confidence in ocr.word_spans if start <= word_start < end]
+    return sum(found) / len(found) if found else 0.0
+
+
 def _placement_refusal(
     validated: ValidatedValue, at: int, marks, first_panel: int | None, report_type,
 ) -> tuple[str, str] | None:
@@ -207,7 +223,7 @@ def _second_reading_values(
     first_panel = first_panel_offset(marks) if panels else None
     out = []
     for raw in extract_raw_values(second.text, page_breaks=_page_breaks(None, second)):
-        validated = validate_value(raw, schema=schema, ocr_confidence=second.mean_confidence)
+        validated = validate_value(raw, schema=schema, ocr_confidence=_row_confidence(second, raw))
         if not validated.persists_clinical_value or not validated.analyte:
             continue
         if _placement_refusal(validated, raw.char_span[0], marks, first_panel, report_type) is None:
@@ -390,10 +406,7 @@ def process_document(
     disputed: set[str] = set()
 
     for raw in raws:
-        validated = validate_value(
-            raw, schema=schema,
-            ocr_confidence=ocr.mean_confidence if ocr else None,
-        )
+        validated = validate_value(raw, schema=schema, ocr_confidence=_row_confidence(ocr, raw))
         at = raw.char_span[0]
         analyte = validated.analyte
         if analyte and validated.value is not None:

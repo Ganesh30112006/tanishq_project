@@ -2,7 +2,12 @@
 lstmtraining supports. Lines are made from a template, so there is no patient data,
 and they are never used as accuracy evidence.
 
-    python ocr_train.py <max_iterations>
+The stock model has no arrow characters, so a lab's "48 ↑" came out as "48 1" or
+"48 t" and the row was refused. The character set is extended with ↑ and ↓ first,
+from Tesseract's own script data (``langdata_lstm``: ``radical-stroke.txt`` and
+``Latin.unicharset`` in ``$CARESENSE_OCR_WORK/langdata``).
+
+    python train_tesseract.py <max_iterations>
 """
 import os
 import random
@@ -15,7 +20,11 @@ from pathlib import Path
 HERE = Path(os.environ.get("CARESENSE_OCR_WORK", Path.home() / "caresense-ocr"))
 BEST = HERE / "tessdata_best"
 WORK = HERE / "ocr_training"
+LANGDATA = HERE / "langdata"
 BIN = Path(os.environ.get("TESSERACT_HOME", r"C:\Program Files\Tesseract-OCR"))
+#: Flags some labs print beside an abnormal result, and the caret of "10^3/uL":
+#: characters the stock model does not have, so it can never read them.
+NEW_CHARACTERS = ["↑", "↓", "^"]
 ITERATIONS = sys.argv[1] if len(sys.argv) > 1 else "3000"
 
 FONTS_TRAIN = ["Arial", "Calibri", "Times New Roman", "Verdana", "Tahoma", "Segoe UI", "Cambria", "Consolas"]
@@ -59,7 +68,7 @@ def row(rng):
         return rng.choice(OTHER).format(d=f"{rng.randint(1, 28):02d}", m=rng.choice(MONTHS))
     name, unit, low, high, reference = rng.choice(TESTS)
     value = number(rng, low, high)
-    flag = rng.choice(["", "", "", " H", " L", " High", " Low"])
+    flag = rng.choice(["", "", "", " H", " L", " High", " Low", " ↑", " ↓", " ↑", " ↓"])
     shape = rng.randrange(4)
     if shape == 0:
         return f"{name} {value}{flag} {unit} {reference}"
@@ -71,7 +80,9 @@ def row(rng):
 
 
 def run(args, check=True):
-    done = subprocess.run([str(a) for a in args], capture_output=True, text=True, errors="replace")  # noqa: S603 - Tesseract tools
+    # lstmtraining only finds its files reliably on Windows when run inside WORK
+    # with relative list files.
+    done = subprocess.run([str(a) for a in args], capture_output=True, text=True, errors="replace", cwd=WORK)  # noqa: S603 - Tesseract tools
     if check and done.returncode != 0:
         print("FAILED", args[0], (done.stderr or done.stdout)[-400:])
         raise SystemExit(1)
@@ -93,31 +104,50 @@ def make(fonts, label, lines, seed):
             continue
         run([BIN / "tesseract.exe", base.with_suffix(".tif"), base, "--tessdata-dir", BEST, "-l", "eng", "--psm", "6", BIN / "tessdata" / "configs" / "lstm.train"])
         if base.with_suffix(".lstmf").exists():
-            made.append(base.with_suffix(".lstmf").as_posix())
+            made.append(base.with_suffix(".lstmf").name)
     listing = WORK / f"{label}.list"
-    listing.write_text("\n".join(made) + "\n", encoding="utf-8")
+    # Plain line ends: lstmtraining takes a Windows "\r" as part of the file name.
+    listing.write_text("\n".join(made) + "\n", encoding="utf-8", newline="\n")
     print(label, "fonts", len(made), flush=True)
     if not made:
         raise SystemExit(f"no training data was made for {label}")
     return listing
 
 
+def starter():
+    """The stock character set plus the arrows, with the stock dictionaries."""
+    run([BIN / "combine_tessdata.exe", "-u", BEST / "eng.traineddata", WORK / "eng."])
+    for kind, name in (("word", "wordlist"), ("punc", "punc"), ("number", "numbers")):
+        run([BIN / "dawg2wordlist.exe", "eng.lstm-unicharset", f"eng.lstm-{kind}-dawg", f"eng.{name}"])
+    (WORK / "new.txt").write_text(" ".join(NEW_CHARACTERS), encoding="utf-8")
+    run([BIN / "unicharset_extractor.exe", "--output_unicharset", "new.unicharset", "--norm_mode", "1", "new.txt"])
+    run([BIN / "merge_unicharsets.exe", "eng.lstm-unicharset", "new.unicharset", "lab.unicharset"])
+    (WORK / "starter" / "eng").mkdir(parents=True, exist_ok=True)  # the tool does not make it
+    run([BIN / "combine_lang_model.exe", "--input_unicharset", "lab.unicharset", "--script_dir", LANGDATA,
+         "--words", "eng.wordlist", "--puncs", "eng.punc", "--numbers", "eng.numbers", "--lang", "eng", "--output_dir", "starter"])
+    made = WORK / "starter" / "eng" / "eng.traineddata"
+    if not made.exists():
+        raise SystemExit("the extended character set was not built")
+    return made
+
+
 def main():
     WORK.mkdir(exist_ok=True)
-    run([BIN / "combine_tessdata.exe", "-u", BEST / "eng.traineddata", WORK / "eng."])
+    for old in WORK.glob("lab*checkpoint"):
+        old.unlink()  # a stale checkpoint would be taken for this run's result
+    extended = starter()
     train = make(FONTS_TRAIN, "train", 900, 11)
     evaluation = make(FONTS_EVAL, "eval", 300, 12)
-    print("before", run([BIN / "lstmeval.exe", "--model", WORK / "eng.lstm", "--traineddata", BEST / "eng.traineddata", "--eval_listfile", evaluation], check=False).stderr[-120:].strip(), flush=True)
-    done = run([BIN / "lstmtraining.exe", "--continue_from", WORK / "eng.lstm", "--traineddata", BEST / "eng.traineddata",
-                "--model_output", WORK / "lab", "--train_listfile", train, "--eval_listfile", evaluation,
-                "--max_iterations", ITERATIONS, "--learning_rate", "0.0001"], check=False)
+    print("before", run([BIN / "lstmeval.exe", "--model", BEST / "eng.traineddata", "--eval_listfile", evaluation.name], check=False).stderr[-120:].strip(), flush=True)
+    done = run([BIN / "lstmtraining.exe", "--continue_from", "eng.lstm", "--old_traineddata", BEST / "eng.traineddata",
+                "--traineddata", extended, "--model_output", "lab", "--train_listfile", train.name,
+                "--eval_listfile", evaluation.name, "--max_iterations", ITERATIONS, "--learning_rate", "0.0001"], check=False)
     print((done.stderr or "")[-700:], flush=True)
-    checkpoint = WORK / "lab_checkpoint"
     out = HERE / "tessdata_lab"
     out.mkdir(exist_ok=True)
-    run([BIN / "lstmtraining.exe", "--stop_training", "--continue_from", checkpoint, "--traineddata", BEST / "eng.traineddata",
+    run([BIN / "lstmtraining.exe", "--stop_training", "--continue_from", "lab_checkpoint", "--traineddata", extended,
          "--model_output", out / "eng.traineddata"])
-    print("after", run([BIN / "lstmeval.exe", "--model", checkpoint, "--traineddata", BEST / "eng.traineddata", "--eval_listfile", evaluation], check=False).stderr[-120:].strip(), flush=True)
+    print("after", run([BIN / "lstmeval.exe", "--model", out / "eng.traineddata", "--eval_listfile", evaluation.name], check=False).stderr[-120:].strip(), flush=True)
     print("model", (out / "eng.traineddata").stat().st_size // 1024 // 1024, "MB", flush=True)
 
 
